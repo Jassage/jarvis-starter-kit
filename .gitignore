@@ -1,0 +1,34 @@
+# --- Secrets / environnement ---
+.env
+.env.*
+!.env-exemple
+
+# --- Système ---
+.DS_Store
+Thumbs.db
+
+# --- Dépendances ---
+node_modules/
+
+# --- Builds ---
+dist/
+build/
+.next/
+out/
+
+# --- Éditeurs / IDE ---
+.vscode/
+.idea/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Fichiers temporaires ---
+*.tmp
+*.temp
+*.bak
+
+# --- Secrets génériques ---
+*.key
+*.pem
