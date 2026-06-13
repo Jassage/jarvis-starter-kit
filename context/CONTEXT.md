@@ -61,6 +61,7 @@ Liste des projets ou chantiers actifs sur lesquels je veux que Claude m'aide :
 
 - Mon activité d'enseignement de la programmation
 - Le développement de ma plateforme e-learning (système d'apprentissage en ligne)
+- **SYGS-IMFP** : système de gestion scolaire (Institution Mixte Faustin 1er). Projet avancé (60+ commits) : backend Express 5 + TypeScript + Prisma + MySQL, frontend Vite + React 18 + shadcn/ui. Couvre élèves, profs, notes, bulletins, présence, frais de scolarité, etc. Actuellement mono-établissement (pas encore multi-tenant)
 
 ---
 
