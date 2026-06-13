@@ -20,6 +20,10 @@ out/
 .vscode/
 .idea/
 
+# --- Claude Code local ---
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
 # --- Logs ---
 *.log
 logs/
