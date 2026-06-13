@@ -1,25 +1,58 @@
 'use client';
 
 import { useState } from 'react';
+import { signIn, getSession } from 'next-auth/react';
 import Icon from '@/components/Icon';
 import Logo from '@/components/Logo';
 import { useGo } from '@/lib/navigation';
+import { registerUser } from '@/lib/actions/auth';
 
 export default function Auth() {
   const go = useGo();
   const [mode, setMode] = useState('login'); // login | signup
   const [role, setRole] = useState('student');
   const [show, setShow] = useState(false);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [touched, setTouched] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const isSignup = mode === 'signup';
   const emailOk = /\S+@\S+\.\S+/.test(email);
 
-  const submit = (e) => {
+  const redirectByRole = (r) => {
+    const role = (r || 'STUDENT').toLowerCase();
+    go(role === 'teacher' ? 'teacher' : role === 'admin' ? 'admin' : 'student');
+  };
+
+  const submit = async (e) => {
     e.preventDefault();
     setTouched(true);
-    if (!email || !emailOk) return;
-    go(role === 'teacher' ? 'teacher' : 'student');
+    setError('');
+    if (!email || !emailOk || !password) return;
+    if (isSignup && !name) { setError('Indique ton nom complet.'); return; }
+
+    setLoading(true);
+    try {
+      if (isSignup) {
+        const res = await registerUser({ name, email, password, role });
+        if (res?.error) { setError(res.error); setLoading(false); return; }
+      }
+
+      const result = await signIn('credentials', { email, password, redirect: false });
+      if (result?.error) {
+        setError('Email ou mot de passe incorrect.');
+        setLoading(false);
+        return;
+      }
+
+      const session = await getSession();
+      redirectByRole(session?.user?.role);
+    } catch (err) {
+      setError('Une erreur est survenue. Réessaie.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -92,7 +125,7 @@ export default function Auth() {
             {isSignup && (
               <div className="field">
                 <label className="label">Nom complet</label>
-                <input className="input" placeholder="Julien Mercier" defaultValue="" />
+                <input className="input" placeholder="Julien Mercier" value={name} onChange={e => setName(e.target.value)} />
               </div>
             )}
             <div className="field">
@@ -112,7 +145,7 @@ export default function Auth() {
               </div>
               <div className="input-icon">
                 <Icon name="shield" />
-                <input className="input" type={show ? 'text' : 'password'} placeholder="••••••••" defaultValue="" style={{ paddingRight: 44 }} />
+                <input className="input" type={show ? 'text' : 'password'} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} style={{ paddingRight: 44 }} />
                 <button type="button" onClick={() => setShow(s => !s)} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-4)' }} aria-label="Afficher">
                   <Icon name={show ? 'eyeOff' : 'eye'} size={18} />
                 </button>
@@ -127,8 +160,10 @@ export default function Auth() {
               </label>
             )}
 
-            <button className="btn btn-primary btn-block btn-lg" type="submit" style={{ marginTop: 4 }}>
-              {isSignup ? 'Créer mon compte' : 'Se connecter'}<Icon name="arrowR" size={18} />
+            {error && <p className="tiny" style={{ color: 'var(--rose)', fontWeight: 600 }}>{error}</p>}
+
+            <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={loading} style={{ marginTop: 4 }}>
+              {loading ? 'Patiente…' : isSignup ? 'Créer mon compte' : 'Se connecter'}{!loading && <Icon name="arrowR" size={18} />}
             </button>
           </form>
 
