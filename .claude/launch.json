@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "imfp-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/IMFP_PROTOTYPE/gestion-frontend", "run", "dev"],
+      "port": 3001
+    },
+    {
+      "name": "imfp-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/IMFP_PROTOTYPE/gestion-backend", "run", "dev"],
+      "port": 5000
+    }
+  ]
+}
