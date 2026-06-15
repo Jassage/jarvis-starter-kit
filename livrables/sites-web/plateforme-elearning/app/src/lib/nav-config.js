@@ -30,6 +30,23 @@ export const ROLE_USER = {
   admin: { name: 'Admin EduSpher', role: 'Administrateur', initials: 'AE', avColor: 'var(--ink)', avInk: '#fff' },
 };
 
+// Libellés et couleurs derives du vrai role Auth.js (enum Prisma Role)
+export const ROLE_LABEL = {
+  STUDENT: 'Étudiant',
+  TEACHER: 'Formateur',
+  ADMIN: 'Administrateur',
+};
+
+export const ROLE_AVATAR = {
+  STUDENT: { avColor: 'var(--brand-soft)', avInk: 'var(--brand-ink)' },
+  TEACHER: { avColor: 'var(--violet-soft)', avInk: 'var(--violet)' },
+  ADMIN: { avColor: 'var(--ink)', avInk: '#fff' },
+};
+
+export function getInitials(name = '') {
+  return name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+}
+
 export const CAT_ICON = {
   'Développement web': 'zap', 'Design produit': 'sparkle', 'Data & IA': 'chart',
   'Marketing': 'trending', 'Langues': 'globe', 'Sécurité': 'shield',
