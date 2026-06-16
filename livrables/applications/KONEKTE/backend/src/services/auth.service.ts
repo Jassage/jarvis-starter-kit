@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 import { RegisterInput, LoginInput } from "../validators/auth.validator";
+import { sendVerificationEmail, sendResetPasswordEmail } from "./email.service";
 
 export const registerService = async (data: RegisterInput) => {
   const existing = await prisma.user.findUnique({ where: { email: data.email } });
@@ -29,6 +30,8 @@ export const registerService = async (data: RegisterInput) => {
   });
 
   const token = generateToken(user.id, user.email, user.subscriptionPlan);
+
+  sendVerificationEmail(user.email, emailVerifyToken).catch(() => {});
 
   return {
     token,
@@ -125,7 +128,7 @@ export const requestPasswordResetService = async (email: string) => {
     data: { resetPasswordToken: token, resetPasswordExpiry: expiry },
   });
 
-  console.log(`[RESET PASSWORD] Token pour ${email}: ${token}`);
+  sendResetPasswordEmail(email, token).catch(() => {});
 };
 
 export const resetPasswordService = async (token: string, newPassword: string) => {

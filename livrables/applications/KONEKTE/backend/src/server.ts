@@ -14,6 +14,7 @@ import photoRoutes from "./routes/photo.routes";
 import moderationRoutes from "./routes/moderation.routes";
 import adminRoutes from "./routes/admin.routes";
 import notificationRoutes from "./routes/notification.routes";
+import paymentRoutes from "./routes/payment.routes";
 import { initSocket } from "./socket";
 
 const app = express();
@@ -28,6 +29,9 @@ app.use(
     credentials: true,
   })
 );
+// Webhook Stripe doit recevoir le body brut avant express.json
+app.use("/api/payments/stripe/webhook", express.raw({ type: "application/json" }));
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -49,6 +53,7 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/moderation", moderationRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/payments", paymentRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: "Route introuvable" });
