@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE `messages` ADD COLUMN `mediaUrl` TEXT NULL,
+    ADD COLUMN `type` ENUM('TEXT', 'IMAGE', 'VOICE') NOT NULL DEFAULT 'TEXT';
