@@ -7,6 +7,71 @@
 
 ---
 
+## 2026-06-21
+
+### MEDIKA : enrichissement hospitalisations, pharmacie et dashboard
+
+- Picker médicament dans les formulaires de prescription (dossier séjour + consultation) : liste déroulante depuis le catalogue, auto-remplissage du dosage depuis `dosageForme`, indicateur stock rouge si sous le seuil
+- Prescription builder dans le modal consultation : interface structurée (médicament + dosage + fréquence + durée), sérialisation en texte pour compatibilité rétrograde
+- Notifications médicaments : badge SSE dans la sidebar (polling 2 min + refresh SSE), section "À administrer maintenant" dans le dossier de séjour (médicaments dus calculés par `lastAdmin.dateHeure + intervalleH <= now`)
+- Seed pharmacie : 63 médicaments avec DCI, catégorie, forme, dosageForme, stock, seuil, prixUnitaire
+- Auto-création de rendez-vous de suivi quand le médecin saisit `prochainRdv` dans une consultation (dans la même transaction Prisma)
+- Facturation hospitalière : champ `sejourId` ajouté à `Facture` (unique), calcul basé uniquement sur les `MouvementStock` type DISPENSATION liés aux prescriptions du séjour
+- Dispensation ambulatoire : endpoint `POST /pharmacie/dispenser-direct` + UI dans l'onglet Dispenser (patients externes, ordonnances libres) sans `prescriptionId` requis
+- Dashboard : 2 nouvelles cartes KPI (patients hospitalisés avec ratio lits occupés/total, recettes du jour via agrégat Paiement)
+
+### MEDIKA : modules Pharmacie et Planning livrés
+
+- Module Pharmacie : backend (routes CRUD inventaire, lots, mouvements, dispensation, alertes, commandes fournisseurs) + frontend (4 onglets : Inventaire, Alertes, Dispenser, Commandes). CRUD complet avec modals (création/édition médicament, lot, mouvement, dispensation, commande, réception). Badge d'alerte temps réel via SSE. Archivage médicament (actif: false)
+- Module Planning du personnel : backend (gardes CRUD, absences CRUD, vue semaine, disponibilité) + frontend (4 onglets : Mon planning, Vue semaine, Aujourd'hui, Absences). "Mon planning" est l'onglet par défaut, chaque utilisateur voit ses propres gardes sur 60 jours
+- Correction critique schema mismatch Prisma : les routes planning utilisaient des champs inexistants (Garde.debut, Garde.fin, Garde.statut, Garde.remplacant, Absence.motif, Absence.approbateur). Réécriture complète de planning.routes.ts pour coller au vrai schéma (Garde.date + heureDebut + heureFin en String, Absence.raison + approvedBy)
+- Frontend planning/page.tsx entièrement corrigé : interfaces, composants, modals. fmtTime remplacé par les strings heureDebut/heureFin directement. GardeDetailModal passe à DELETE au lieu de PATCH avec statut: ANNULE (champ inexistant). AddGardeModal : datetime-local remplacé par date + deux champs time séparés
+
+## 2026-06-17
+
+### Lancement du projet MEDIKA (gestion hospitalière)
+- Projet créé depuis zéro : backend Express 4 + TypeScript + Prisma v5 + PostgreSQL, frontend Next.js 15 App Router + shadcn/ui (Base UI), RBAC avec 5 rôles (ADMIN, MEDECIN, INFIRMIER, CAISSIER, ACCUEIL)
+- Modules livrés : Patients, Rendez-vous, Consultations, Examens médicaux, File d'attente, Facturation
+- Workflow consultation en 2 visites implémenté : visite 1 (plainte + signes vitaux + prescription d'examens), visite 2 (réouverture de la même consultation, diagnostic + prescriptions + prochain RDV après réception des résultats)
+- Formulaires de résultats structurés par type d'examen (15 types avec normes par champ, détection automatique de valeurs anormales avec flags ↑/↓ et mise en rouge)
+- File d'attente avec numérotation journalière séquentielle, support patients avec et sans rendez-vous, auto-refresh 30s
+- Page examens regroupée par patient (au lieu d'une grille plate), avec lignes compactes par examen et badges de synthèse par statut
+- Champ "Prochain rendez-vous" ajouté aux consultations (modèle Prisma + migration + formulaire + affichage sur les cartes)
+- Correction : section "Examens à prescrire" visible aussi en mode modification, avec affichage des examens existants (lecture seule) et possibilité d'en ajouter de nouveaux
+
+### Smoke test Admin IMFP_PROTOTYPE : 5 bugs corrigés + 2 bugs infra
+
+**5 bugs métier corrigés et vérifiés en navigateur :**
+- Onglet Statistiques (Présences) ne rendait pas son contenu : `activeTab` manquait dans le `useEffect` de rechargement des stats, l'API n'était jamais rappelée au changement d'onglet
+- Colonne "Arrivée" affichait l'horodatage ISO brut : fonction de formatage `formatTime` absente de `attendanceUtils.ts`
+- Matières : "0 actives" affiché + toutes les lignes grisées à tort (condition `isActive` inversée dans `SubjectsManager.tsx`)
+- Emploi du temps : "Total cours 0" et année non sélectionnée automatiquement : `fetchSchedules` absent des hooks destructurés, `useEffect` de chargement incomplet dans `ScheduleManager.tsx`
+- Paramètres > Financier : affichait "FCFA" au lieu de "HTG" (migration initiale avec valeurs orientées Bénin). Correction dans `schema.prisma` + nouvelle migration `20260614200000_fix_system_settings_currency` appliquée via `prisma migrate deploy`
+
+**2 bugs infra découverts pendant la vérification :**
+- `.claude/launch.json` : port frontend configuré à 3001 alors que Vite sert sur 3000. Corrigé
+- `server.ts` : `http://localhost:3000` manquait dans `defaultOrigins` CORS, ce qui bloquait tous les logins
+
+**Décision architecture reconfirmée :** modèle Silo (une instance + une base par école) maintenu pour SYGS-IMFP. Multi-tenant partagé (colonne tenantId) jugé prématuré avant validation du marché
+
+**À noter :** mot de passe admin local (`jslnoccius@gmail.com`) réinitialisé à `Admin@123` pour les tests en navigateur (DB uniquement, hors commit)
+
+### KONEKTE : finalisation des fonctionnalités et déploiement en production
+- **Navigation fixe** : refactoring du layout Next.js (`fixed inset-0 flex flex-col`) pour que le header et la BottomNav restent fixes pendant que le contenu défile. Chaque page gère son propre padding
+- **Messages vocaux et partage de photos** : endpoint `POST /:conversationId/media` (multer + Cloudinary), enum `MessageType` (TEXT/IMAGE/VOICE) et champ `mediaUrl` ajoutés au schéma Prisma, migration appliquée. Côté chat : bouton micro (MediaRecorder API), bouton image, player audio et aperçu photo dans les bulles
+- **Fonctionnalités "faibles et moyennes"** : page "Qui m'a liké" (blurrée pour les non-premium, visible pour premium), quota Super Likes (3/jour, compteur en temps réel), changement de mot de passe, suppression de compte (avec confirmation par mot de passe)
+- **Notifications** : cloche dans le header, dropdown avec liste, badge non-lu, écoute socket `notification:new`
+- **Page Premium** : 3 plans (1/3/6 mois), modal de choix du moyen de paiement
+- **Stripe intégré** : `POST /api/payments/stripe/create-checkout`, webhook `checkout.session.completed` qui active Premium automatiquement, Stripe CLI installée et configurée pour le tunnel webhook local
+- **MonCash intégré** : routes `POST /api/payments/moncash/create` et `GET /api/payments/moncash/callback` prêtes, en attente des credentials Digicel Business Haiti
+- **Emails transactionnels** : service nodemailer branché sur Gmail SMTP. Email de vérification envoyé à l'inscription, email de reset de mot de passe fonctionnel. Page `/verify-email/[token]` créée côté frontend
+- **Cloudinary** : upload des photos et audios de chat directement vers Cloudinary en production
+- **AuthGuard** : correction de la race condition de hydratation Zustand (redirect vers /login avec token valide). Attend `persist.onFinishHydration()` avant de vérifier le token
+- **Fix releasePointerCapture** : `setPointerCapture` dans SwipeCard wrappé dans try/catch pour éviter le `NotFoundError`
+- **Déploiement Railway (backend)** : `railway.json` créé, `@types/*` et outils TypeScript déplacés dans `dependencies` pour le build Railway, `DATABASE_URL` liée au service MySQL Railway, variables d'environnement configurées
+- **Déploiement Vercel (frontend)** : `.env.production` commité avec les URLs Railway, 17 pages compilées et déployées sur `konekte-xi.vercel.app`
+- **URLs de production** : frontend `konekte-xi.vercel.app`, backend `jarvis-starter-kit-production-f573.up.railway.app`
+
 ## 2026-06-14
 
 ### Correctifs : "Faire l'appel" (prof) et emploi du temps (étudiant)

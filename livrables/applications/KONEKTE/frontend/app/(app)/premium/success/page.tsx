@@ -3,19 +3,13 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/auth.store";
-import api from "@/lib/api";
 
 export default function PremiumSuccessPage() {
   const router = useRouter();
-  const { user, setUser } = useAuthStore();
+  const { refreshUser } = useAuthStore();
 
   useEffect(() => {
-    // Rafraîchir le profil pour mettre à jour le plan
-    api.get("/auth/me").then((res) => {
-      if (res.data.success && user) {
-        setUser({ ...user, subscriptionPlan: res.data.data.subscriptionPlan });
-      }
-    }).catch(() => {});
+    refreshUser().catch(() => {});
   }, []);
 
   return (

@@ -127,6 +127,7 @@ export default function ConversationPage() {
       id: tempId,
       senderId: user!.id,
       content,
+      type: "TEXT",
       status: "SENT",
       createdAt: new Date().toISOString(),
     };
