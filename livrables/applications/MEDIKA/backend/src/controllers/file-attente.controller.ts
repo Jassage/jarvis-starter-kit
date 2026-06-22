@@ -28,11 +28,16 @@ export async function getFileAttente(req: AuthRequest, res: Response, next: Next
     if (req.query.statut) where.statut = String(req.query.statut) as StatutAttente
     if (req.query.medecinId) where.medecinId = String(req.query.medecinId)
 
-    const entries = await prisma.fileAttente.findMany({
-      where,
-      include,
-      orderBy: { numero: 'asc' }
+    const entries = await prisma.fileAttente.findMany({ where, include, orderBy: { numero: 'asc' } })
+
+    const priorityRank: Record<string, number> = { CRITIQUE: 0, URGENT: 1, NORMAL: 2 }
+    entries.sort((a: any, b: any) => {
+      const pa = priorityRank[a.priorite ?? 'NORMAL'] ?? 2
+      const pb = priorityRank[b.priorite ?? 'NORMAL'] ?? 2
+      if (pa !== pb) return pa - pb
+      return a.numero - b.numero
     })
+
     sendSuccess(res, entries)
   } catch (err) { next(err) }
 }
@@ -44,6 +49,7 @@ export async function addToQueue(req: AuthRequest, res: Response, next: NextFunc
       appointmentId: z.string().uuid().optional(),
       medecinId: z.string().uuid().optional(),
       motif: z.string().optional(),
+      priorite: z.enum(['NORMAL', 'URGENT', 'CRITIQUE']).default('NORMAL'),
     }).parse(req.body)
 
     const { start, end } = todayBounds()
@@ -68,6 +74,7 @@ export async function addToQueue(req: AuthRequest, res: Response, next: NextFunc
       include,
     })
     broadcast('fileattente')
+    if (data.priorite === 'CRITIQUE') broadcast('urgence-critique')
     sendSuccess(res, entry, 201)
   } catch (err) { next(err) }
 }

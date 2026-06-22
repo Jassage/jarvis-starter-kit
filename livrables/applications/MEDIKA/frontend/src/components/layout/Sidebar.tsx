@@ -1,40 +1,41 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useAuthStore } from '@/store/auth'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Users, Calendar, Stethoscope,
-  FileText, UserCog, LogOut, Activity, ChevronRight, Building2, FlaskConical, ListOrdered, Settings, Shield, BedDouble, Pill, CalendarDays, BarChart2
+  FileText, UserCog, LogOut, Activity, ChevronRight, Building2, FlaskConical, ListOrdered, Settings, Shield, BedDouble, Pill, CalendarDays, BarChart2, AlertTriangle
 } from 'lucide-react'
 import { Role } from '@/types'
 import api from '@/lib/api'
 
 const navItems = [
-  { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard, roles: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'CAISSIER', 'ACCUEIL'] },
-  { href: '/file-attente', label: 'File d\'attente', icon: ListOrdered, roles: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'ACCUEIL'] },
-  { href: '/patients', label: 'Patients', icon: Users, roles: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'ACCUEIL'] },
-  { href: '/appointments', label: 'Rendez-vous', icon: Calendar, roles: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'ACCUEIL'] },
-  { href: '/consultations', label: 'Consultations', icon: Stethoscope, roles: ['ADMIN', 'MEDECIN'] },
-  { href: '/examens', label: 'Examens', icon: FlaskConical, roles: ['ADMIN', 'MEDECIN', 'INFIRMIER'] },
-  { href: '/factures', label: 'Facturation', icon: FileText, roles: ['ADMIN', 'CAISSIER'] },
-  { href: '/hospitalisations', label: 'Hospitalisations', icon: BedDouble, roles: ['ADMIN', 'MEDECIN', 'INFIRMIER'] },
-  { href: '/pharmacie', label: 'Pharmacie', icon: Pill, roles: ['ADMIN', 'MEDECIN', 'INFIRMIER'] },
-  { href: '/planning', label: 'Planning', icon: CalendarDays, roles: ['ADMIN', 'MEDECIN', 'INFIRMIER'] },
-  { href: '/rapports', label: 'Rapports', icon: BarChart2, roles: ['ADMIN', 'CAISSIER', 'MEDECIN'] },
-  { href: '/users', label: 'Utilisateurs', icon: UserCog, roles: ['ADMIN'] },
-  { href: '/services', label: 'Services', icon: Building2, roles: ['ADMIN'] },
-  { href: '/settings', label: 'Paramètres', icon: Settings, roles: ['ADMIN'] },
-  { href: '/audit',    label: 'Journal d\'audit', icon: Shield, roles: ['ADMIN'] },
+  { href: '/dashboard',        label: 'Tableau de bord',   icon: LayoutDashboard, roles: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'CAISSIER', 'ACCUEIL'] },
+  { href: '/urgences',         label: 'Urgences',           icon: AlertTriangle,   roles: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'ACCUEIL'] },
+  { href: '/file-attente',     label: 'File d\'attente',    icon: ListOrdered,     roles: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'ACCUEIL'] },
+  { href: '/patients',         label: 'Patients',           icon: Users,           roles: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'ACCUEIL'] },
+  { href: '/appointments',     label: 'Rendez-vous',        icon: Calendar,        roles: ['ADMIN', 'MEDECIN', 'INFIRMIER', 'ACCUEIL'] },
+  { href: '/consultations',    label: 'Consultations',      icon: Stethoscope,     roles: ['ADMIN', 'MEDECIN'] },
+  { href: '/examens',          label: 'Examens',            icon: FlaskConical,    roles: ['ADMIN', 'MEDECIN', 'INFIRMIER'] },
+  { href: '/factures',         label: 'Facturation',        icon: FileText,        roles: ['ADMIN', 'CAISSIER'] },
+  { href: '/hospitalisations', label: 'Hospitalisations',   icon: BedDouble,       roles: ['ADMIN', 'MEDECIN', 'INFIRMIER'] },
+  { href: '/pharmacie',        label: 'Pharmacie',          icon: Pill,            roles: ['ADMIN', 'MEDECIN', 'INFIRMIER'] },
+  { href: '/planning',         label: 'Planning',           icon: CalendarDays,    roles: ['ADMIN', 'MEDECIN', 'INFIRMIER'] },
+  { href: '/rapports',         label: 'Rapports',           icon: BarChart2,       roles: ['ADMIN', 'CAISSIER', 'MEDECIN'] },
+  { href: '/users',            label: 'Utilisateurs',       icon: UserCog,         roles: ['ADMIN'] },
+  { href: '/services',         label: 'Services',           icon: Building2,       roles: ['ADMIN'] },
+  { href: '/settings',         label: 'Paramètres',         icon: Settings,        roles: ['ADMIN'] },
+  { href: '/audit',            label: 'Journal d\'audit',   icon: Shield,          roles: ['ADMIN'] },
 ]
 
 const roleColors: Record<string, string> = {
-  ADMIN: 'bg-rose-500/20 text-rose-400',
-  MEDECIN: 'bg-blue-500/20 text-blue-400',
+  ADMIN:     'bg-rose-500/20 text-rose-400',
+  MEDECIN:   'bg-blue-500/20 text-blue-400',
   INFIRMIER: 'bg-teal-500/20 text-teal-400',
-  CAISSIER: 'bg-amber-500/20 text-amber-400',
-  ACCUEIL: 'bg-violet-500/20 text-violet-400',
+  CAISSIER:  'bg-amber-500/20 text-amber-400',
+  ACCUEIL:   'bg-violet-500/20 text-violet-400',
 }
 
 export default function Sidebar() {
@@ -42,6 +43,16 @@ export default function Sidebar() {
   const { user, logout } = useAuthStore()
   const [alertesPharmacie, setAlertesPharmacie] = useState(0)
   const [medicamentsDus, setMedicamentsDus]     = useState(0)
+  const [critiqueCount, setCritiqueCount]       = useState(0)
+  const [critiqueAlert, setCritiqueAlert]       = useState(false)
+
+  const fetchCritiques = useCallback(async () => {
+    try {
+      const r = await api.get('/urgences')
+      const entries: any[] = r.data.data ?? []
+      setCritiqueCount(entries.filter((e: any) => e.priorite === 'CRITIQUE').length)
+    } catch {}
+  }, [])
 
   useEffect(() => {
     if (!user) return
@@ -63,6 +74,7 @@ export default function Sidebar() {
 
     fetchAlertes()
     fetchMedsDus()
+    fetchCritiques()
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('medika_token') : null
     if (!token) return
@@ -72,14 +84,20 @@ export default function Sidebar() {
     sse.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data)
-        if (data.resource === 'pharmacie')       fetchAlertes()
-        if (data.resource === 'hospitalisations') fetchMedsDus()
+        if (data.resource === 'pharmacie')         fetchAlertes()
+        if (data.resource === 'hospitalisations')  fetchMedsDus()
+        if (data.resource === 'fileattente')       fetchCritiques()
+        if (data.resource === 'urgence-critique') {
+          fetchCritiques()
+          setCritiqueAlert(true)
+          setTimeout(() => setCritiqueAlert(false), 8000)
+        }
       } catch {}
     }
 
     const poll = setInterval(fetchMedsDus, 120_000)
     return () => { sse.close(); clearInterval(poll) }
-  }, [user])
+  }, [user, fetchCritiques])
 
   const visible = navItems.filter(item =>
     user?.role && item.roles.includes(user.role as Role)
@@ -104,18 +122,31 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {/* Alerte CRITIQUE */}
+      {critiqueAlert && (
+        <div className="mx-3 mt-3 flex items-center gap-2 px-3 py-2.5 bg-red-600 rounded-xl text-white text-xs font-bold animate-pulse shadow-lg shadow-red-500/40">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          Patient CRITIQUE en urgences !
+        </div>
+      )}
+
       {/* Navigation */}
       <nav className="flex-1 px-3 py-5 space-y-0.5 overflow-y-auto">
         <p className="text-slate-600 text-[10px] font-semibold uppercase tracking-widest px-3 mb-3">Menu principal</p>
         {visible.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
-          const isPharmacie       = href === '/pharmacie'
+          const isPharmacie        = href === '/pharmacie'
           const isHospitalisations = href === '/hospitalisations'
+          const isUrgences         = href === '/urgences'
           const badge = isPharmacie && alertesPharmacie > 0
             ? alertesPharmacie
             : isHospitalisations && medicamentsDus > 0
               ? medicamentsDus
-              : 0
+              : isUrgences && critiqueCount > 0
+                ? critiqueCount
+                : 0
+          const isUrgenceBadge = isUrgences && badge > 0
+
           return (
             <Link
               key={href}
@@ -128,12 +159,17 @@ export default function Sidebar() {
               )}
             >
               <div className="flex items-center gap-3">
-                <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-white' : 'text-slate-500 group-hover:text-slate-300')} />
-                {label}
+                <Icon className={cn('w-4 h-4 shrink-0',
+                  active ? 'text-white'
+                  : isUrgenceBadge ? 'text-red-400 group-hover:text-red-300'
+                  : 'text-slate-500 group-hover:text-slate-300'
+                )} />
+                <span className={isUrgenceBadge && !active ? 'text-red-400 group-hover:text-red-300' : ''}>{label}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 {badge > 0 && (
-                  <span className="text-[10px] font-bold bg-red-500 text-white rounded-full min-w-4 h-4 px-1 flex items-center justify-center">
+                  <span className={cn('text-[10px] font-bold rounded-full min-w-4 h-4 px-1 flex items-center justify-center',
+                    isUrgenceBadge ? 'bg-red-500 text-white animate-pulse' : 'bg-red-500 text-white')}>
                     {badge > 9 ? '9+' : badge}
                   </span>
                 )}

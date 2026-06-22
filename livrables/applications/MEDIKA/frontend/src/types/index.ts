@@ -76,6 +76,7 @@ export interface FileAttenteEntry {
   appointmentId?: string
   medecinId?: string
   motif?: string
+  priorite: string
   statut: StatutAttente
   dateFile: string
   appelleA?: string

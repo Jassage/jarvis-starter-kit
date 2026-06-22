@@ -371,6 +371,7 @@ export async function printFacture(facture: Facture) {
 
 interface RapportData {
   date: string
+  dateFin?: string
   hopital: { nom: string; adresse?: string | null; telephone?: string | null } | null
   appointments: Array<{ dateHeure: string; statut: string; motif?: string | null; patient: { prenom: string; nom: string; numero: string }; medecin: { prenom: string; nom: string }; service: { nom: string } }>
   consultations: Array<{ date: string; diagnostic?: string | null; patient: { prenom: string; nom: string; numero: string }; medecin: { prenom: string; nom: string } }>
@@ -389,10 +390,14 @@ const FACT_STATUT: Record<string, string> = {
 }
 
 export function printRapport(data: RapportData) {
-  const nom      = data.hopital?.nom || 'CLINIQUE MEDIKA'
-  const adresse  = [data.hopital?.adresse, data.hopital?.telephone].filter(Boolean).join(' · ') || 'Haïti'
-  const dateStr  = new Date(data.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-  const now      = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const nom     = data.hopital?.nom || 'CLINIQUE MEDIKA'
+  const adresse = [data.hopital?.adresse, data.hopital?.telephone].filter(Boolean).join(' · ') || 'Haïti'
+  const now     = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const fmtD    = (d: string) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+  const isSingleDay = !data.dateFin || data.date.slice(0, 10) === data.dateFin.slice(0, 10)
+  const dateStr = isSingleDay
+    ? new Date(data.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : `Du ${fmtD(data.date)} au ${fmtD(data.dateFin!)}`
 
   function fmtTime(d: string) {
     return new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -610,4 +615,237 @@ export async function printExamen(examen: Examen) {
     </div>`
 
   openPrintWindow(html, `Examen ${examen.type} — ${examen.patient.prenom} ${examen.patient.nom}`)
+}
+
+// ─── Dossier médical complet ──────────────────────────────────────────────────
+
+interface DossierPatient {
+  id: string; numero: string; prenom: string; nom: string
+  dateNaissance: string; sexe: 'M' | 'F'; telephone: string
+  adresse?: string | null; groupeSanguin?: string | null
+  antecedents?: string | null; allergies?: string | null
+  createdAt: string
+  consultations: Array<{
+    id: string; date: string; diagnostic?: string | null; notes?: string | null
+    prescriptions?: string | null; signesVitaux?: Record<string, unknown> | null
+    medecin: { prenom: string; nom: string }
+  }>
+  examens: Array<{
+    id: string; type: string; statut: string; resultat?: string | null
+    createdAt: string; medecin: { prenom: string; nom: string }
+  }>
+  factures: Array<{
+    id: string; numero: string; montantTotal: number; montantPaye: number; statut: string; createdAt: string
+  }>
+}
+
+interface DossierSejour {
+  id: string; dateAdmission: string; dateSortie?: string | null; motif?: string | null; statut: string
+  medecin: { prenom: string; nom: string }
+  lit: { numero: string; chambre: { numero: string; type: string; service?: { nom: string } | null } }
+}
+
+interface DossierPrescription {
+  id: string; medicament: string; dosage: string; voie: string; frequence: string
+  medecin: { prenom: string; nom: string }
+}
+
+export async function printDossierPatient(
+  patient: DossierPatient,
+  sejours: DossierSejour[],
+  prescriptionsActives: DossierPrescription[],
+) {
+  const cfg = await getConfig()
+  const HOSPITAL_NAME    = cfg.nom
+  const HOSPITAL_ADDRESS = [cfg.adresse, cfg.telephone].filter(Boolean).join(' · ') || 'Haïti'
+
+  function fmtD(d: string) { return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) }
+  function fmtT(d: string) { return new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
+  const age = Math.floor((Date.now() - new Date(patient.dateNaissance).getTime()) / (365.25 * 24 * 3600 * 1000))
+
+  const STATUT_EXAMEN: Record<string, string> = {
+    EN_ATTENTE: 'En attente', EN_COURS: 'En cours',
+    RESULTAT_DISPONIBLE: 'Résultat dispo.', VALIDE: 'Validé', ANNULE: 'Annulé',
+  }
+  const STATUT_FACTURE: Record<string, string> = {
+    EN_ATTENTE: 'Non payée', PARTIELLEMENT_PAYE: 'Partielle', PAYE: 'Payée', ANNULE: 'Annulée',
+  }
+  const TYPE_CHAMBRE: Record<string, string> = {
+    STANDARD: 'Standard', SOINS_INTENSIFS: 'Soins intensifs',
+    MATERNITE: 'Maternité', PEDIATRIE: 'Pédiatrie', ISOLEMENT: 'Isolement',
+  }
+
+  const consultHtml = patient.consultations.length === 0
+    ? '<p style="color:#94a3b8;font-style:italic;font-size:12px">Aucune consultation enregistrée.</p>'
+    : patient.consultations.map((c, i) => {
+        const sv = c.signesVitaux as { tension?: string; temperature?: number; poids?: number } | undefined
+        const vitauxStr = sv
+          ? [sv.tension && `TA ${sv.tension}`, sv.temperature && `T° ${sv.temperature}°C`, sv.poids && `${sv.poids} kg`].filter(Boolean).join(' · ')
+          : ''
+        return `
+          <div style="border-left:3px solid #e2e8f0;padding:10px 16px;margin-bottom:${i < patient.consultations.length - 1 ? '14px' : '0'}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+              <div>
+                <strong style="font-size:13px;color:#0f172a">${fmtD(c.date)}</strong>
+                <span style="font-size:10px;color:#94a3b8;margin-left:6px">${fmtT(c.date)}</span>
+              </div>
+              <span style="font-size:11px;color:#64748b">Dr. ${c.medecin.prenom} ${c.medecin.nom}</span>
+            </div>
+            ${vitauxStr ? `<p style="font-size:10px;color:#64748b;margin-bottom:6px;background:#f8fafc;padding:4px 8px;border-radius:4px">Signes vitaux : ${vitauxStr}</p>` : ''}
+            ${c.diagnostic ? `<p style="font-size:12px;color:#1e293b;margin-bottom:4px"><strong>Diagnostic :</strong> ${c.diagnostic}</p>` : ''}
+            ${c.notes ? `<p style="font-size:12px;color:#475569;margin-bottom:4px"><em>Notes :</em> ${c.notes}</p>` : ''}
+            ${c.prescriptions ? `<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:6px;padding:8px 12px;margin-top:6px"><p style="font-size:10px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Ordonnance</p><pre style="font-size:11px;color:#3730a3;white-space:pre-wrap;font-family:inherit">${c.prescriptions}</pre></div>` : ''}
+          </div>`
+      }).join('')
+
+  const examenRows = patient.examens.length === 0
+    ? '<tr><td colspan="4" style="text-align:center;color:#94a3b8;font-style:italic">Aucun examen</td></tr>'
+    : patient.examens.map(e => {
+        const isOk = e.statut === 'RESULTAT_DISPONIBLE' || e.statut === 'VALIDE'
+        return `<tr>
+          <td>${fmtD(e.createdAt)}</td>
+          <td><strong>${e.type}</strong></td>
+          <td>Dr. ${e.medecin.prenom} ${e.medecin.nom}</td>
+          <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${isOk ? '#dcfce7' : '#fef3c7'};color:${isOk ? '#166534' : '#92400e'}">${STATUT_EXAMEN[e.statut] || e.statut}</span></td>
+        </tr>
+        ${e.resultat ? `<tr><td colspan="4" style="padding:2px 12px 8px;font-size:11px;color:#475569;font-style:italic">${e.resultat}</td></tr>` : ''}`
+      }).join('')
+
+  const sejourHtml = sejours.length === 0
+    ? '<p style="color:#94a3b8;font-style:italic;font-size:12px">Aucune hospitalisation dans le dossier.</p>'
+    : sejours.map(s => {
+        const dureeMs = (s.dateSortie ? new Date(s.dateSortie) : new Date()).getTime() - new Date(s.dateAdmission).getTime()
+        const jours = Math.ceil(dureeMs / 86_400_000)
+        const isActif = s.statut === 'EN_COURS'
+        return `
+          <div style="border:1px solid ${isActif ? '#fecaca' : '#e2e8f0'};background:${isActif ? '#fff5f5' : '#f8fafc'};border-radius:8px;padding:10px 14px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div>
+                <strong style="font-size:13px;color:#0f172a">Chambre ${s.lit.chambre.numero} — Lit ${s.lit.numero}</strong>
+                <span style="font-size:10px;color:#94a3b8;margin-left:6px">${TYPE_CHAMBRE[s.lit.chambre.type] || s.lit.chambre.type}${s.lit.chambre.service ? ` · ${s.lit.chambre.service.nom}` : ''}</span>
+              </div>
+              <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${isActif ? '#fee2e2' : '#f1f5f9'};color:${isActif ? '#dc2626' : '#64748b'}">${isActif ? 'En cours' : `${jours} jour${jours > 1 ? 's' : ''}`}</span>
+            </div>
+            <p style="font-size:11px;color:#64748b;margin-top:4px">
+              ${fmtD(s.dateAdmission)}${s.dateSortie ? ` → ${fmtD(s.dateSortie)}` : ' → en cours'} · Dr. ${s.medecin.prenom} ${s.medecin.nom}
+            </p>
+            ${s.motif ? `<p style="font-size:11px;color:#475569;font-style:italic;margin-top:2px">Motif : ${s.motif}</p>` : ''}
+          </div>`
+      }).join('')
+
+  const prescHtml = prescriptionsActives.length === 0 ? '' : `
+    <section>
+      <div class="sec-title">Prescriptions actives (séjour en cours)</div>
+      <table>
+        <thead><tr><th>Médicament</th><th>Dosage</th><th>Voie</th><th>Fréquence</th><th>Prescrit par</th></tr></thead>
+        <tbody>
+          ${prescriptionsActives.map(p => `<tr>
+            <td><strong>${p.medicament}</strong></td>
+            <td>${p.dosage}</td>
+            <td>${p.voie}</td>
+            <td>${p.frequence}</td>
+            <td>Dr. ${p.medecin.prenom} ${p.medecin.nom}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </section>`
+
+  const totalImpayes = patient.factures
+    .filter(f => ['EN_ATTENTE', 'PARTIELLEMENT_PAYE'].includes(f.statut))
+    .reduce((s, f) => s + (f.montantTotal - f.montantPaye), 0)
+
+  const factureRows = patient.factures.length === 0
+    ? '<tr><td colspan="4" style="text-align:center;color:#94a3b8;font-style:italic">Aucune facture</td></tr>'
+    : patient.factures.map(f => {
+        const isPaid = f.statut === 'PAYE'
+        return `<tr>
+          <td><strong>${f.numero}</strong><br><span style="font-size:10px;color:#94a3b8">${fmtD(f.createdAt)}</span></td>
+          <td class="text-right">${f.montantTotal.toLocaleString('fr-FR')} HTG</td>
+          <td class="text-right">${f.montantPaye.toLocaleString('fr-FR')} HTG</td>
+          <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${isPaid ? '#dcfce7' : '#fff7ed'};color:${isPaid ? '#166534' : '#9a3412'}">${STATUT_FACTURE[f.statut] || f.statut}</span></td>
+        </tr>`
+      }).join('')
+
+  const html = `
+    <div class="doc-header">
+      <div>
+        <h1>${HOSPITAL_NAME}</h1>
+        <p>${HOSPITAL_ADDRESS}</p>
+      </div>
+      <div class="doc-type">Dossier médical<span class="numero" style="font-size:14px">${patient.numero}</span></div>
+    </div>
+
+    <!-- Identité -->
+    <div class="info-grid">
+      <div class="info-box">
+        <div class="label">Patient</div>
+        <div class="value">${patient.prenom} ${patient.nom}</div>
+        <div class="sub">${patient.sexe === 'M' ? 'Masculin' : 'Féminin'} · ${age} ans · Né(e) le ${fmtD(patient.dateNaissance)}</div>
+        ${patient.groupeSanguin ? `<div class="sub" style="margin-top:4px;font-weight:700;color:#dc2626">Groupe sanguin : ${patient.groupeSanguin}</div>` : ''}
+      </div>
+      <div class="info-box">
+        <div class="label">Contact</div>
+        <div class="value">${patient.telephone}</div>
+        ${patient.adresse ? `<div class="sub">${patient.adresse}</div>` : ''}
+        <div class="sub" style="margin-top:6px;font-size:10px;color:#94a3b8">Enregistré le ${fmtD(patient.createdAt)}</div>
+      </div>
+    </div>
+
+    <!-- Antécédents & Allergies -->
+    ${(patient.antecedents || patient.allergies) ? `
+    <div class="info-grid" style="margin-top:0">
+      ${patient.antecedents ? `<div class="info-box"><div class="label">Antécédents médicaux</div><div style="font-size:12px;color:#1e293b;line-height:1.6;margin-top:4px">${patient.antecedents}</div></div>` : '<div></div>'}
+      ${patient.allergies ? `<div class="info-box" style="border-color:#fca5a5;background:#fff5f5"><div class="label" style="color:#dc2626">⚠ Allergies connues</div><div style="font-size:12px;color:#991b1b;line-height:1.6;margin-top:4px;font-weight:600">${patient.allergies}</div></div>` : '<div></div>'}
+    </div>` : ''}
+
+    <!-- Consultations -->
+    <section>
+      <div class="sec-title">Consultations (${patient.consultations.length})</div>
+      ${consultHtml}
+    </section>
+
+    <!-- Examens -->
+    <section>
+      <div class="sec-title">Examens médicaux (${patient.examens.length})</div>
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Prescrit par</th><th>Statut</th></tr></thead>
+        <tbody>${examenRows}</tbody>
+      </table>
+    </section>
+
+    <!-- Hospitalisations -->
+    <section>
+      <div class="sec-title">Hospitalisations (${sejours.length})</div>
+      ${sejourHtml}
+    </section>
+
+    ${prescHtml}
+
+    <!-- Facturation -->
+    <section>
+      <div class="sec-title">Facturation (${patient.factures.length})</div>
+      <table>
+        <thead><tr><th>Facture</th><th class="text-right">Montant</th><th class="text-right">Payé</th><th>Statut</th></tr></thead>
+        <tbody>
+          ${factureRows}
+          ${totalImpayes > 0 ? `
+          <tr class="total-row">
+            <td colspan="3">Total impayés</td>
+            <td class="text-right" style="color:#dc2626">${totalImpayes.toLocaleString('fr-FR')} HTG</td>
+          </tr>` : ''}
+        </tbody>
+      </table>
+    </section>
+
+    <div class="sig-line" style="margin-top:32px;display:flex;justify-content:space-between">
+      <div class="sig-box"><p>Signature du médecin responsable</p></div>
+      <div class="sig-box"><p>Cachet de l'établissement</p></div>
+    </div>
+
+    <div class="doc-footer">
+      <span>${HOSPITAL_NAME} — Document confidentiel</span>
+      <span>Imprimé le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+    </div>`
+
+  openPrintWindow(html, `Dossier médical — ${patient.prenom} ${patient.nom}`)
 }

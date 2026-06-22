@@ -5,6 +5,7 @@ import prisma from '../utils/prisma'
 import { sendSuccess, sendError, generateNumero } from '../utils/response'
 import { AuthRequest } from '../types'
 import { audit } from '../utils/audit'
+import { notify } from '../utils/notifier'
 
 const examenSchema = z.object({
   patientId: z.string().uuid(),
@@ -88,6 +89,16 @@ export async function saisirResultat(req: AuthRequest, res: Response, next: Next
       include,
     })
     audit(req.user, 'UPDATE', 'Examen', { recordId: examen.id, label: `Résultat saisi — ${examen.type} — ${examen.patient.prenom} ${examen.patient.nom}` })
+
+    // Notifie le médecin prescripteur si ce n'est pas lui qui saisit
+    notify(
+      examen.medecinId,
+      'EXAM_RESULT',
+      `Résultat disponible — ${examen.type}`,
+      `Patient : ${examen.patient.prenom} ${examen.patient.nom}`,
+      { examId: examen.id, patientId: examen.patientId, type: examen.type },
+    ).catch(() => {})
+
     sendSuccess(res, examen)
   } catch (err) { next(err) }
 }

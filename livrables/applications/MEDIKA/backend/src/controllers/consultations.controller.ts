@@ -5,6 +5,36 @@ import prisma from '../utils/prisma'
 import { sendSuccess, sendError } from '../utils/response'
 import { AuthRequest } from '../types'
 import { audit } from '../utils/audit'
+import { broadcast } from '../utils/eventBus'
+
+function todayBounds() {
+  const d = new Date()
+  return {
+    start: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0),
+    end:   new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999),
+  }
+}
+
+async function syncFileAttente(tx: Prisma.TransactionClient, patientId: string, newStatut: 'EN_CONSULTATION' | 'TERMINE') {
+  const { start, end } = todayBounds()
+  const statuts = newStatut === 'EN_CONSULTATION'
+    ? ['EN_ATTENTE']
+    : ['EN_ATTENTE', 'EN_CONSULTATION']
+
+  const entry = await tx.fileAttente.findFirst({
+    where: { patientId, dateFile: { gte: start, lte: end }, statut: { in: statuts as any } },
+    orderBy: { numero: 'desc' },
+  })
+  if (!entry) return
+
+  await tx.fileAttente.update({
+    where: { id: entry.id },
+    data: {
+      statut: newStatut,
+      ...(newStatut === 'EN_CONSULTATION' ? { appelleA: new Date() } : { termineA: new Date() }),
+    },
+  })
+}
 
 const consultationSchema = z.object({
   patientId: z.string().uuid(),
@@ -69,6 +99,10 @@ export async function createConsultation(req: AuthRequest, res: Response, next: 
         await tx.appointment.update({ where: { id: data.appointmentId }, data: { statut: 'TERMINE' } })
       }
 
+      // Mise à jour automatique de la file d'attente
+      const hasdiag = !!(restData as any).diagnostic
+      await syncFileAttente(tx, data.patientId, hasdiag ? 'TERMINE' : 'EN_CONSULTATION')
+
       if (restData.prochainRdv) {
         const docteur = await tx.user.findUnique({
           where: { id: req.user!.userId },
@@ -105,6 +139,7 @@ export async function createConsultation(req: AuthRequest, res: Response, next: 
 
     const withExamens = await prisma.consultation.findUnique({ where: { id: result.id }, include })
     audit(req.user, 'CREATE', 'Consultation', { recordId: result.id, label: `Patient ${result.patient.prenom} ${result.patient.nom}` })
+    broadcast('fileattente')
     sendSuccess(res, withExamens, 201)
   } catch (err) {
     next(err)
@@ -156,8 +191,14 @@ export async function updateConsultation(req: AuthRequest, res: Response, next: 
       if (examensTypes && examensTypes.length > 0) {
         await createExamens(tx, examensTypes, exists.patientId, consultationId, req.user!.userId)
       }
+
+      // Si un diagnostic est ajouté/modifié, clore automatiquement la file
+      if (restData.diagnostic) {
+        await syncFileAttente(tx, exists.patientId, 'TERMINE')
+      }
     })
 
+    broadcast('fileattente')
     const updated = await prisma.consultation.findUnique({ where: { id: consultationId }, include })
     sendSuccess(res, updated)
   } catch (err) { next(err) }

@@ -105,6 +105,14 @@ function PatientSearch({ onSelect, hasError }: { onSelect: (p: Patient | null) =
   )
 }
 
+// ─── Priority config ──────────────────────────────────────────────────────────
+
+const PRIORITY_CFG: Record<string, { label: string; badge: string; border: string; numBg: string }> = {
+  NORMAL:   { label: 'Normal',   badge: '',                                                                          border: '',                     numBg: 'bg-indigo-50 text-indigo-700 border-2 border-indigo-200' },
+  URGENT:   { label: 'Urgent',   badge: 'bg-orange-100 text-orange-700 border border-orange-300',                   border: 'border-orange-200',    numBg: 'bg-orange-500 text-white' },
+  CRITIQUE: { label: 'Critique', badge: 'bg-red-100 text-red-700 border border-red-300 animate-pulse',              border: 'border-red-300',       numBg: 'bg-red-600 text-white' },
+}
+
 // ─── Add to queue modal ───────────────────────────────────────────────────────
 
 function AddPatientModal({ open, onClose, onSuccess }: {
@@ -114,6 +122,7 @@ function AddPatientModal({ open, onClose, onSuccess }: {
   const [patientMissing, setPatientMissing] = useState(false)
   const [motif, setMotif]           = useState('')
   const [medecinId, setMedecinId]   = useState('')
+  const [priorite, setPriorite]     = useState('NORMAL')
   const [medecins, setMedecins]     = useState<Pick<User, 'id' | 'prenom' | 'nom'>[]>([])
   const [loading, setLoading]       = useState(false)
   const [done, setDone]             = useState(false)
@@ -125,7 +134,7 @@ function AddPatientModal({ open, onClose, onSuccess }: {
   }, [open])
 
   function reset() {
-    setPatientId(''); setPatientMissing(false); setMotif(''); setMedecinId('')
+    setPatientId(''); setPatientMissing(false); setMotif(''); setMedecinId(''); setPriorite('NORMAL')
     setLoading(false); setDone(false); setApiErr('')
   }
 
@@ -140,6 +149,7 @@ function AddPatientModal({ open, onClose, onSuccess }: {
         patientId,
         motif: motif || undefined,
         medecinId: medecinId || undefined,
+        priorite,
       })
       setDone(true)
       setTimeout(() => { reset(); onSuccess() }, 1200)
@@ -201,6 +211,26 @@ function AddPatientModal({ open, onClose, onSuccess }: {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
+                  Priorité
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['NORMAL', 'URGENT', 'CRITIQUE'] as const).map(p => (
+                    <button key={p} type="button" onClick={() => setPriorite(p)}
+                      className={`py-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
+                        priorite === p
+                          ? p === 'CRITIQUE' ? 'bg-red-600 text-white border-red-600'
+                          : p === 'URGENT'   ? 'bg-orange-500 text-white border-orange-500'
+                          :                    'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                      }`}>
+                      {p === 'CRITIQUE' ? 'Critique' : p === 'URGENT' ? 'Urgent' : 'Normal'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
                   Médecin assigné
                 </label>
                 <Combobox
@@ -249,6 +279,8 @@ function QueueCard({ entry, onRefresh, canAct, canRemove }: {
 }) {
   const [loading, setLoading] = useState<string | null>(null)
   const cfg = STATUT_CFG[entry.statut]
+  const prio = PRIORITY_CFG[entry.priorite ?? 'NORMAL'] ?? PRIORITY_CFG.NORMAL
+  const isUrgent = entry.priorite === 'URGENT' || entry.priorite === 'CRITIQUE'
 
   async function act(action: string) {
     setLoading(action)
@@ -272,6 +304,7 @@ function QueueCard({ entry, onRefresh, canAct, canRemove }: {
   return (
     <div className={`relative flex gap-4 bg-white rounded-2xl border p-4 transition-all hover:shadow-md ${
       isInProgress ? 'border-blue-200 shadow-sm shadow-blue-100' :
+      isWaiting && isUrgent ? `${prio.border} shadow-sm` :
       isWaiting ? 'border-slate-200' :
       'border-slate-100 opacity-75'
     }`}>
@@ -280,6 +313,7 @@ function QueueCard({ entry, onRefresh, canAct, canRemove }: {
       <div className="shrink-0 flex flex-col items-center">
         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shadow-sm ${
           isInProgress ? 'bg-blue-600 text-white' :
+          isWaiting && isUrgent ? prio.numBg :
           isWaiting    ? 'bg-indigo-50 text-indigo-700 border-2 border-indigo-200' :
           'bg-slate-100 text-slate-400'
         }`}>
@@ -300,7 +334,12 @@ function QueueCard({ entry, onRefresh, canAct, canRemove }: {
             <p className="font-semibold text-slate-900">{entry.patient.prenom} {entry.patient.nom}</p>
             <p className="text-xs text-slate-400">{entry.patient.numero} · <Phone className="w-2.5 h-2.5 inline" /> {entry.patient.telephone}</p>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+            {isUrgent && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${prio.badge}`}>
+                {prio.label}
+              </span>
+            )}
             <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color}`}>
               {cfg.label}

@@ -19,6 +19,9 @@ import pharmacieRoutes from "./routes/pharmacie.routes";
 import planningRoutes from "./routes/planning.routes";
 import eventsRoutes from "./routes/events.routes";
 import tarifsRoutes from "./routes/tarifs.routes";
+import urgencesRoutes from "./routes/urgences.routes";
+import notificationsRoutes from "./routes/notifications.routes";
+import searchRoutes from "./routes/search.routes";
 
 const app = express();
 
@@ -48,6 +51,9 @@ app.use("/api/pharmacie", pharmacieRoutes);
 app.use("/api/planning", planningRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/tarifs", tarifsRoutes);
+app.use("/api/urgences", urgencesRoutes);
+app.use("/api/notifications", notificationsRoutes);
+app.use("/api/search", searchRoutes);
 
 app.use(errorHandler);
 

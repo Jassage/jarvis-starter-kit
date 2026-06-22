@@ -6,12 +6,13 @@ import api from '@/lib/api'
 import { useAuthStore } from '@/store/auth'
 import { Examen, ExamenStatut, Facture, FactureStatut } from '@/types'
 import { DossierSejour } from '../../hospitalisations/DossierSejour'
+import { printDossierPatient } from '@/lib/print'
 import {
   ArrowLeft, Phone, MapPin, Droplets, Calendar, Stethoscope,
   FileText, AlertTriangle, Clock, Plus,
   CheckCircle2, Activity, User, ClipboardList, CreditCard,
   HeartPulse, Pill, StickyNote, Archive, FlaskConical, Pencil, X,
-  BedDouble, Building2, ChevronRight, FolderOpen, History
+  BedDouble, Building2, ChevronRight, FolderOpen, History, Download
 } from 'lucide-react'
 
 // ─── Types enrichis ───────────────────────────────────────────────────────────
@@ -263,11 +264,16 @@ export default function PatientDetailPage() {
   const [error, setError] = useState('')
   const [toggling, setToggling] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [dossierSejourId, setDossierSejourId] = useState<string | null>(null)
   const [sejours, setSejours] = useState<SejourHistorique[]>([])
   const [prescriptionsActives, setPrescriptionsActives] = useState<PrescriptionActive[]>([])
 
-  const canEdit = user?.role && EDIT_ROLES.includes(user.role)
+  const canEdit          = user?.role && EDIT_ROLES.includes(user.role)
+  const canAccessDossier = ['ADMIN', 'MEDECIN', 'INFIRMIER'].includes(user?.role || '')
+  const canConsulter     = ['ADMIN', 'MEDECIN'].includes(user?.role || '')
+  const canPrescrire     = ['ADMIN', 'MEDECIN'].includes(user?.role || '')
+  const canFacturer      = ['ADMIN', 'CAISSIER', 'MEDECIN'].includes(user?.role || '')
 
   async function handleToggleActif() {
     setToggling(true)
@@ -275,6 +281,14 @@ export default function PatientDetailPage() {
       const r = await api.patch(`/patients/${id}/actif`, {})
       setPatient(p => p ? { ...p, actif: r.data.data.actif } : p)
     } catch {} finally { setToggling(false) }
+  }
+
+  async function handleExportPdf() {
+    if (!patient) return
+    setExporting(true)
+    try {
+      await printDossierPatient(patient, sejours, prescriptionsActives)
+    } finally { setExporting(false) }
   }
 
   useEffect(() => {
@@ -375,28 +389,43 @@ export default function PatientDetailPage() {
                       <Pencil className="w-3.5 h-3.5" />Modifier
                     </button>
                   )}
+                  {canAccessDossier && (
+                    <button onClick={handleExportPdf} disabled={exporting}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl transition-all disabled:opacity-50">
+                      {exporting
+                        ? <div className="w-3.5 h-3.5 border-2 border-slate-400/30 border-t-slate-500 rounded-full animate-spin" />
+                        : <Download className="w-3.5 h-3.5" />}
+                      Dossier PDF
+                    </button>
+                  )}
                   <Link href={`/appointments?patientId=${patient.id}`}
                     className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 rounded-xl transition-all">
                     <Calendar className="w-3.5 h-3.5" />Rendez-vous
                   </Link>
-                  <Link href={`/consultations`}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl transition-all">
-                    <Stethoscope className="w-3.5 h-3.5" />Consultation
-                  </Link>
-                  <Link href={`/factures`}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-xl transition-all">
-                    <FileText className="w-3.5 h-3.5" />Facture
-                  </Link>
-                  <button onClick={handleToggleActif} disabled={toggling}
-                    className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 border rounded-xl transition-all disabled:opacity-50
-                      ${patient.actif
-                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
-                        : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'}`}>
-                    {toggling
-                      ? <div className="w-3 h-3 border border-current/30 border-t-current rounded-full animate-spin" />
-                      : patient.actif ? <Archive className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                    {patient.actif ? 'Archiver' : 'Réactiver'}
-                  </button>
+                  {canConsulter && (
+                    <Link href={`/consultations`}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl transition-all">
+                      <Stethoscope className="w-3.5 h-3.5" />Consultation
+                    </Link>
+                  )}
+                  {canFacturer && (
+                    <Link href={`/factures`}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-xl transition-all">
+                      <FileText className="w-3.5 h-3.5" />Facture
+                    </Link>
+                  )}
+                  {canConsulter && (
+                    <button onClick={handleToggleActif} disabled={toggling}
+                      className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 border rounded-xl transition-all disabled:opacity-50
+                        ${patient.actif
+                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
+                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'}`}>
+                      {toggling
+                        ? <div className="w-3 h-3 border border-current/30 border-t-current rounded-full animate-spin" />
+                        : patient.actif ? <Archive className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                      {patient.actif ? 'Archiver' : 'Réactiver'}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -572,11 +601,11 @@ export default function PatientDetailPage() {
 
       {/* ── Consultations ── */}
       <Section icon={<ClipboardList className="w-3.5 h-3.5 text-emerald-600" />} label={`Consultations (${patient.consultations.length})`} color="bg-emerald-50"
-        action={
+        action={canConsulter ? (
           <Link href="/consultations" className="text-xs text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1">
             <Plus className="w-3 h-3" />Nouvelle
           </Link>
-        }>
+        ) : undefined}>
         {patient.consultations.length === 0 ? (
           <EmptyState msg="Aucune consultation dans le dossier" />
         ) : (
@@ -630,11 +659,11 @@ export default function PatientDetailPage() {
 
       {/* ── Examens ── */}
       <Section icon={<FlaskConical className="w-3.5 h-3.5 text-sky-600" />} label={`Examens médicaux (${patient.examens.length})`} color="bg-sky-50"
-        action={
+        action={canPrescrire ? (
           <Link href="/examens" className="text-xs text-sky-600 hover:text-sky-700 font-semibold flex items-center gap-1">
             <Plus className="w-3 h-3" />Prescrire
           </Link>
-        }>
+        ) : undefined}>
         {patient.examens.length === 0 ? (
           <EmptyState msg="Aucun examen prescrit dans le dossier" />
         ) : (
@@ -702,11 +731,11 @@ export default function PatientDetailPage() {
 
         {/* Facturation */}
         <Section icon={<CreditCard className="w-3.5 h-3.5 text-orange-600" />} label={`Facturation (${patient.factures.length})`} color="bg-orange-50"
-          action={
+          action={canFacturer ? (
             <Link href="/factures" className="text-xs text-orange-600 hover:text-orange-700 font-semibold flex items-center gap-1">
               <Plus className="w-3 h-3" />Nouvelle
             </Link>
-          }>
+          ) : undefined}>
           {patient.factures.length === 0 ? (
             <EmptyState msg="Aucune facture dans le dossier" />
           ) : (
@@ -748,20 +777,22 @@ export default function PatientDetailPage() {
             <Section icon={<Pill className="w-3.5 h-3.5 text-blue-600" />}
               label={`Prescriptions actives${prescriptionsActives.length > 0 ? ` (${prescriptionsActives.length})` : ''}`}
               color="bg-blue-50"
-              action={
+              action={canAccessDossier ? (
                 <button onClick={() => setDossierSejourId(patient.sejourEnCours!.id)}
                   className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold">
                   <FolderOpen className="w-3 h-3" />Dossier complet
                 </button>
-              }>
+              ) : undefined}>
               {prescriptionsActives.length === 0 ? (
                 <div className="text-center py-4">
                   <Pill className="w-7 h-7 text-slate-200 mx-auto mb-2" />
                   <p className="text-sm text-slate-400">Aucune prescription active</p>
-                  <button onClick={() => setDossierSejourId(patient.sejourEnCours!.id)}
-                    className="mt-2 text-xs text-blue-600 hover:underline">
-                    Ouvrir le dossier de séjour →
-                  </button>
+                  {canAccessDossier && (
+                    <button onClick={() => setDossierSejourId(patient.sejourEnCours!.id)}
+                      className="mt-2 text-xs text-blue-600 hover:underline">
+                      Ouvrir le dossier de séjour →
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -775,10 +806,12 @@ export default function PatientDetailPage() {
                       <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full shrink-0">{p.voie}</span>
                     </div>
                   ))}
-                  <button onClick={() => setDossierSejourId(patient.sejourEnCours!.id)}
-                    className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-2 rounded-xl transition-colors mt-2">
-                    <FolderOpen className="w-3.5 h-3.5" />Voir dossier complet (soins, MAR, notes)
-                  </button>
+                  {canAccessDossier && (
+                    <button onClick={() => setDossierSejourId(patient.sejourEnCours!.id)}
+                      className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-2 rounded-xl transition-colors mt-2">
+                      <FolderOpen className="w-3.5 h-3.5" />Voir dossier complet (soins, MAR, notes)
+                    </button>
+                  )}
                 </div>
               )}
             </Section>
@@ -812,7 +845,7 @@ export default function PatientDetailPage() {
                         {' · '}Dr. {s.medecin.prenom} {s.medecin.nom}
                       </p>
                       {s.motif && <p className="text-xs text-slate-500 italic mt-0.5">"{s.motif}"</p>}
-                      {isActif && (
+                      {isActif && canAccessDossier && (
                         <button onClick={() => setDossierSejourId(s.id)}
                           className="mt-2 flex items-center gap-1 text-xs font-semibold text-red-700 hover:text-red-800 transition-colors">
                           <FolderOpen className="w-3 h-3" />Ouvrir le dossier

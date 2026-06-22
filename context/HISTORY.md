@@ -7,6 +7,16 @@
 
 ---
 
+## 2026-06-22
+
+### MEDIKA : export PDF, recherche globale et rapports par période
+
+- **Export dossier médical PDF** : bouton "Dossier PDF" sur la page patient (visible pour ADMIN/MEDECIN/INFIRMIER). Appelle `printDossierPatient(patient, sejours, prescriptionsActives)` dans `print.ts`. Génère un document HTML complet imprimé via `openPrintWindow` (pas de lib externe) : identité, antécédents/allergies (fond rouge), timeline consultations, tableau examens, hospitalisations, prescriptions actives, factures, lignes signature médecin + cachet établissement
+- **Recherche globale Cmd+K** : nouveau endpoint `GET /api/search?q=` (backend) + composant `SearchPalette` (frontend). Debounce 280ms, résultats groupés (patients × 6, factures × 4, examens × 4), navigation clavier (↑↓↵Esc), scroll into view. Raccourci Cmd+K/Ctrl+K câblé dans Header via `useEffect`. SearchPalette retourne `null` si fermé (pas de portal DOM inutile)
+- **Rapports avec sélecteur de période** : endpoint `GET /stats/rapport` enrichi avec `?from=YYYY-MM-DD&to=YYYY-MM-DD`, répond `dateFin` en plus de `date`. Page rapports : 5 presets (aujourd'hui, hier, semaine en cours, mois en cours, mois dernier) + champs date personnalisés. `printRapport` mis à jour pour afficher "Du X au Y" vs date unique. Titre de période contextuel dans l'en-tête de la page
+- **Section examens dans les rapports journaliers** : les examens étaient présents dans la réponse API mais jamais rendus. Ajout d'un tableau avec badges de statut colorés entre les sections Consultations et Facturation
+- **Fix TypeScript** : `urlBase64ToUint8Array` dans `useNotifications.ts` renvoyait `Uint8Array<ArrayBufferLike>`, incompatible avec `PushSubscribeOptions.applicationServerKey`. Corrigé avec type de retour explicite `Uint8Array<ArrayBuffer>` + construction par boucle au lieu de `Uint8Array.from`
+
 ## 2026-06-21
 
 ### MEDIKA : enrichissement hospitalisations, pharmacie et dashboard
