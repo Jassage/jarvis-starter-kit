@@ -1,0 +1,646 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Patient {
+  id            String   @id @default(uuid())
+  numero        String   @unique
+  prenom        String
+  nom           String
+  dateNaissance DateTime
+  sexe          Sexe
+  telephone     String
+  adresse       String?
+  groupeSanguin String?
+  antecedents   String?
+  allergies     String?
+  actif         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  appointments   Appointment[]
+  consultations  Consultation[]
+  factures       Facture[]
+  examens        Examen[]
+  fileAttente    FileAttente[]
+  sejours        Sejour[]
+  prescriptions  Prescription[]
+
+  @@map("patients")
+}
+
+enum Sexe {
+  M
+  F
+}
+
+model User {
+  id        String   @id @default(uuid())
+  prenom    String
+  nom       String
+  email     String   @unique
+  password  String
+  role      Role
+  serviceId String?
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service                  Service?          @relation(fields: [serviceId], references: [id])
+  consultationsComme       Consultation[]    @relation("MedecinConsultations")
+  paiementsEncaisses       Paiement[]        @relation("CaissierPaiements")
+  appointmentsMedecin      Appointment[]     @relation("MedecinAppointments")
+  examensPrescrits         Examen[]          @relation("MedecinExamens")
+  fileAttente              FileAttente[]     @relation("MedecinFile")
+  sejours                  Sejour[]          @relation("MedecinSejours")
+  prescriptionsRedigees    Prescription[]    @relation("MedecinPrescriptions")
+  administrationsRecordees Administration[]  @relation("InfirmierAdministrations")
+  soinsInfirmiers          SoinInfirmier[]   @relation("InfirmierSoins")
+  mouvementsStock          MouvementStock[]  @relation("UserMouvements")
+  gardes                   Garde[]           @relation("UserGardes")
+  absences                 Absence[]         @relation("UserAbsences")
+  absencesApprouvees       Absence[]         @relation("AdminApprovals")
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  MEDECIN
+  INFIRMIER
+  CAISSIER
+  ACCUEIL
+}
+
+model Service {
+  id          String  @id @default(uuid())
+  nom         String
+  description String?
+  actif       Boolean @default(true)
+
+  users        User[]
+  appointments Appointment[]
+  chambres     Chambre[]
+  gardes       Garde[]
+
+  @@map("services")
+}
+
+model Appointment {
+  id          String            @id @default(uuid())
+  patientId   String
+  medecinId   String
+  serviceId   String
+  dateHeure   DateTime
+  statut      AppointmentStatut @default(PLANIFIE)
+  motif       String?
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  patient      Patient       @relation(fields: [patientId], references: [id])
+  medecin      User          @relation("MedecinAppointments", fields: [medecinId], references: [id])
+  service      Service       @relation(fields: [serviceId], references: [id])
+  consultation Consultation?
+  fileAttente  FileAttente?
+
+  @@map("appointments")
+}
+
+enum AppointmentStatut {
+  PLANIFIE
+  EN_ATTENTE
+  EN_CONSULTATION
+  TERMINE
+  ANNULE
+}
+
+model Consultation {
+  id            String   @id @default(uuid())
+  patientId     String
+  medecinId     String
+  appointmentId String?  @unique
+  date          DateTime @default(now())
+  plainte       String?
+  diagnostic    String?
+  notes         String?
+  prescriptions String?
+  signesVitaux  Json?
+  prochainRdv   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  patient     Patient      @relation(fields: [patientId], references: [id])
+  medecin     User         @relation("MedecinConsultations", fields: [medecinId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  facture     Facture?
+  examens     Examen[]
+
+  @@map("consultations")
+}
+
+model Examen {
+  id                String       @id @default(uuid())
+  numero            String       @unique
+  patientId         String
+  consultationId    String?
+  medecinId         String
+  type              String
+  description       String?
+  statut            ExamenStatut @default(EN_ATTENTE)
+  resultat          String?
+  resultatStructure Json?
+  dateResultat      DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  patient      Patient       @relation(fields: [patientId], references: [id])
+  consultation Consultation? @relation(fields: [consultationId], references: [id])
+  medecin      User          @relation("MedecinExamens", fields: [medecinId], references: [id])
+
+  @@map("examens")
+}
+
+enum ExamenStatut {
+  EN_ATTENTE
+  EN_COURS
+  RESULTAT_DISPONIBLE
+  ANNULE
+}
+
+model FileAttente {
+  id            String        @id @default(uuid())
+  numero        Int
+  patientId     String
+  appointmentId String?       @unique
+  medecinId     String?
+  motif         String?
+  statut        StatutAttente @default(EN_ATTENTE)
+  dateFile      DateTime      @default(now())
+  appelleA      DateTime?
+  termineA      DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  patient     Patient      @relation(fields: [patientId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  medecin     User?        @relation("MedecinFile", fields: [medecinId], references: [id])
+
+  @@map("file_attente")
+}
+
+enum StatutAttente {
+  EN_ATTENTE
+  EN_CONSULTATION
+  TERMINE
+  ABSENT
+}
+
+model Facture {
+  id             String        @id @default(uuid())
+  numero         String        @unique
+  patientId      String
+  consultationId String?       @unique
+  sejourId       String?       @unique
+  montantTotal   Float
+  montantPaye    Float         @default(0)
+  statut         FactureStatut @default(EN_ATTENTE)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  patient      Patient       @relation(fields: [patientId], references: [id])
+  consultation Consultation? @relation(fields: [consultationId], references: [id])
+  sejour       Sejour?       @relation(fields: [sejourId], references: [id])
+  lignes       LigneFacture[]
+  paiements    Paiement[]
+
+  @@map("factures")
+}
+
+enum FactureStatut {
+  EN_ATTENTE
+  PARTIELLEMENT_PAYE
+  PAYE
+  ANNULE
+}
+
+model LigneFacture {
+  id           String @id @default(uuid())
+  factureId    String
+  description  String
+  quantite     Int    @default(1)
+  prixUnitaire Float
+  montant      Float
+
+  facture Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
+
+  @@map("lignes_facture")
+}
+
+model Paiement {
+  id        String          @id @default(uuid())
+  factureId String
+  montant   Float
+  methode   MethodePaiement
+  caissierI String
+  reference String?
+  date      DateTime        @default(now())
+
+  facture  Facture @relation(fields: [factureId], references: [id])
+  caissier User    @relation("CaissierPaiements", fields: [caissierI], references: [id])
+
+  @@map("paiements")
+}
+
+enum MethodePaiement {
+  CASH
+  CARTE
+  ASSURANCE
+  MONCASH
+}
+
+model Chambre {
+  id        String      @id @default(uuid())
+  numero    String      @unique
+  etage     Int?
+  serviceId String?
+  type      ChambreType @default(STANDARD)
+  actif     Boolean     @default(true)
+
+  service Service? @relation(fields: [serviceId], references: [id])
+  lits    Lit[]
+
+  @@map("chambres")
+}
+
+enum ChambreType {
+  STANDARD
+  SOINS_INTENSIFS
+  MATERNITE
+  PEDIATRIE
+  ISOLEMENT
+}
+
+model Lit {
+  id        String    @id @default(uuid())
+  numero    String    @unique
+  chambreId String
+  statut    LitStatut @default(DISPONIBLE)
+
+  chambre Chambre  @relation(fields: [chambreId], references: [id])
+  sejours Sejour[]
+
+  @@map("lits")
+}
+
+enum LitStatut {
+  DISPONIBLE
+  OCCUPE
+  MAINTENANCE
+  RESERVE
+}
+
+model Sejour {
+  id            String       @id @default(uuid())
+  patientId     String
+  litId         String
+  medecinId     String
+  dateAdmission DateTime     @default(now())
+  dateSortie    DateTime?
+  motif         String?
+  statut        SejourStatut @default(EN_COURS)
+  notes         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  patient       Patient         @relation(fields: [patientId], references: [id])
+  lit           Lit             @relation(fields: [litId], references: [id])
+  medecin       User            @relation("MedecinSejours", fields: [medecinId], references: [id])
+  prescriptions Prescription[]
+  soins         SoinInfirmier[]
+  facture       Facture?
+
+  @@map("sejours")
+}
+
+enum SejourStatut {
+  EN_COURS
+  SORTI
+  TRANSFERE
+}
+
+// ── Prescriptions structurées ─────────────────────────────────────────────────
+
+model Prescription {
+  id           String             @id @default(uuid())
+  patientId    String
+  medecinId    String
+  sejourId     String
+  medicament   String
+  dosage       String
+  voie         VoieAdministration @default(ORAL)
+  frequence    String
+  intervalleH  Int                @default(8)
+  dureeJours   Int?
+  instructions String?
+  statut       PrescriptionStatut @default(ACTIVE)
+  dateDebut    DateTime           @default(now())
+  dateFin      DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  patient         Patient          @relation(fields: [patientId], references: [id])
+  medecin         User             @relation("MedecinPrescriptions", fields: [medecinId], references: [id])
+  sejour          Sejour           @relation(fields: [sejourId], references: [id])
+  administrations Administration[]
+  mouvementsStock MouvementStock[] @relation("PrescriptionMouvements")
+
+  @@map("prescriptions")
+}
+
+enum VoieAdministration {
+  ORAL
+  IV
+  IM
+  SC
+  TOPIQUE
+  INHALATION
+  SUBLINGUALE
+  RECTALE
+}
+
+enum PrescriptionStatut {
+  ACTIVE
+  SUSPENDUE
+  TERMINEE
+  ANNULEE
+}
+
+// ── Administrations de médicaments (MAR) ─────────────────────────────────────
+
+model Administration {
+  id             String               @id @default(uuid())
+  prescriptionId String
+  infirmierId    String
+  dateHeure      DateTime             @default(now())
+  statut         AdministrationStatut @default(ADMINISTRE)
+  note           String?
+  createdAt      DateTime             @default(now())
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  infirmier    User         @relation("InfirmierAdministrations", fields: [infirmierId], references: [id])
+
+  @@map("administrations")
+}
+
+enum AdministrationStatut {
+  ADMINISTRE
+  OMIS
+  REFUSE
+  REPORTE
+}
+
+// ── Feuille de soins infirmiers ───────────────────────────────────────────────
+
+model SoinInfirmier {
+  id          String   @id @default(uuid())
+  sejourId    String
+  infirmierId String
+  date        DateTime @default(now())
+  tension     String?
+  pouls       Int?
+  temperature Float?
+  spo2        Float?
+  freqResp    Int?
+  entrees     Float?
+  sorties     Float?
+  douleur     Int?
+  actes       Json?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  sejour    Sejour @relation(fields: [sejourId], references: [id])
+  infirmier User   @relation("InfirmierSoins", fields: [infirmierId], references: [id])
+
+  @@map("soins_infirmiers")
+}
+
+// ── Pharmacie & stocks ────────────────────────────────────────────────────────
+
+model Medicament {
+  id           String   @id @default(uuid())
+  nom          String
+  dci          String?
+  categorie    String?
+  forme        String?
+  dosageForme  String?
+  unite        String   @default("unité")
+  stockActuel  Float    @default(0)
+  seuilAlerte  Float    @default(10)
+  prixUnitaire Float?
+  actif        Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  lots       LotMedicament[]
+  mouvements MouvementStock[]
+  lignesCmd  LigneCommande[]
+
+  @@map("medicaments")
+}
+
+model LotMedicament {
+  id               String    @id @default(uuid())
+  medicamentId     String
+  numero           String
+  quantiteInitiale Float
+  quantiteRestante Float
+  datePeremption   DateTime?
+  fournisseur      String?
+  dateReception    DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+
+  medicament Medicament @relation(fields: [medicamentId], references: [id])
+
+  @@map("lots_medicaments")
+}
+
+model MouvementStock {
+  id             String        @id @default(uuid())
+  medicamentId   String
+  userId         String
+  type           TypeMouvement
+  quantite       Float
+  raison         String?
+  prescriptionId String?
+  lotId          String?
+  createdAt      DateTime      @default(now())
+
+  medicament   Medicament   @relation(fields: [medicamentId], references: [id])
+  user         User         @relation("UserMouvements", fields: [userId], references: [id])
+  prescription Prescription? @relation("PrescriptionMouvements", fields: [prescriptionId], references: [id])
+
+  @@map("mouvements_stock")
+}
+
+enum TypeMouvement {
+  ENTREE
+  SORTIE
+  DISPENSATION
+  AJUSTEMENT
+  PEREMPTION
+}
+
+model CommandeFournisseur {
+  id                  String         @id @default(uuid())
+  numero              String         @unique
+  fournisseur         String
+  statut              StatutCommande @default(BROUILLON)
+  dateCommande        DateTime       @default(now())
+  dateLivraisonPrevue DateTime?
+  notes               String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  lignes LigneCommande[]
+
+  @@map("commandes_fournisseurs")
+}
+
+enum StatutCommande {
+  BROUILLON
+  ENVOYE
+  RECU_PARTIEL
+  RECU
+  ANNULE
+}
+
+model LigneCommande {
+  id                String  @id @default(uuid())
+  commandeId        String
+  medicamentId      String
+  quantiteCommandee Float
+  quantiteRecue     Float?
+  prixUnitaire      Float?
+
+  commande   CommandeFournisseur @relation(fields: [commandeId], references: [id], onDelete: Cascade)
+  medicament Medicament          @relation(fields: [medicamentId], references: [id])
+
+  @@map("lignes_commandes")
+}
+
+// ── Planning du personnel ─────────────────────────────────────────────────────
+
+model Garde {
+  id         String    @id @default(uuid())
+  userId     String
+  serviceId  String?
+  date       DateTime
+  type       TypeGarde @default(JOUR)
+  heureDebut String    @default("08:00")
+  heureFin   String    @default("16:00")
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user    User     @relation("UserGardes", fields: [userId], references: [id])
+  service Service? @relation(fields: [serviceId], references: [id])
+
+  @@map("gardes")
+}
+
+enum TypeGarde {
+  JOUR
+  NUIT
+  ASTREINTE
+  URGENCE
+}
+
+model Absence {
+  id           String        @id @default(uuid())
+  userId       String
+  type         TypeAbsence   @default(CONGE)
+  dateDebut    DateTime
+  dateFin      DateTime
+  statut       StatutAbsence @default(EN_ATTENTE)
+  raison       String?
+  approvedById String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user       User  @relation("UserAbsences", fields: [userId], references: [id])
+  approvedBy User? @relation("AdminApprovals", fields: [approvedById], references: [id])
+
+  @@map("absences")
+}
+
+enum TypeAbsence {
+  CONGE
+  MALADIE
+  FORMATION
+  AUTRE
+}
+
+enum StatutAbsence {
+  EN_ATTENTE
+  APPROUVE
+  REJETE
+}
+
+// ── Audit & config ────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id        String      @id @default(uuid())
+  userId    String?
+  userEmail String?
+  userRole  String?
+  action    AuditAction
+  resource  String
+  recordId  String?
+  label     String?
+  changes   Json?
+  createdAt DateTime    @default(now())
+
+  @@index([resource, createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+}
+
+model HopitalConfig {
+  id        String   @id @default("singleton")
+  nom       String   @default("CLINIQUE MEDIKA")
+  adresse   String?
+  telephone String?
+  email     String?
+  siteWeb   String?
+  updatedAt DateTime @updatedAt
+
+  @@map("hopital_config")
+}
+
+// ── Catalogue de tarifs médicaux ──────────────────────────────────────────────
+
+model TarifMedical {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  libelle    String
+  categorie  String?
+  prixDefaut Float
+  actif      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("tarifs_medicaux")
+}
