@@ -9,6 +9,7 @@ export const ROUTES = {
   course: '/course',
   quiz: '/quiz',
   teacher: '/teacher',
+  tcourses: '/teacher/courses',
   admin: '/admin',
   certificate: '/certificate',
   comingSoon: '/bientot-disponible',

@@ -7,6 +7,40 @@
 
 ---
 
+## 2026-06-23
+
+### EduSpher : Phase 1 et Phase 2 livrées (plateforme e-learning opérationnelle)
+
+**Contexte :** La plateforme EduSpher existait avec une UI complète (9 pages, design system cohérent) mais zéro donnée réelle — tout venait de `lib/data.js` (mock). Le projet Supabase du `.env` était mort (ENOTFOUND). Passage à SQLite local pour continuer.
+
+**Phase 1 — Branchement backend :**
+- Bascule SQLite : `schema.prisma` provider → sqlite, `DATABASE_URL` → `file:./dev.db`, `directUrl` supprimé
+- DB créée via `prisma db push` + seedée (`npm run db:seed`) : 6 cours, 3 users démo (julien/sofia/admin, password123), inscriptions, quiz, certificats
+- 4 API routes créées : `GET /api/courses`, `GET /api/courses/[id]`, `GET /api/user/enrollments`, `GET /api/user/profile`
+- `SessionProvider` ajouté dans `layout.jsx` via wrapper client `Providers.jsx`
+- Bouton Déconnexion corrigé : `go('landing')` → `signOut({ callbackUrl: '/' })` (next-auth/react)
+- Dashboard étudiant rebranché : vraies inscriptions + vraies recommandations depuis la DB, prénom depuis la session
+- Sidebar rebanchée : vrai nom/rôle depuis `useSession()` au lieu des constantes hardcodées
+
+**Phase 2 — Persistance et fonctionnalités formateur :**
+- `GET/POST /api/lesson/progress` : marque une leçon terminée, recalcule automatiquement le % d'enrollment dans la foulée
+- `GET /api/quiz` : liste les quizzes de l'utilisateur avec statut réel (passed/failed/available) basé sur les tentatives en DB
+- `GET /api/quiz/[quizId]` : charge les questions réelles depuis la DB
+- `POST /api/quiz/[quizId]` : sauvegarde une tentative (score + passed)
+- Page Cours (`/course`) : charge le cours réel via l'API (premier cours inscrit par défaut, ou `?id=` en param), affiche modules/leçons depuis la DB, persiste chaque clic "Marquer comme terminé"
+- Page Quiz (`/quiz`) : charge les quizzes réels, lance avec les vraies questions, sauvegarde le résultat après chaque passage
+- `GET/POST/PUT/DELETE /api/teacher/courses` : CRUD complet des cours du formateur (protégé TEACHER)
+- `GET /api/teacher/students` : inscriptions récentes dans les cours du formateur
+- Page `/teacher/courses` (course builder) : liste des cours avec création, édition, publication/dépublication, suppression
+- Dashboard formateur (`/teacher`) : rebranché sur vraies données (stats réelles, tableau des cours depuis la DB, inscriptions récentes, widget course builder avec vrais brouillons)
+- Route `tcourses: '/teacher/courses'` ajoutée à `navigation.js`
+
+**Comptes démo :** julien@eduspher.com (étudiant), sofia@eduspher.com (formateur), admin@eduspher.com (admin) — password123
+
+**Prochaine étape :** Phase 3 (Stripe, notifications temps réel, recherche/explore, Google OAuth)
+
+---
+
 ## 2026-06-22
 
 ### MEDIKA : export PDF, recherche globale et rapports par période

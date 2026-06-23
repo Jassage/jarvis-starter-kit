@@ -4,6 +4,7 @@ import '../styles/tokens.css';
 import '../styles/app.css';
 import '../styles/landing.css';
 import '../styles/screens.css';
+import Providers from '@/components/Providers';
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -25,7 +26,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="fr" className={`${plusJakarta.variable} ${geistMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

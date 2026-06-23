@@ -1,14 +1,25 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import Icon from './Icon';
 import Logo from './Logo';
-import { NAV, ROLE_USER } from '@/lib/nav-config';
+import { NAV, ROLE_USER, ROLE_LABEL, ROLE_AVATAR, getInitials } from '@/lib/nav-config';
 
 export default function Sidebar({ role, active, go, mobileOpen, onClose }) {
   const router = useRouter();
+  const { data: session } = useSession();
   const items = NAV[role] || NAV.student;
-  const user = ROLE_USER[role] || ROLE_USER.student;
+
+  const sessionRole = session?.user?.role || '';
+  const avatarColors = ROLE_AVATAR[sessionRole] || ROLE_AVATAR.STUDENT;
+  const user = {
+    name: session?.user?.name || ROLE_USER[role]?.name || '',
+    role: ROLE_LABEL[sessionRole] || ROLE_USER[role]?.role || '',
+    initials: getInitials(session?.user?.name || ROLE_USER[role]?.name || ''),
+    avColor: avatarColors.avColor,
+    avInk: avatarColors.avInk,
+  };
   const map = { teacher: 'teacher', tcourses: 'teacher', tstudents: 'teacher', trevenue: 'teacher', treviews: 'teacher',
     admin: 'admin', ausers: 'admin', acourses: 'admin', arevenue: 'admin',
     student: 'student', course: 'course', quiz: 'quiz', explore: 'student', certs: 'certificate', messages: 'student' };
@@ -44,7 +55,7 @@ export default function Sidebar({ role, active, go, mobileOpen, onClose }) {
           <button className={'edu-nav-item' + (active === 'settings' ? ' is-active' : '')} onClick={() => router.push(`/${role}/settings`)}>
             <Icon name="settings" size={20} /><span>Réglages</span>
           </button>
-          <button className="edu-nav-item" onClick={() => go('landing')}>
+          <button className="edu-nav-item" onClick={() => signOut({ callbackUrl: '/' })}>
             <Icon name="logout" size={20} /><span>Déconnexion</span>
           </button>
         </nav>
