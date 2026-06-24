@@ -7,6 +7,41 @@
 
 ---
 
+## 2026-06-24
+
+### BANKA : mandats/procurations, administration système, pénalités automatiques, 9 types de comptes
+
+**TypeCompte étendu (3 types → 9) :**
+- Ajout JOINT, MICRO_EPARGNE, TONTINE, RETRAITE, JEUNESSE, CREDIT (codes : CJ/ME/TN/RT/JE/CL)
+- Migration Prisma appliquée, CompteForm mis à jour en grille 3x3, filtre déroulant étendu
+
+**Module Mandats & Procurations (nouveau) :**
+- Modèle `MandatCompte` (migration appliquée) : droits flexibles (`String[]`), date d'expiration optionnelle, relation mandataire (client tiers)
+- Backend : service avec validation doublon + audit log, 4 endpoints (`GET/POST/PUT/DELETE /comptes/:id/mandats`)
+- Frontend : `mandatStore`, composant `MandatForm` (combobox recherche client + sélection droits CONSULTATION/DEPOT/RETRAIT/VIREMENT en cartes)
+- Section mandats sur la page détail compte, révocation en un clic
+
+**Module Administration (nouveau) :**
+- 10 paramètres configurables : nom/adresse/tel/email institution, taux pénalité journalier, délai grâce, taux intérêt épargne, solde minimum ouverture, plafond retrait, devise principale
+- API `GET/PUT/POST /configurations`, modification réservée SUPER_ADMIN/DIRECTEUR
+- Page `/administration` en 3 colonnes, sauvegarde individuelle par champ avec feedback visuel
+- Entrée "Administration" avec icône engrenage dans la Sidebar
+
+**Pénalités de retard automatiques :**
+- `enregistrerRemboursement` calcule la pénalité depuis config : `Capital restant × Taux journalier × (Jours retard - Délai grâce)`
+- Ventilation : pénalité d'abord, puis intérêts, puis capital
+- Endpoint `GET /prets/:id/penalite` pour consulter la pénalité estimée
+- Endpoint `POST /prets/refresh-retards` : bascule les prêts EN_COURS en EN_RETARD si échéances dépassées
+
+**Corrections et compléments de la session :**
+- Audit log manquant sur les virements corrigé (`effectuerVirement`)
+- Audit logs ajoutés sur tous les services (client, compte, pret, caisse, auth)
+- Pages full-width : suppression des `max-w-*` sur toutes les pages dashboard
+- Rapport journalier + PAR 30/90 + impayés (nouvelle page `/rapports`)
+- PDF dossier crédit depuis la page détail prêt
+
+---
+
 ## 2026-06-23
 
 ### EduSpher : Phase 1 et Phase 2 livrées (plateforme e-learning opérationnelle)

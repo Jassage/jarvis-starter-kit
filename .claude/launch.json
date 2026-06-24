@@ -26,6 +26,26 @@
       "runtimeArgs": ["--prefix", "livrables/applications/KONEKTE/frontend", "run", "dev"],
       "port": 3001,
       "autoPort": false
+    },
+    {
+      "name": "gros-morne",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/gros-morne", "run", "dev"],
+      "port": 3002
+    },
+    {
+      "name": "banka-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/BANKA/backend", "run", "dev"],
+      "port": 4001,
+      "autoPort": false
+    },
+    {
+      "name": "banka-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/BANKA/frontend", "run", "dev"],
+      "port": 3001,
+      "autoPort": false
     }
   ]
 }

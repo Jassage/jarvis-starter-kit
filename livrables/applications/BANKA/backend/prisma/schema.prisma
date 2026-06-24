@@ -1,0 +1,468 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  DIRECTEUR
+  SUPERVISEUR
+  CAISSIER
+  AGENT_CREDIT
+  COMPTABLE
+  AUDITEUR
+}
+
+enum TypeClient {
+  INDIVIDUEL
+  ENTREPRISE
+}
+
+enum StatutClient {
+  ACTIF
+  INACTIF
+  SUSPENDU
+  BLACKLISTE
+}
+
+enum TypeCompte {
+  EPARGNE
+  COURANT
+  TERME
+  JOINT
+  MICRO_EPARGNE
+  TONTINE
+  RETRAITE
+  JEUNESSE
+  CREDIT
+}
+
+enum StatutCompte {
+  ACTIF
+  INACTIF
+  SUSPENDU
+  CLOTURE
+}
+
+enum Devise {
+  HTG
+  USD
+}
+
+enum TypeTransaction {
+  DEPOT
+  RETRAIT
+  VIREMENT_DEBIT
+  VIREMENT_CREDIT
+  DECAISSEMENT_PRET
+  REMBOURSEMENT_PRET
+  FRAIS
+  INTERET
+  AJUSTEMENT
+}
+
+enum StatutTransaction {
+  EN_ATTENTE
+  VALIDEE
+  REJETEE
+  ANNULEE
+}
+
+enum StatutSession {
+  OUVERTE
+  FERMEE
+}
+
+enum StatutPret {
+  EN_ATTENTE
+  APPROUVE
+  DECAISSE
+  EN_COURS
+  SOLDE
+  EN_RETARD
+  REJETE
+  ANNULE
+}
+
+enum TypeAmortissement {
+  DEGRESSIF
+  CONSTANT
+  IN_FINE
+}
+
+enum StatutLignePret {
+  EN_ATTENTE
+  PARTIELLEMENT_PAYE
+  PAYE
+  EN_RETARD
+}
+
+enum TypeRemboursement {
+  MENSUALITE
+  ANTICIPEE
+  PARTIELLE
+}
+
+enum TypeCompteComptable {
+  ACTIF
+  PASSIF
+  CHARGE
+  PRODUIT
+  CAPITAUX
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model Utilisateur {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  motDePasse String
+  nom        String
+  prenom     String
+  role       UserRole
+  actif      Boolean  @default(true)
+  telephone  String?
+  agenceId   String?
+  agence     Agence?  @relation(fields: [agenceId], references: [id])
+
+  transactionsCreees   Transaction[]       @relation("TransactionCreateur")
+  transactionsValidees Transaction[]       @relation("TransactionValidateur")
+  sessionsOuvertes     SessionCaisse[]     @relation("SessionOuverture")
+  sessionsFermees      SessionCaisse[]     @relation("SessionFermeture")
+  pretsCreees          Pret[]              @relation("PretAgentCredit")
+  pretsValides         Pret[]              @relation("PretValidateur")
+  remboursements       RemboursementPret[]
+  ecritures            EcritureComptable[]
+  auditLogs            AuditLog[]
+  refreshTokens        RefreshToken[]
+  mandatsCrees         MandatCompte[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("utilisateurs")
+}
+
+model Agence {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  nom       String
+  adresse   String?
+  telephone String?
+  actif     Boolean @default(true)
+
+  utilisateurs Utilisateur[]
+  comptes      Compte[]
+  prets        Pret[]
+  sessions     SessionCaisse[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("agences")
+}
+
+model Client {
+  id            String       @id @default(cuid())
+  numeroClient  String       @unique
+  type          TypeClient   @default(INDIVIDUEL)
+  statut        StatutClient @default(ACTIF)
+
+  // Individuel
+  nom           String?
+  prenom        String?
+  dateNaissance DateTime?
+  lieuNaissance String?
+
+  // Entreprise
+  raisonSociale String?
+  nif           String?
+
+  // Commun
+  pieceIdentite String?
+  numeroPiece   String?
+  telephone     String
+  email         String?
+  adresse       String
+  profession    String?
+  photo         String?
+  notes         String?
+
+  comptes      Compte[]
+  prets        Pret[]
+  mandatsRecus MandatCompte[] @relation("MandataireCompte")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("clients")
+}
+
+model Compte {
+  id           String       @id @default(cuid())
+  numeroCompte String       @unique
+  type         TypeCompte
+  devise       Devise       @default(HTG)
+  solde        Decimal      @default(0) @db.Decimal(15, 2)
+  soldeMinimum Decimal      @default(0) @db.Decimal(15, 2)
+  statut       StatutCompte @default(ACTIF)
+  intitule     String?
+  tauxInteret  Decimal?     @db.Decimal(6, 4)
+  dateEcheance DateTime?
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+  agenceId String
+  agence   Agence @relation(fields: [agenceId], references: [id])
+
+  transactionsDebit  Transaction[] @relation("TransactionDebit")
+  transactionsCredit Transaction[] @relation("TransactionCredit")
+  mandats            MandatCompte[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("comptes")
+}
+
+model SessionCaisse {
+  id             String        @id @default(cuid())
+  date           DateTime      @default(now()) @db.Date
+  agenceId       String
+  agence         Agence        @relation(fields: [agenceId], references: [id])
+  ouvertParId    String
+  ouvertPar      Utilisateur   @relation("SessionOuverture", fields: [ouvertParId], references: [id])
+  fermeParId     String?
+  fermePar       Utilisateur?  @relation("SessionFermeture", fields: [fermeParId], references: [id])
+  soldeOuverture Decimal       @db.Decimal(15, 2)
+  soldeFermeture Decimal?      @db.Decimal(15, 2)
+  devise         Devise        @default(HTG)
+  statut         StatutSession @default(OUVERTE)
+  notes          String?
+
+  transactions Transaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agenceId, date, devise])
+  @@map("sessions_caisse")
+}
+
+model Transaction {
+  id         String            @id @default(cuid())
+  reference  String            @unique
+  type       TypeTransaction
+  montant    Decimal           @db.Decimal(15, 2)
+  devise     Devise
+  soldeAvant Decimal           @db.Decimal(15, 2)
+  soldeApres Decimal           @db.Decimal(15, 2)
+  motif      String?
+  statut     StatutTransaction @default(EN_ATTENTE)
+
+  compteDebitId  String?
+  compteDebit    Compte?  @relation("TransactionDebit", fields: [compteDebitId], references: [id])
+  compteCreditId String?
+  compteCredit   Compte?  @relation("TransactionCredit", fields: [compteCreditId], references: [id])
+
+  sessionId String?
+  session   SessionCaisse? @relation(fields: [sessionId], references: [id])
+
+  creeParId    String
+  creePar      Utilisateur  @relation("TransactionCreateur", fields: [creeParId], references: [id])
+  valideParId  String?
+  validePar    Utilisateur? @relation("TransactionValidateur", fields: [valideParId], references: [id])
+
+  remboursementId String?           @unique
+  remboursement   RemboursementPret? @relation(fields: [remboursementId], references: [id])
+
+  ecritures EcritureComptable[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("transactions")
+}
+
+model Pret {
+  id                String            @id @default(cuid())
+  reference         String            @unique
+  clientId          String
+  client            Client            @relation(fields: [clientId], references: [id])
+  agenceId          String
+  agence            Agence            @relation(fields: [agenceId], references: [id])
+  montant           Decimal           @db.Decimal(15, 2)
+  tauxMensuel       Decimal           @db.Decimal(6, 4)
+  dureeMois         Int
+  typeAmortissement TypeAmortissement @default(DEGRESSIF)
+  devise            Devise            @default(HTG)
+  objet             String?
+  statut            StatutPret        @default(EN_ATTENTE)
+
+  dateDemande      DateTime  @default(now())
+  dateApprobation  DateTime?
+  dateDecaissement DateTime?
+  datePremierRdv   DateTime?
+  dateDernierRdv   DateTime?
+
+  agentCreditId String
+  agentCredit   Utilisateur  @relation("PretAgentCredit", fields: [agentCreditId], references: [id])
+  validateurId  String?
+  validateur    Utilisateur? @relation("PretValidateur", fields: [validateurId], references: [id])
+
+  montantTotal     Decimal @db.Decimal(15, 2)
+  montantRembourse Decimal @default(0) @db.Decimal(15, 2)
+  resteARegler     Decimal @db.Decimal(15, 2)
+  notes            String?
+
+  lignes         LignePret[]
+  remboursements RemboursementPret[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("prets")
+}
+
+model LignePret {
+  id             String          @id @default(cuid())
+  pretId         String
+  pret           Pret            @relation(fields: [pretId], references: [id])
+  numeroEcheance Int
+  dateEcheance   DateTime
+  capital        Decimal         @db.Decimal(15, 2)
+  interet        Decimal         @db.Decimal(15, 2)
+  mensualite     Decimal         @db.Decimal(15, 2)
+  capitalRestant Decimal         @db.Decimal(15, 2)
+  statut         StatutLignePret @default(EN_ATTENTE)
+
+  createdAt DateTime @default(now())
+
+  @@map("lignes_pret")
+}
+
+model RemboursementPret {
+  id       String            @id @default(cuid())
+  pretId   String
+  pret     Pret              @relation(fields: [pretId], references: [id])
+  type     TypeRemboursement @default(MENSUALITE)
+  montant  Decimal           @db.Decimal(15, 2)
+  capital  Decimal           @db.Decimal(15, 2)
+  interet  Decimal           @db.Decimal(15, 2)
+  penalite Decimal           @default(0) @db.Decimal(15, 2)
+  date     DateTime          @default(now())
+
+  creeParId String
+  creePar   Utilisateur @relation(fields: [creeParId], references: [id])
+
+  transaction Transaction?
+
+  createdAt DateTime @default(now())
+
+  @@map("remboursements_pret")
+}
+
+model CompteComptable {
+  id       String              @id @default(cuid())
+  numero   String              @unique
+  intitule String
+  type     TypeCompteComptable
+  parentId String?
+  actif    Boolean             @default(true)
+
+  ecrituresDebit  EcritureComptable[] @relation("EcritureDebit")
+  ecrituresCredit EcritureComptable[] @relation("EcritureCredit")
+
+  createdAt DateTime @default(now())
+
+  @@map("comptes_comptables")
+}
+
+model EcritureComptable {
+  id            String @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+
+  compteDebitId  String
+  compteDebit    CompteComptable @relation("EcritureDebit", fields: [compteDebitId], references: [id])
+  compteCreditId String
+  compteCredit   CompteComptable @relation("EcritureCredit", fields: [compteCreditId], references: [id])
+
+  montant  Decimal @db.Decimal(15, 2)
+  libelle  String
+  date     DateTime @default(now())
+
+  creeParId String
+  creePar   Utilisateur @relation(fields: [creeParId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("ecritures_comptables")
+}
+
+model MandatCompte {
+  id           String    @id @default(cuid())
+  compteId     String
+  compte       Compte    @relation(fields: [compteId], references: [id])
+  mandataireId String
+  mandataire   Client    @relation("MandataireCompte", fields: [mandataireId], references: [id])
+  droits       String[]
+  dateDebut    DateTime  @default(now())
+  dateFin      DateTime?
+  actif        Boolean   @default(true)
+  notes        String?
+
+  creeParId    String
+  creePar      Utilisateur @relation(fields: [creeParId], references: [id])
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("mandats_compte")
+}
+
+model Configuration {
+  id          String   @id @default(cuid())
+  cle         String   @unique
+  valeur      String
+  description String?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("configurations")
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  table          String
+  action         String
+  entiteId       String
+  ancienneValeur Json?
+  nouvelleValeur Json?
+  utilisateurId  String
+  utilisateur    Utilisateur @relation(fields: [utilisateurId], references: [id])
+  ip             String?
+
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model RefreshToken {
+  id            String      @id @default(cuid())
+  token         String      @unique
+  utilisateurId String
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
+  expiresAt     DateTime
+  revoked       Boolean     @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
