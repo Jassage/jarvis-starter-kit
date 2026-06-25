@@ -115,6 +115,52 @@ export async function getRapportJournalier(date: Date, agenceId?: string) {
   return { date: debut, transactions, nouveauxClients, nouveauxComptes, nouveauxPrets };
 }
 
+export async function getTendance(jours: number = 7) {
+  const days = [];
+  for (let i = jours - 1; i >= 0; i--) {
+    const debut = new Date();
+    debut.setDate(debut.getDate() - i);
+    debut.setHours(0, 0, 0, 0);
+    const fin = new Date(debut);
+    fin.setHours(23, 59, 59, 999);
+
+    const [depots, retraits] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: { type: 'DEPOT', statut: 'VALIDEE', createdAt: { gte: debut, lte: fin } },
+        _sum: { montant: true },
+      }),
+      prisma.transaction.aggregate({
+        where: { type: 'RETRAIT', statut: 'VALIDEE', createdAt: { gte: debut, lte: fin } },
+        _sum: { montant: true },
+      }),
+    ]);
+
+    days.push({
+      date: debut.toISOString().slice(0, 10),
+      depots: Number(depots._sum.montant || 0),
+      retraits: Number(retraits._sum.montant || 0),
+    });
+  }
+  return days;
+}
+
+export async function getAlertes() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const [txEnAttente, pretsEnRetard, echeancesAujourdhui] = await Promise.all([
+    prisma.transaction.count({ where: { statut: 'EN_ATTENTE' } }),
+    prisma.pret.count({ where: { statut: 'EN_RETARD' } }),
+    prisma.lignePret.count({
+      where: { statut: { in: ['EN_ATTENTE', 'PARTIELLEMENT_PAYE'] }, dateEcheance: { gte: today, lt: tomorrow } },
+    }),
+  ]);
+
+  return { txEnAttente, pretsEnRetard, echeancesAujourdhui, total: txEnAttente + pretsEnRetard + echeancesAujourdhui };
+}
+
 export async function getPAR(agenceId?: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);

@@ -26,3 +26,18 @@ export async function par(req: AuthRequest, res: Response, next: NextFunction) {
     res.json(ok(result));
   } catch (e) { next(e); }
 }
+
+export async function tendance(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const jours = req.query.jours ? parseInt(req.query.jours as string) : 7;
+    const result = await statsService.getTendance(Math.min(Math.max(jours, 7), 30));
+    res.json(ok(result));
+  } catch (e) { next(e); }
+}
+
+export async function alertes(_req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await statsService.getAlertes();
+    res.json(ok(result));
+  } catch (e) { next(e); }
+}

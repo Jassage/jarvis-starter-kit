@@ -8,6 +8,7 @@ import { useToastStore } from '@/stores/toastStore';
 import { formatMontant, formatDate, nomClient, STATUT_PRET_LABELS } from '@/lib/utils';
 import Combobox, { ComboboxOption } from '@/components/ui/Combobox';
 import { generateDossierCredit } from '@/lib/rapportPret';
+import api from '@/lib/api';
 
 const STATUT_CHIP: Record<string, string> = {
   EN_ATTENTE: 'chip chip-warning',
@@ -44,6 +45,53 @@ export default function PretDetailPage() {
   const [action, setAction] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
+  // Garanties
+  const [garanties, setGaranties] = useState<any[]>([]);
+  const [showGarantieForm, setShowGarantieForm] = useState(false);
+  const [garantieAction, setGarantieAction] = useState(false);
+  const [gType, setGType] = useState('HYPOTHEQUE');
+  const [gDescription, setGDescription] = useState('');
+  const [gValeur, setGValeur] = useState('');
+  const [gNotes, setGNotes] = useState('');
+
+  const loadGaranties = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/prets/${id}/garanties`);
+      setGaranties(data.data || []);
+    } catch {}
+  }, [id]);
+
+  const handleAddGarantie = async () => {
+    if (!gDescription.trim()) { toast.warning('Champ manquant', 'La description est obligatoire.'); return; }
+    setGarantieAction(true);
+    try {
+      await api.post(`/prets/${id}/garanties`, {
+        type: gType,
+        description: gDescription,
+        valeurEstimee: gValeur ? parseFloat(gValeur) : undefined,
+        notes: gNotes || undefined,
+      });
+      toast.success('Garantie ajoutée', 'La garantie a été enregistrée.');
+      setShowGarantieForm(false);
+      setGDescription(''); setGValeur(''); setGNotes(''); setGType('HYPOTHEQUE');
+      loadGaranties();
+    } catch (err: any) {
+      toast.error('Erreur', err.response?.data?.error || 'Impossible d\'ajouter la garantie.');
+    } finally {
+      setGarantieAction(false);
+    }
+  };
+
+  const handleLeverGarantie = async (garantieId: string) => {
+    try {
+      await api.put(`/prets/${id}/garanties/${garantieId}`, { statut: 'LEVEE' });
+      toast.success('Garantie levée', 'La garantie a été marquée comme levée.');
+      loadGaranties();
+    } catch {
+      toast.error('Erreur', 'Impossible de lever cette garantie.');
+    }
+  };
+
   // Drawers
   const [showConfirmApprouver, setShowConfirmApprouver] = useState(false);
   const [showConfirmRejeter, setShowConfirmRejeter] = useState(false);
@@ -69,7 +117,7 @@ export default function PretDetailPage() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); loadGaranties(); }, [id]);
 
   const handlePdf = async () => {
     if (!pret || pdfLoading) return;
@@ -306,6 +354,138 @@ export default function PretDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Garanties */}
+      <div className="card overflow-hidden">
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #f0f2f9' }}>
+          <div>
+            <h3 className="font-bold" style={{ color: '#0b1733' }}>Garanties</h3>
+            <p className="text-xs mt-0.5" style={{ color: '#8b94b0' }}>
+              {garanties.filter(g => g.statut === 'ACTIVE').length} garantie{garanties.filter(g => g.statut === 'ACTIVE').length > 1 ? 's' : ''} active{garanties.filter(g => g.statut === 'ACTIVE').length > 1 ? 's' : ''}
+            </p>
+          </div>
+          {['EN_ATTENTE', 'APPROUVE', 'EN_COURS', 'EN_RETARD'].includes(pret.statut) && (
+            <button
+              onClick={() => setShowGarantieForm(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium"
+              style={{ background: '#eef2ff', color: '#1e40af' }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              Ajouter
+            </button>
+          )}
+        </div>
+
+        {garanties.length === 0 ? (
+          <div className="p-10 text-center">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3" style={{ background: '#f0f2f9' }}>
+              <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" style={{ color: '#8b94b0' }}>
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <p className="font-semibold text-sm" style={{ color: '#0b1733' }}>Aucune garantie</p>
+            <p className="text-xs mt-1" style={{ color: '#8b94b0' }}>Ajoutez une garantie pour sécuriser ce dossier de crédit.</p>
+          </div>
+        ) : (
+          <div className="divide-y" style={{ borderColor: '#f0f2f9' }}>
+            {garanties.map((g: any) => {
+              const GARANTIE_LABELS: Record<string, string> = {
+                HYPOTHEQUE: 'Hypothèque', NANTISSEMENT: 'Nantissement', CAUTION: 'Caution', GAGE: 'Gage', AUTRE: 'Autre',
+              };
+              const isActive = g.statut === 'ACTIVE';
+              return (
+                <div key={g.id} className="px-5 py-4 flex items-start gap-4" style={{ opacity: isActive ? 1 : 0.6 }}>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: isActive ? '#eef2ff' : '#f0f2f9', color: isActive ? '#1e40af' : '#8b94b0' }}>
+                    <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="chip chip-primary text-xs">{GARANTIE_LABELS[g.type] || g.type}</span>
+                      <span className={`chip text-xs ${g.statut === 'ACTIVE' ? 'chip-success' : g.statut === 'SAISIE' ? 'chip-danger' : 'chip-neutral'}`}>
+                        {g.statut === 'ACTIVE' ? 'Active' : g.statut === 'LEVEE' ? 'Levée' : 'Saisie'}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium" style={{ color: '#0b1733' }}>{g.description}</p>
+                    {g.valeurEstimee && (
+                      <p className="text-xs mt-0.5" style={{ color: '#4a5578' }}>
+                        Valeur estimée : <strong>{formatMontant(g.valeurEstimee, pret.devise)}</strong>
+                      </p>
+                    )}
+                    <p className="text-xs mt-0.5" style={{ color: '#8b94b0' }}>
+                      Constituée le {formatDate(g.dateConstit)}
+                      {g.dateLevee && ` · Levée le ${formatDate(g.dateLevee)}`}
+                      {g.notes && ` · "${g.notes}"`}
+                    </p>
+                  </div>
+                  {isActive && (
+                    <button
+                      onClick={() => handleLeverGarantie(g.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium flex-shrink-0"
+                      style={{ background: '#f0f2f9', color: '#4a5578' }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Lever
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Drawer — Nouvelle garantie */}
+      {showGarantieForm && (
+        <div className="drawer-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowGarantieForm(false); }}>
+          <div className="drawer-panel" style={{ maxWidth: '500px' }}>
+            <div className="px-5 py-4 flex items-center gap-3 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #1e3a8a, #2563eb)' }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
+                <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" style={{ color: 'white' }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </div>
+              <div className="flex-1"><h2 className="font-bold" style={{ color: 'white' }}>Nouvelle garantie</h2><p className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>Dossier {pret.reference}</p></div>
+              <button onClick={() => setShowGarantieForm(false)} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }}><svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></button>
+            </div>
+            <div className="px-5 py-5 flex-1 space-y-4">
+              <div>
+                <label className="label">Type de garantie</label>
+                <select value={gType} onChange={(e) => setGType(e.target.value)} className="input">
+                  <option value="HYPOTHEQUE">Hypothèque</option>
+                  <option value="NANTISSEMENT">Nantissement</option>
+                  <option value="CAUTION">Caution personnelle</option>
+                  <option value="GAGE">Gage</option>
+                  <option value="AUTRE">Autre</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Description <span style={{ color: '#ef4444' }}>*</span></label>
+                <textarea
+                  value={gDescription}
+                  onChange={(e) => setGDescription(e.target.value)}
+                  className="input"
+                  rows={3}
+                  placeholder="Ex : Maison sise au 12 rue des Palmiers, Port-au-Prince..."
+                />
+              </div>
+              <div>
+                <label className="label">Valeur estimée ({pret.devise}) <span style={{ color: '#8b94b0', fontWeight: 400 }}>optionnel</span></label>
+                <input type="number" value={gValeur} onChange={(e) => setGValeur(e.target.value)} className="input" placeholder="0.00" min="0" step="0.01" />
+              </div>
+              <div>
+                <label className="label">Notes <span style={{ color: '#8b94b0', fontWeight: 400 }}>optionnel</span></label>
+                <input type="text" value={gNotes} onChange={(e) => setGNotes(e.target.value)} className="input" placeholder="Observations particulières..." />
+              </div>
+            </div>
+            <div className="px-5 py-4 flex gap-3" style={{ borderTop: '1px solid #f0f2f9', background: '#f7f8fc' }}>
+              <button onClick={() => setShowGarantieForm(false)} className="btn-ghost flex-1">Annuler</button>
+              <button onClick={handleAddGarantie} disabled={garantieAction || !gDescription.trim()} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #1e3a8a, #2563eb)', color: 'white' }}>
+                {garantieAction ? 'En cours...' : 'Enregistrer la garantie'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tableau d'amortissement */}
       {pret.lignes?.length > 0 && (

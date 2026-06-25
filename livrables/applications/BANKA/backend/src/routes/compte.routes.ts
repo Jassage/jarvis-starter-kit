@@ -12,6 +12,8 @@ router.post('/', requireAuth, ctrl.create);
 router.put('/:id', requireAuth, ctrl.update);
 router.patch('/:id/statut', requireAuth, ctrl.changeStatut);
 
+router.post('/:id/cloturer', requireAuth, ctrl.cloturer);
+
 router.get('/:id/mandats', requireAuth, mandatCtrl.list);
 router.post('/:id/mandats', requireAuth, mandatCtrl.create);
 router.put('/:id/mandats/:mandatId', requireAuth, mandatCtrl.update);

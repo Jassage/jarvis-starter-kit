@@ -14,6 +14,10 @@ import statsRoutes from './routes/stats.routes';
 import auditRoutes from './routes/audit.routes';
 import agenceRoutes from './routes/agence.routes';
 import configurationRoutes from './routes/configuration.routes';
+import epargneProgrammeRoutes from './routes/epargne-programme.routes';
+import comptaRoutes from './routes/compta.routes';
+import rhRoutes from './routes/rh.routes';
+import { ensureComptesBase } from './services/compta.service';
 
 const app = express();
 
@@ -40,7 +44,12 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/agences', agenceRoutes);
 app.use('/api/configurations', configurationRoutes);
+app.use('/api/epargnes-programmees', epargneProgrammeRoutes);
+app.use('/api/compta', comptaRoutes);
+app.use('/api/rh', rhRoutes);
 
 app.use(errorHandler);
+
+ensureComptesBase().catch((e: Error) => console.warn('[BANKA] Init comptes comptables:', e.message));
 
 export default app;

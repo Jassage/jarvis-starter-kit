@@ -17,6 +17,8 @@ interface Stats {
   encoursCredit: number;
 }
 
+interface TendancePoint { date: string; depots: number; retraits: number; }
+
 const Icon = ({ name, className = 'w-5 h-5' }: { name: string; className?: string }) => {
   const props = { viewBox: '0 0 24 24', fill: 'none', className, strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   switch (name) {
@@ -28,39 +30,27 @@ const Icon = ({ name, className = 'w-5 h-5' }: { name: string; className?: strin
     case 'down': return <svg {...props}><path d="M17 7L7.8 16.2M7 7v10h10" stroke="currentColor"/></svg>;
     case 'alert': return <svg {...props}><path d="M10.29 3.86l-8.18 14.14a2 2 0 001.71 3h16.36a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01" stroke="currentColor"/></svg>;
     case 'plus': return <svg {...props}><path d="M12 5v14M5 12h14" stroke="currentColor"/></svg>;
-    case 'eye': return <svg {...props}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor"/><circle cx="12" cy="12" r="3" stroke="currentColor"/></svg>;
     default: return null;
   }
 };
 
-function KpiCard({
-  label, value, sub, icon, trend, color = 'primary', href,
-}: {
+function KpiCard({ label, value, sub, icon, color = 'primary', href }: {
   label: string; value: string | number; sub?: string; icon: string;
-  trend?: { value: string; positive: boolean }; color?: 'primary' | 'success' | 'warning' | 'danger';
-  href?: string;
+  color?: 'primary' | 'success' | 'warning' | 'danger'; href?: string;
 }) {
   const palette = {
     primary: { bg: '#eef2ff', icon: '#2563eb' },
     success: { bg: '#ecfdf5', icon: '#10b981' },
     warning: { bg: '#fffbeb', icon: '#f59e0b' },
-    danger: { bg: '#fef2f2', icon: '#ef4444' },
+    danger:  { bg: '#fef2f2', icon: '#ef4444' },
   }[color];
-
   const borderClass = { primary: 'card-blue', success: 'card-green', warning: 'card-amber', danger: 'card-red' }[color];
-
   const content = (
     <div className={`card card-hover p-5 h-full ${borderClass}`}>
       <div className="flex items-start justify-between mb-3">
         <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: palette.bg, color: palette.icon }}>
           <Icon name={icon} />
         </div>
-        {trend && (
-          <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold" style={{ background: trend.positive ? '#ecfdf5' : '#fef2f2', color: trend.positive ? '#047857' : '#b91c1c' }}>
-            <Icon name={trend.positive ? 'up' : 'down'} className="w-3 h-3" />
-            <span>{trend.value}</span>
-          </div>
-        )}
       </div>
       <p className="text-sm font-medium mb-1" style={{ color: '#8b94b0' }}>{label}</p>
       <p className="text-2xl font-bold tracking-tight" style={{ color: '#0b1733' }}>{value}</p>
@@ -70,14 +60,71 @@ function KpiCard({
   return href ? <Link href={href}>{content}</Link> : content;
 }
 
+function TendanceChart({ data }: { data: TendancePoint[] }) {
+  if (!data.length) return null;
+
+  const maxVal = Math.max(...data.flatMap((d) => [d.depots, d.retraits]), 1);
+  const W = 580; const H = 120; const BAR_W = 16; const GAP = 20;
+  const groupW = BAR_W * 2 + GAP;
+  const totalW = data.length * groupW;
+  const startX = (W - totalW) / 2;
+  const BOTTOM_PAD = 28; const TOP_PAD = 8;
+  const chartH = H - BOTTOM_PAD - TOP_PAD;
+
+  const barH = (v: number) => Math.max(2, (v / maxVal) * chartH);
+
+  const dayLabels = data.map((d) => {
+    const dt = new Date(d.date + 'T12:00:00');
+    return dt.toLocaleDateString('fr-FR', { weekday: 'short' }).slice(0, 3);
+  });
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ overflow: 'visible' }}>
+      {data.map((d, i) => {
+        const x = startX + i * groupW;
+        const hD = barH(d.depots);
+        const hR = barH(d.retraits);
+        const isLast = i === data.length - 1;
+        return (
+          <g key={d.date}>
+            {/* dépôt */}
+            <rect
+              x={x} y={TOP_PAD + chartH - hD} width={BAR_W} height={hD}
+              rx="3" fill={isLast ? '#10b981' : '#93c5fd'}
+            />
+            {/* retrait */}
+            <rect
+              x={x + BAR_W + 4} y={TOP_PAD + chartH - hR} width={BAR_W} height={hR}
+              rx="3" fill={isLast ? '#f87171' : '#fca5a5'}
+            />
+            {/* label jour */}
+            <text x={x + BAR_W + 2} y={H - 6} textAnchor="middle" fontSize="9" fill="#8b94b0">{dayLabels[i]}</text>
+          </g>
+        );
+      })}
+      {/* légende */}
+      <rect x={startX} y={H - 6} width={8} height={8} rx="2" fill="#93c5fd" />
+      <text x={startX + 11} y={H + 3} fontSize="9" fill="#8b94b0">Dépôts</text>
+      <rect x={startX + 70} y={H - 6} width={8} height={8} rx="2" fill="#fca5a5" />
+      <text x={startX + 81} y={H + 3} fontSize="9" fill="#8b94b0">Retraits</text>
+    </svg>
+  );
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [tendance, setTendance] = useState<TendancePoint[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/stats/dashboard')
-      .then(({ data }) => { setStats(data.data); setLoading(false); })
-      .catch(() => setLoading(false));
+    Promise.all([
+      api.get('/stats/dashboard'),
+      api.get('/stats/tendance?jours=7'),
+    ]).then(([s, t]) => {
+      setStats(s.data.data);
+      setTendance(t.data.data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   if (loading) {
@@ -100,27 +147,24 @@ export default function DashboardPage() {
       <div className="relative overflow-hidden rounded-2xl p-6 lg:p-8" style={{ background: 'linear-gradient(135deg, #0b1733 0%, #1e3a8a 60%, #2563eb 100%)' }}>
         <div className="absolute -right-20 -top-20 w-60 h-60 rounded-full" style={{ background: 'rgba(255,255,255,0.05)' }}></div>
         <div className="absolute right-10 -bottom-10 w-40 h-40 rounded-full" style={{ background: 'rgba(255,255,255,0.04)' }}></div>
-
         <div className="relative grid lg:grid-cols-2 gap-6">
           <div>
             <p className="text-blue-200 text-sm font-medium mb-2">SOLDE TOTAL DES COMPTES CLIENTS</p>
             <p className="text-white text-4xl lg:text-5xl font-bold tracking-tight">{formatMontant(stats.soldeTotal, 'HTG')}</p>
             <p className="text-blue-200 text-sm mt-2">Encours crédit : <span className="font-semibold text-white">{formatMontant(stats.encoursCredit, 'HTG')}</span></p>
-
             <div className="flex gap-3 mt-6">
               <Link href="/transactions" className="px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all hover:scale-105" style={{ background: 'white', color: '#1e3a8a' }}>
                 <Icon name="plus" className="w-4 h-4" /> Nouvelle transaction
               </Link>
-              <Link href="/clients" className="px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all" style={{ background: 'rgba(255,255,255,0.15)', color: 'white', backdropFilter: 'blur(10px)' }}>
+              <Link href="/clients" className="px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2" style={{ background: 'rgba(255,255,255,0.15)', color: 'white', backdropFilter: 'blur(10px)' }}>
                 <Icon name="users" className="w-4 h-4" /> Voir les clients
               </Link>
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-3 lg:gap-4">
             <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
               <div className="flex items-center gap-2 mb-2 text-emerald-300">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(16, 185, 129, 0.25)' }}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(16,185,129,0.25)' }}>
                   <Icon name="up" className="w-4 h-4" />
                 </div>
                 <span className="text-xs font-medium">Dépôts du jour</span>
@@ -129,7 +173,7 @@ export default function DashboardPage() {
             </div>
             <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
               <div className="flex items-center gap-2 mb-2 text-red-300">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(239, 68, 68, 0.25)' }}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.25)' }}>
                   <Icon name="down" className="w-4 h-4" />
                 </div>
                 <span className="text-xs font-medium">Retraits du jour</span>
@@ -154,47 +198,17 @@ export default function DashboardPage() {
 
       {/* KPI grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          label="Clients actifs"
-          value={stats.totalClients.toLocaleString('fr')}
-          icon="users"
-          color="primary"
-          href="/clients"
-          sub="Base totale"
-        />
-        <KpiCard
-          label="Comptes ouverts"
-          value={stats.totalComptes.toLocaleString('fr')}
-          icon="wallet"
-          color="success"
-          href="/comptes"
-          sub="Tous statuts confondus"
-        />
-        <KpiCard
-          label="Prêts actifs"
-          value={stats.totalPretsEnCours.toLocaleString('fr')}
-          icon="doc"
-          color={stats.pretsEnRetard > 0 ? 'warning' : 'primary'}
-          href="/prets"
-          sub={stats.pretsEnRetard > 0 ? `${stats.pretsEnRetard} en retard` : 'Aucun retard'}
-        />
-        <KpiCard
-          label="En attente"
-          value={stats.transactionsEnAttente.toLocaleString('fr')}
-          icon="arrows"
-          color={stats.transactionsEnAttente > 0 ? 'danger' : 'primary'}
-          href="/transactions"
-          sub="À valider par un superviseur"
-        />
+        <KpiCard label="Clients actifs" value={stats.totalClients.toLocaleString('fr')} icon="users" color="primary" href="/clients" sub="Base totale" />
+        <KpiCard label="Comptes ouverts" value={stats.totalComptes.toLocaleString('fr')} icon="wallet" color="success" href="/comptes" sub="Tous statuts confondus" />
+        <KpiCard label="Prêts actifs" value={stats.totalPretsEnCours.toLocaleString('fr')} icon="doc" color={stats.pretsEnRetard > 0 ? 'warning' : 'primary'} href="/prets" sub={stats.pretsEnRetard > 0 ? `${stats.pretsEnRetard} en retard` : 'Aucun retard'} />
+        <KpiCard label="En attente" value={stats.transactionsEnAttente.toLocaleString('fr')} icon="arrows" color={stats.transactionsEnAttente > 0 ? 'danger' : 'primary'} href="/transactions" sub="À valider par un superviseur" />
       </div>
 
-      {/* Activity panels */}
+      {/* Panels */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Quick actions */}
         <div className="card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold tracking-tight" style={{ color: '#0b1733' }}>Actions rapides</h3>
-          </div>
+          <h3 className="font-bold tracking-tight mb-4" style={{ color: '#0b1733' }}>Actions rapides</h3>
           <div className="grid grid-cols-2 gap-2">
             {[
               { label: 'Nouveau client', href: '/clients', icon: 'users', color: '#2563eb' },
@@ -212,34 +226,44 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Today summary */}
+        {/* Tendance 7 jours */}
         <div className="card p-5 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold tracking-tight" style={{ color: '#0b1733' }}>Activité d'aujourd'hui</h3>
-            <Link href="/transactions" className="text-xs font-semibold flex items-center gap-1" style={{ color: '#2563eb' }}>
-              Tout voir <span>→</span>
+            <div>
+              <h3 className="font-bold tracking-tight" style={{ color: '#0b1733' }}>Tendance — 7 derniers jours</h3>
+              <p className="text-xs mt-0.5" style={{ color: '#8b94b0' }}>Dépôts vs Retraits validés (HTG)</p>
+            </div>
+            <Link href="/rapports" className="text-xs font-semibold flex items-center gap-1" style={{ color: '#2563eb' }}>
+              Rapports complets <span>→</span>
             </Link>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="p-3 rounded-xl" style={{ background: '#ecfdf5' }}>
-              <p className="text-xs font-medium mb-1" style={{ color: '#047857' }}>Entrées</p>
-              <p className="font-bold tracking-tight" style={{ color: '#047857' }}>{formatMontant(stats.depotsAujourdhui, 'HTG')}</p>
+          {tendance.length > 0 ? (
+            <div className="mt-2">
+              <TendanceChart data={tendance} />
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <div className="p-3 rounded-xl" style={{ background: '#ecfdf5' }}>
+                  <p className="text-xs font-medium mb-1" style={{ color: '#047857' }}>Total dépôts (7j)</p>
+                  <p className="font-bold" style={{ color: '#047857' }}>
+                    {formatMontant(tendance.reduce((s, d) => s + d.depots, 0), 'HTG')}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl" style={{ background: '#fef2f2' }}>
+                  <p className="text-xs font-medium mb-1" style={{ color: '#b91c1c' }}>Total retraits (7j)</p>
+                  <p className="font-bold" style={{ color: '#b91c1c' }}>
+                    {formatMontant(tendance.reduce((s, d) => s + d.retraits, 0), 'HTG')}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="p-3 rounded-xl" style={{ background: '#fef2f2' }}>
-              <p className="text-xs font-medium mb-1" style={{ color: '#b91c1c' }}>Sorties</p>
-              <p className="font-bold tracking-tight" style={{ color: '#b91c1c' }}>{formatMontant(stats.retraitsAujourdhui, 'HTG')}</p>
+          ) : (
+            <div className="flex items-center justify-center py-8">
+              <p className="text-sm" style={{ color: '#8b94b0' }}>Aucune donnée disponible</p>
             </div>
-            <div className="p-3 rounded-xl" style={{ background: netJour >= 0 ? '#eef2ff' : '#fef2f2' }}>
-              <p className="text-xs font-medium mb-1" style={{ color: netJour >= 0 ? '#1e40af' : '#b91c1c' }}>Net</p>
-              <p className="font-bold tracking-tight" style={{ color: netJour >= 0 ? '#1e40af' : '#b91c1c' }}>
-                {netJour >= 0 ? '+' : ''}{formatMontant(netJour, 'HTG')}
-              </p>
-            </div>
-          </div>
+          )}
 
           {stats.transactionsEnAttente > 0 && (
-            <div className="flex items-start gap-3 p-4 rounded-xl" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+            <div className="flex items-start gap-3 p-4 rounded-xl mt-4" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
               <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#fef3c7', color: '#b45309' }}>
                 <Icon name="alert" />
               </div>
@@ -252,18 +276,6 @@ export default function DashboardPage() {
               <Link href="/transactions?statut=EN_ATTENTE" className="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap" style={{ background: '#b45309', color: 'white' }}>
                 Examiner
               </Link>
-            </div>
-          )}
-
-          {stats.transactionsEnAttente === 0 && (
-            <div className="flex items-center gap-3 p-4 rounded-xl" style={{ background: '#ecfdf5' }}>
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#d1fae5', color: '#047857' }}>
-                <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </div>
-              <div>
-                <p className="text-sm font-semibold" style={{ color: '#047857' }}>Tout est à jour</p>
-                <p className="text-xs" style={{ color: '#059669' }}>Aucune transaction en attente de validation</p>
-              </div>
             </div>
           )}
         </div>

@@ -61,7 +61,18 @@ export async function getSessionActive(agenceId: string, devise: Devise = 'HTG')
     include: {
       agence: { select: { nom: true, code: true } },
       ouvertPar: { select: { nom: true, prenom: true } },
-      _count: { select: { transactions: true } },
+      transactions: {
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          reference: true,
+          type: true,
+          montant: true,
+          devise: true,
+          statut: true,
+          createdAt: true,
+        },
+      },
     },
   });
 }

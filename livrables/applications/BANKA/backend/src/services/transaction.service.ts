@@ -4,12 +4,22 @@ import { AppError } from '../types';
 import { TypeTransaction, Devise } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { createAuditLog } from '../utils/audit';
+import { creerEcritureAuto } from './compta.service';
 
 const SEUIL_HTG = parseFloat(process.env.SEUIL_VALIDATION_HTG || '50000');
 const SEUIL_USD = parseFloat(process.env.SEUIL_VALIDATION_USD || '500');
 
 function seuilDepasse(montant: number, devise: Devise): boolean {
   return devise === 'HTG' ? montant >= SEUIL_HTG : montant >= SEUIL_USD;
+}
+
+async function resolveSessionId(agenceId: string, devise: string, providedSessionId?: string): Promise<string | undefined> {
+  if (providedSessionId) return providedSessionId;
+  const session = await prisma.sessionCaisse.findFirst({
+    where: { agenceId, devise: devise as any, statut: 'OUVERTE' },
+    select: { id: true },
+  });
+  return session?.id;
 }
 
 export async function effectuerDepot(data: {
@@ -19,13 +29,14 @@ export async function effectuerDepot(data: {
   sessionId?: string;
   userId: string;
 }) {
-  const { compteId, montant, motif, sessionId, userId } = data;
+  const { compteId, montant, motif, userId } = data;
   if (montant <= 0) throw new AppError(400, 'Le montant doit être positif');
 
   const compte = await prisma.compte.findUnique({ where: { id: compteId } });
   if (!compte) throw new AppError(404, 'Compte introuvable');
   if (compte.statut !== 'ACTIF') throw new AppError(400, 'Compte inactif ou suspendu');
 
+  const sessionId = await resolveSessionId(compte.agenceId, compte.devise, data.sessionId);
   const reference = await generateReferenceTransaction('DEPOT');
   const soldeAvant = Number(compte.solde);
   const soldeApres = soldeAvant + montant;
@@ -53,6 +64,15 @@ export async function effectuerDepot(data: {
         where: { id: compteId },
         data: { solde: soldeApres },
       });
+      await creerEcritureAuto(tx, {
+        debitNumero:  '5700',
+        creditNumero: '2600',
+        montant,
+        libelle: `Dépôt ${reference}${motif ? ' - ' + motif : ''}`,
+        date: new Date(),
+        userId,
+        transactionId: transaction.id,
+      });
     }
 
     await createAuditLog({ userId, table: 'transactions', action: 'DEPOT', entiteId: transaction.id, nouveau: { montant, compteId, statut: transaction.statut } });
@@ -67,7 +87,7 @@ export async function effectuerRetrait(data: {
   sessionId?: string;
   userId: string;
 }) {
-  const { compteId, montant, motif, sessionId, userId } = data;
+  const { compteId, montant, motif, userId } = data;
   if (montant <= 0) throw new AppError(400, 'Le montant doit être positif');
 
   const compte = await prisma.compte.findUnique({ where: { id: compteId } });
@@ -80,6 +100,7 @@ export async function effectuerRetrait(data: {
     throw new AppError(400, `Solde insuffisant. Solde disponible : ${soldeAvant - soldeMinimum} ${compte.devise}`);
   }
 
+  const sessionId = await resolveSessionId(compte.agenceId, compte.devise, data.sessionId);
   const reference = await generateReferenceTransaction('RETRAIT');
   const soldeApres = soldeAvant - montant;
   const needsValidation = seuilDepasse(montant, compte.devise);
@@ -106,6 +127,15 @@ export async function effectuerRetrait(data: {
         where: { id: compteId },
         data: { solde: soldeApres },
       });
+      await creerEcritureAuto(tx, {
+        debitNumero:  '2600',
+        creditNumero: '5700',
+        montant,
+        libelle: `Retrait ${reference}${motif ? ' - ' + motif : ''}`,
+        date: new Date(),
+        userId,
+        transactionId: transaction.id,
+      });
     }
 
     await createAuditLog({ userId, table: 'transactions', action: 'RETRAIT', entiteId: transaction.id, nouveau: { montant, compteId, statut: transaction.statut } });
@@ -121,7 +151,7 @@ export async function effectuerVirement(data: {
   sessionId?: string;
   userId: string;
 }) {
-  const { compteSourceId, compteDestinationId, montant, motif, sessionId, userId } = data;
+  const { compteSourceId, compteDestinationId, montant, motif, userId } = data;
   if (montant <= 0) throw new AppError(400, 'Le montant doit être positif');
   if (compteSourceId === compteDestinationId) throw new AppError(400, 'Les comptes source et destination doivent être différents');
 
@@ -145,6 +175,7 @@ export async function effectuerVirement(data: {
   const refDebit = await generateReferenceTransaction('VIREMENT_DEBIT');
   const refCredit = refDebit.replace('VIR', 'VIR');
   const needsValidation = seuilDepasse(montant, source.devise);
+  const sessionId = await resolveSessionId(source.agenceId, source.devise, data.sessionId);
 
   return prisma.$transaction(async (tx) => {
     const soldeDestAvant = Number(destination.solde);
@@ -211,8 +242,26 @@ export async function validerTransaction(id: string, userId: string) {
 
     if (tx.type === 'DEPOT' && tx.compteCreditId) {
       await p.compte.update({ where: { id: tx.compteCreditId }, data: { solde: { increment: montant } } });
+      await creerEcritureAuto(p, {
+        debitNumero:  '5700',
+        creditNumero: '2600',
+        montant,
+        libelle: `Dépôt validé ${tx.reference}`,
+        date: new Date(),
+        userId,
+        transactionId: id,
+      });
     } else if (tx.type === 'RETRAIT' && tx.compteDebitId) {
       await p.compte.update({ where: { id: tx.compteDebitId }, data: { solde: { decrement: montant } } });
+      await creerEcritureAuto(p, {
+        debitNumero:  '2600',
+        creditNumero: '5700',
+        montant,
+        libelle: `Retrait validé ${tx.reference}`,
+        date: new Date(),
+        userId,
+        transactionId: id,
+      });
     } else if ((tx.type === 'VIREMENT_DEBIT' || tx.type === 'VIREMENT_CREDIT') && tx.compteDebitId && tx.compteCreditId) {
       await p.compte.update({ where: { id: tx.compteDebitId }, data: { solde: { decrement: montant } } });
       await p.compte.update({ where: { id: tx.compteCreditId }, data: { solde: { increment: montant } } });

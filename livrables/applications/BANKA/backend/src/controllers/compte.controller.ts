@@ -43,6 +43,13 @@ export async function changeStatut(req: AuthRequest, res: Response, next: NextFu
   } catch (e) { next(e); }
 }
 
+export async function cloturer(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const compte = await compteService.cloturerCompte(req.params.id, req.user!.userId);
+    res.json(ok(compte, 'Compte clôturé avec succès'));
+  } catch (e) { next(e); }
+}
+
 export async function getReleve(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { from, to, page, limit } = req.query as Record<string, string>;

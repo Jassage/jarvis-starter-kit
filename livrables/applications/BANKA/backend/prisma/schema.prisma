@@ -117,6 +117,88 @@ enum TypeCompteComptable {
   CAPITAUX
 }
 
+enum TypeGarantie {
+  HYPOTHEQUE
+  NANTISSEMENT
+  CAUTION
+  GAGE
+  AUTRE
+}
+
+enum StatutGarantie {
+  ACTIVE
+  LEVEE
+  SAISIE
+}
+
+enum FrequenceEpargne {
+  HEBDOMADAIRE
+  MENSUEL
+  BIMESTRIEL
+  TRIMESTRIEL
+}
+
+enum StatutEmploye {
+  ACTIF
+  INACTIF
+  CONGE
+  SUSPENDU
+}
+
+enum TypeContrat {
+  CDI
+  CDD
+  STAGE
+  CONSULTANT
+}
+
+enum StatutContrat {
+  ACTIF
+  EXPIRE
+  RESILIE
+}
+
+enum TypeConge {
+  ANNUEL
+  MALADIE
+  MATERNITE
+  PATERNITE
+  SANS_SOLDE
+  AUTRE
+}
+
+enum StatutConge {
+  EN_ATTENTE
+  APPROUVE
+  REFUSE
+  ANNULE
+}
+
+enum StatutPaie {
+  BROUILLON
+  VALIDE
+  PAYE
+}
+
+enum ModeReglement {
+  VIREMENT_BANKA
+  ESPECES
+}
+
+enum StatutAvance {
+  EN_ATTENTE
+  DEDUITE
+  ANNULEE
+}
+
+enum TypeElement {
+  PRIME
+  BONUS
+  INDEMNITE
+  RETENUE
+  HEURE_SUP
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Utilisateur {
@@ -142,6 +224,11 @@ model Utilisateur {
   auditLogs            AuditLog[]
   refreshTokens        RefreshToken[]
   mandatsCrees         MandatCompte[]
+  garantiesCrees       Garantie[]
+  epargnesCrees        EpargneProgrammee[]
+  avancesCrees         AvanceSalaire[]     @relation("AvanceCreePar")
+  fichesPaieValidees   FichePaie[]         @relation("FicheValide")
+  elementsVariablesCrees ElementVariable[] @relation("ElementVariableCreePar")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -221,9 +308,14 @@ model Compte {
   agenceId String
   agence   Agence @relation(fields: [agenceId], references: [id])
 
-  transactionsDebit  Transaction[] @relation("TransactionDebit")
-  transactionsCredit Transaction[] @relation("TransactionCredit")
-  mandats            MandatCompte[]
+  transactionsDebit   Transaction[]       @relation("TransactionDebit")
+  transactionsCredit  Transaction[]       @relation("TransactionCredit")
+  mandats             MandatCompte[]
+  epargnesSource      EpargneProgrammee[] @relation("EpargneSource")
+  epargnesDest        EpargneProgrammee[] @relation("EpargneDestination")
+  employes            Employe[]
+
+  dateCloture DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -323,6 +415,7 @@ model Pret {
 
   lignes         LignePret[]
   remboursements RemboursementPret[]
+  garanties      Garantie[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -386,8 +479,8 @@ model CompteComptable {
 
 model EcritureComptable {
   id            String @id @default(cuid())
-  transactionId String
-  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  transactionId String?
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
 
   compteDebitId  String
   compteDebit    CompteComptable @relation("EcritureDebit", fields: [compteDebitId], references: [id])
@@ -436,6 +529,176 @@ model Configuration {
   updatedAt DateTime @updatedAt
 
   @@map("configurations")
+}
+
+model Garantie {
+  id            String         @id @default(cuid())
+  pretId        String
+  pret          Pret           @relation(fields: [pretId], references: [id])
+  type          TypeGarantie
+  statut        StatutGarantie @default(ACTIVE)
+  description   String
+  valeurEstimee Decimal?       @db.Decimal(15, 2)
+  dateConstit   DateTime       @default(now())
+  dateLevee     DateTime?
+  notes         String?
+
+  creeParId     String
+  creePar       Utilisateur    @relation(fields: [creeParId], references: [id])
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("garanties")
+}
+
+model EpargneProgrammee {
+  id                String           @id @default(cuid())
+  compteSourceId    String
+  compteSource      Compte           @relation("EpargneSource", fields: [compteSourceId], references: [id])
+  compteDestId      String
+  compteDest        Compte           @relation("EpargneDestination", fields: [compteDestId], references: [id])
+  montant           Decimal          @db.Decimal(15, 2)
+  frequence         FrequenceEpargne
+  prochainVersement DateTime
+  actif             Boolean          @default(true)
+  notes             String?
+  nombreExecutions  Int              @default(0)
+  derniereExecution DateTime?
+  creeParId         String
+  creePar           Utilisateur      @relation(fields: [creeParId], references: [id])
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@map("epargnes_programmees")
+}
+
+model Poste {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  intitule    String
+  departement String?
+  salaireMin  Decimal? @db.Decimal(15, 2)
+  salaireMax  Decimal? @db.Decimal(15, 2)
+  actif       Boolean  @default(true)
+  employes    Employe[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("postes")
+}
+
+model Employe {
+  id             String         @id @default(cuid())
+  matricule      String         @unique
+  nom            String
+  prenom         String
+  telephone      String?
+  email          String?
+  adresse        String?
+  dateNaissance  DateTime?
+  dateEmbauche   DateTime
+  departement    String?
+  statut         StatutEmploye  @default(ACTIF)
+  salaireBrut    Decimal        @db.Decimal(15, 2)
+  posteId        String
+  poste          Poste          @relation(fields: [posteId], references: [id])
+  compteId       String?
+  compte         Compte?        @relation(fields: [compteId], references: [id])
+  modeReglement  ModeReglement  @default(VIREMENT_BANKA)
+  contrats       Contrat[]
+  conges         Conge[]
+  fichesPaie     FichePaie[]
+  avances        AvanceSalaire[]
+  elementsVariables ElementVariable[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  @@map("employes")
+}
+
+model Contrat {
+  id          String        @id @default(cuid())
+  reference   String        @unique
+  employeId   String
+  employe     Employe       @relation(fields: [employeId], references: [id])
+  type        TypeContrat
+  statut      StatutContrat @default(ACTIF)
+  dateDebut   DateTime
+  dateFin     DateTime?
+  salaireBrut Decimal       @db.Decimal(15, 2)
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  @@map("contrats")
+}
+
+model Conge {
+  id         String      @id @default(cuid())
+  employeId  String
+  employe    Employe     @relation(fields: [employeId], references: [id])
+  type       TypeConge
+  statut     StatutConge @default(EN_ATTENTE)
+  dateDebut  DateTime
+  dateFin    DateTime
+  nbJours    Int
+  motif      String?
+  commentaire String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  @@map("conges")
+}
+
+model FichePaie {
+  id              String        @id @default(cuid())
+  reference       String        @unique
+  employeId       String
+  employe         Employe       @relation(fields: [employeId], references: [id])
+  periode         String
+  salaireBrut     Decimal       @db.Decimal(15, 2)
+  cotisations     Decimal       @default(0) @db.Decimal(15, 2)
+  avanceDeduite   Decimal       @default(0) @db.Decimal(15, 2)
+  creditDeduit    Decimal       @default(0) @db.Decimal(15, 2)
+  salaireNet      Decimal       @db.Decimal(15, 2)
+  statut          StatutPaie    @default(BROUILLON)
+  modeReglement   ModeReglement @default(VIREMENT_BANKA)
+  details         Json?
+  valideParId     String?
+  validePar       Utilisateur?  @relation("FicheValide", fields: [valideParId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  @@unique([employeId, periode])
+  @@map("fiches_paie")
+}
+
+model AvanceSalaire {
+  id               String       @id @default(cuid())
+  reference        String       @unique
+  employeId        String
+  employe          Employe      @relation(fields: [employeId], references: [id])
+  montant          Decimal      @db.Decimal(15, 2)
+  periodeDeduction String
+  statut           StatutAvance @default(EN_ATTENTE)
+  notes            String?
+  creeParId        String
+  creePar          Utilisateur  @relation("AvanceCreePar", fields: [creeParId], references: [id])
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  @@map("avances_salaire")
+}
+
+model ElementVariable {
+  id          String      @id @default(cuid())
+  employeId   String
+  employe     Employe     @relation(fields: [employeId], references: [id])
+  periode     String
+  type        TypeElement
+  libelle     String
+  montant     Decimal     @db.Decimal(15, 2)
+  notes       String?
+  creeParId   String
+  creePar     Utilisateur @relation("ElementVariableCreePar", fields: [creeParId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  @@map("elements_variables")
 }
 
 model AuditLog {

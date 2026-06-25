@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { formatMontant, formatDate, nomClient, STATUT_PRET_LABELS, TYPE_TRANSACTION_LABELS } from '@/lib/utils';
+import { openPrintWindow, formatMontantPrint, formatDatePrint, bankaHeader } from '@/lib/printBanka';
 
 type Tab = 'journalier' | 'par' | 'impayes';
 
@@ -9,6 +10,82 @@ const TYPE_TX_COLORS: Record<string, string> = {
   DEPOT: '#047857', RETRAIT: '#b91c1c', VIREMENT_DEBIT: '#1e40af', VIREMENT_CREDIT: '#1e40af',
   DECAISSEMENT_PRET: '#0e7490', REMBOURSEMENT_PRET: '#0e7490', FRAIS: '#b45309', INTERET: '#b45309',
 };
+
+function printJournal(date: string, journal: any, txRows: any[], totalDepots: number, totalRetraits: number, totalOps: number) {
+  const lignes = txRows.map((row) => `<tr>
+    <td>${TYPE_TRANSACTION_LABELS[row.type] || row.type}</td>
+    <td>${row.devise}</td>
+    <td style="text-align:right">${row.count}</td>
+    <td style="text-align:right;font-weight:700">${formatMontantPrint(row.montant, row.devise)}</td>
+  </tr>`).join('');
+
+  const html = `${bankaHeader(`Activité journalière — ${formatDatePrint(date)}`)}
+<div class="kpi-grid">
+  <div class="kpi"><div class="kpi-label">Dépôts (HTG)</div><div class="kpi-value" style="color:#047857">${formatMontantPrint(totalDepots, 'HTG')}</div></div>
+  <div class="kpi"><div class="kpi-label">Retraits (HTG)</div><div class="kpi-value" style="color:#b91c1c">${formatMontantPrint(totalRetraits, 'HTG')}</div></div>
+  <div class="kpi"><div class="kpi-label">Net (HTG)</div><div class="kpi-value" style="color:#1e40af">${formatMontantPrint(totalDepots - totalRetraits, 'HTG')}</div></div>
+  <div class="kpi"><div class="kpi-label">Total opérations</div><div class="kpi-value">${totalOps}</div></div>
+</div>
+<div class="kpi-grid">
+  <div class="kpi"><div class="kpi-label">Nouveaux clients</div><div class="kpi-value">${journal.nouveauxClients}</div></div>
+  <div class="kpi"><div class="kpi-label">Nouveaux comptes</div><div class="kpi-value">${journal.nouveauxComptes}</div></div>
+  <div class="kpi"><div class="kpi-label">Demandes prêt</div><div class="kpi-value">${journal.nouveauxPrets}</div></div>
+</div>
+<h2>Détail par type d'opération</h2>
+<table>
+  <thead><tr><th>Type</th><th>Devise</th><th style="text-align:right">Opérations</th><th style="text-align:right">Montant total</th></tr></thead>
+  <tbody>${lignes}</tbody>
+</table>
+<div class="footer"><span>BANKA — Rapport journalier</span><span>Document confidentiel</span></div>`;
+
+  openPrintWindow(html, `Rapport journalier ${formatDatePrint(date)}`);
+}
+
+function printPAR(par: any) {
+  const html = `${bankaHeader('Portefeuille à Risque (PAR)')}
+<div class="kpi-grid">
+  <div class="kpi" style="grid-column:span 2"><div class="kpi-label">Encours total de crédit</div><div class="kpi-value">${formatMontantPrint(par.encoursTotalCredit, 'HTG')}</div></div>
+  <div class="kpi"><div class="kpi-label">PAR 30 (ratio)</div><div class="kpi-value" style="color:#b45309">${par.par30.ratio.toFixed(2)}%</div></div>
+  <div class="kpi"><div class="kpi-label">PAR 90 (ratio)</div><div class="kpi-value" style="color:#b91c1c">${par.par90.ratio.toFixed(2)}%</div></div>
+</div>
+<table>
+  <thead><tr><th>Indicateur</th><th style="text-align:right">Montant à risque</th><th style="text-align:right">Dossiers</th><th style="text-align:right">Ratio</th></tr></thead>
+  <tbody>
+    <tr><td>PAR 30 — Prêts en retard > 30 jours</td><td style="text-align:right;color:#b45309">${formatMontantPrint(par.par30.montant, 'HTG')}</td><td style="text-align:right">${par.par30.count}</td><td style="text-align:right;font-weight:700;color:#b45309">${par.par30.ratio.toFixed(2)}%</td></tr>
+    <tr><td>PAR 90 — Prêts en retard > 90 jours</td><td style="text-align:right;color:#b91c1c">${formatMontantPrint(par.par90.montant, 'HTG')}</td><td style="text-align:right">${par.par90.count}</td><td style="text-align:right;font-weight:700;color:#b91c1c">${par.par90.ratio.toFixed(2)}%</td></tr>
+  </tbody>
+</table>
+<div class="footer"><span>BANKA — Rapport PAR</span><span>Document confidentiel</span></div>`;
+
+  openPrintWindow(html, 'PAR — Portefeuille à Risque');
+}
+
+function printImpayes(impayes: any[]) {
+  const total = impayes.reduce((s: number, p: any) => s + Number(p.resteARegler), 0);
+  const lignes = impayes.map((p: any) => `<tr>
+    <td style="font-family:monospace">${p.reference}</td>
+    <td>${p.client?.type === 'ENTREPRISE' ? p.client.raisonSociale : `${p.client?.prenom || ''} ${p.client?.nom || ''}`.trim()}<br/><span style="font-size:10px;color:#8b94b0">${p.client?.numeroClient}</span></td>
+    <td>${p.agence?.code || '—'}</td>
+    <td style="text-align:right">${formatMontantPrint(p.montant, p.devise)}</td>
+    <td style="text-align:right;color:#b91c1c;font-weight:700">${formatMontantPrint(p.resteARegler, p.devise)}</td>
+    <td>${p.dateDecaissement ? formatDatePrint(p.dateDecaissement) : '—'}</td>
+  </tr>`).join('');
+
+  const html = `${bankaHeader(`État des impayés — ${new Date().toLocaleDateString('fr-FR')}`)}
+<div class="kpi-grid">
+  <div class="kpi" style="grid-column:span 2"><div class="kpi-label">Total créances en retard</div><div class="kpi-value" style="color:#b91c1c">${formatMontantPrint(total, 'HTG')}</div></div>
+  <div class="kpi" style="grid-column:span 2"><div class="kpi-label">Nombre de dossiers en retard</div><div class="kpi-value">${impayes.length}</div></div>
+</div>
+<h2>Liste des prêts en retard</h2>
+<table>
+  <thead><tr><th>Référence</th><th>Client</th><th>Agence</th><th style="text-align:right">Montant accordé</th><th style="text-align:right">Reste à régler</th><th>Décaissement</th></tr></thead>
+  <tbody>${lignes}</tbody>
+  <tr class="total-row"><td colspan="3">TOTAL</td><td></td><td style="text-align:right">${formatMontantPrint(total, 'HTG')}</td><td></td></tr>
+</table>
+<div class="footer"><span>BANKA — État des impayés</span><span>Document confidentiel</span></div>`;
+
+  openPrintWindow(html, 'État des impayés');
+}
 
 export default function RapportsPage() {
   const [tab, setTab] = useState<Tab>('journalier');
@@ -133,6 +210,16 @@ export default function RapportsPage() {
               }
               Actualiser
             </button>
+            {journal && (
+              <button
+                onClick={() => printJournal(date, journal, txRows, totalDepots, totalRetraits, totalOps)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium"
+                style={{ background: '#f0f2f9', color: '#4a5578' }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Imprimer
+              </button>
+            )}
           </div>
 
           {journalLoading && (
@@ -240,6 +327,12 @@ export default function RapportsPage() {
 
           {!parLoading && par && (
             <>
+              <div className="flex justify-end mb-1">
+                <button onClick={() => printPAR(par)} className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium" style={{ background: '#f0f2f9', color: '#4a5578' }}>
+                  <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Imprimer
+                </button>
+              </div>
               {/* Encours total */}
               <div className="card overflow-hidden">
                 <div className="px-6 py-5" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)' }}>
@@ -326,6 +419,13 @@ export default function RapportsPage() {
                   {impayesLoading ? 'Chargement...' : `${impayes.length} dossier(s) en retard de paiement`}
                 </p>
               </div>
+              <div className="flex items-center gap-2">
+                {impayes.length > 0 && (
+                  <button onClick={() => printImpayes(impayes)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: '#f0f2f9', color: '#4a5578' }}>
+                    <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Imprimer
+                  </button>
+                )}
               <button
                 onClick={loadImpayes}
                 disabled={impayesLoading}
@@ -335,6 +435,7 @@ export default function RapportsPage() {
                 <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5"><path d="M4 4v5h5M20 20v-5h-5M4 9a9 9 0 0115 0M20 15a9 9 0 01-15 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 Actualiser
               </button>
+              </div>
             </div>
 
             {impayesLoading ? (

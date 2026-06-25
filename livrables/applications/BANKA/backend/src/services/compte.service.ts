@@ -150,6 +150,34 @@ export async function getReleveCompte(id: string, opts: { from?: Date; to?: Date
   return { compte, transactions, total, page, limit, pages: Math.ceil(total / limit) };
 }
 
+export async function cloturerCompte(id: string, userId: string) {
+  const compte = await prisma.compte.findUnique({
+    where: { id },
+    include: { _count: { select: { epargnesSource: { where: { actif: true } }, epargnesDest: { where: { actif: true } } } } },
+  });
+  if (!compte) throw new AppError(404, 'Compte introuvable');
+  if (compte.statut === 'CLOTURE') throw new AppError(400, 'Ce compte est déjà clôturé');
+  if (Number(compte.solde) !== 0) throw new AppError(400, `Impossible de clôturer : solde non nul (${compte.solde})`);
+
+  const pretsActifs = await prisma.pret.count({
+    where: {
+      clientId: compte.clientId,
+      statut: { in: ['DECAISSE', 'EN_COURS', 'EN_RETARD'] },
+    },
+  });
+  if (pretsActifs > 0) throw new AppError(400, 'Ce client a des prêts actifs liés à ce compte');
+
+  const totalEpargnes = (compte as any)._count.epargnesSource + (compte as any)._count.epargnesDest;
+  if (totalEpargnes > 0) throw new AppError(400, 'Désactivez d\'abord les épargnes programmées liées à ce compte');
+
+  const updated = await prisma.compte.update({
+    where: { id },
+    data: { statut: 'CLOTURE', dateCloture: new Date() },
+  });
+  await createAuditLog({ userId, table: 'comptes', action: 'CLOTURE', entiteId: id, ancien: { statut: compte.statut }, nouveau: { statut: 'CLOTURE' } });
+  return updated;
+}
+
 export async function searchComptes(q: string) {
   return prisma.compte.findMany({
     where: {

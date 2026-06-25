@@ -7,6 +7,37 @@
 
 ---
 
+## 2026-06-25
+
+### BANKA : module RH complet, mandats externes, bug caisse corrigé
+
+**Module RH — Paie (nouveau) :**
+- Workflow BROUILLON → VALIDÉ → PAYÉ pour les bulletins de paie
+- Chaque employé peut avoir un compte bancaire BANKA lié (`compteId`) et un mode de règlement (`VIREMENT_BANKA` ou `ESPECES`)
+- `genererFichesPaie` calcule : salaire brut + primes/bonus/indemnités/heures sup (depuis `ElementVariable`) - cotisations ONA 6% - retenues - avance déductible - versement mensuel prêt en cours = net à payer
+- `validerFiche` : passage BROUILLON → VALIDÉ par un responsable (nouvel endpoint `PATCH /rh/paie/:id/valider`)
+- `payerSalaires` : traite uniquement les fiches VALIDÉES, crée une vraie `Transaction` type `VIREMENT_CREDIT` sur le compte de l'employé (visible dans son relevé), marque la fiche PAYÉE
+
+**Avances sur salaire (nouveau) :**
+- Modèle `AvanceSalaire` : montant max 50% du brut, créditée sur le compte de l'employé à la création
+- Déduction automatique au moment de `genererFichesPaie` si l'avance est `EN_ATTENTE` et que la `periodeDeduction` correspond
+- Endpoints : `GET/POST /rh/avances`, `PATCH /rh/avances/:id/annuler` (débite le compte en cas d'annulation)
+
+**Éléments variables (nouveau) :**
+- Modèle `ElementVariable` : 5 types (PRIME, BONUS, INDEMNITE, HEURE_SUP, RETENUE)
+- PRIME/BONUS/INDEMNITE/HEURE_SUP s'ajoutent au brut avant les cotisations ; RETENUE se déduit du net après cotisations
+- Endpoints : `GET/POST /rh/elements-variables`, `DELETE /rh/elements-variables/:id`
+
+**Mandats & Procurations — Personne externe (fix) :**
+- Avant : seuls les clients enregistrés pouvaient être désignés mandataires
+- Après : mode "Personne externe" dans `MandatForm` (nom, prénom, téléphone, pièce d'identité) : un client est créé à la volée pour garantir la traçabilité KYC, puis le mandat est créé sur ce client
+
+**Bug Caisse — 0 transactions (fix) :**
+- Cause 1 : `getSessionActive` retournait `_count` au lieu du tableau complet des transactions → corrigé (tableau `transactions` avec orderBy)
+- Cause 2 : `effectuerDepot`/`effectuerRetrait`/`effectuerVirement` ne passaient jamais `sessionId` car `TransactionForm` ne le transmet pas → helper `resolveSessionId` ajouté dans `transaction.service.ts` : cherche la session ouverte pour l'agence + la devise du compte et l'auto-lie à toute nouvelle transaction
+
+---
+
 ## 2026-06-24
 
 ### BANKA : mandats/procurations, administration système, pénalités automatiques, 9 types de comptes

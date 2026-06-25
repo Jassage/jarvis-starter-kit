@@ -11,38 +11,56 @@ const CATEGORIES: { label: string; cles: string[]; icon: string; color: string; 
     cles: ['NOM_INSTITUTION', 'ADRESSE_INSTITUTION', 'TELEPHONE_INSTITUTION', 'EMAIL_INSTITUTION'],
   },
   {
-    label: 'Taux & Pénalités',
+    label: 'Pénalités & Prêts',
     icon: 'M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6',
     color: '#b45309', bg: '#fffbeb',
-    cles: ['TAUX_PENALITE_JOURNALIER', 'DELAI_GRACE_RETARD', 'TAUX_INTERET_EPARGNE'],
+    cles: ['TAUX_PENALITE_JOURNALIER', 'DELAI_GRACE_RETARD', 'TAUX_DEFAULT_PRET_MENSUEL'],
+  },
+  {
+    label: 'Taux d\'intérêt par compte',
+    icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+    color: '#047857', bg: '#ecfdf5',
+    cles: ['TAUX_INTERET_EPARGNE', 'TAUX_INTERET_TERME', 'TAUX_INTERET_MICRO_EPARGNE', 'TAUX_INTERET_RETRAITE', 'TAUX_INTERET_JEUNESSE', 'TAUX_INTERET_TONTINE'],
   },
   {
     label: 'Limites & Seuils',
-    icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
-    color: '#047857', bg: '#ecfdf5',
+    icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+    color: '#7c3aed', bg: '#f5f3ff',
     cles: ['SOLDE_MINIMUM_OUVERTURE', 'PLAFOND_RETRAIT_JOURNALIER', 'DEVISE_PRINCIPALE'],
   },
 ];
 
 const LABELS: Record<string, string> = {
-  NOM_INSTITUTION: 'Nom de l\'institution',
-  ADRESSE_INSTITUTION: 'Adresse',
-  TELEPHONE_INSTITUTION: 'Téléphone',
-  EMAIL_INSTITUTION: 'Email',
-  TAUX_PENALITE_JOURNALIER: 'Taux de pénalité journalier',
-  DELAI_GRACE_RETARD: 'Délai de grâce (jours)',
-  TAUX_INTERET_EPARGNE: 'Taux d\'intérêt épargne (annuel)',
-  SOLDE_MINIMUM_OUVERTURE: 'Solde minimum d\'ouverture (HTG)',
-  PLAFOND_RETRAIT_JOURNALIER: 'Plafond de retrait journalier (HTG)',
-  DEVISE_PRINCIPALE: 'Devise principale',
+  NOM_INSTITUTION:           'Nom de l\'institution',
+  ADRESSE_INSTITUTION:       'Adresse',
+  TELEPHONE_INSTITUTION:     'Téléphone',
+  EMAIL_INSTITUTION:         'Email',
+  TAUX_PENALITE_JOURNALIER:  'Taux de pénalité journalier',
+  DELAI_GRACE_RETARD:        'Délai de grâce (jours)',
+  TAUX_DEFAULT_PRET_MENSUEL: 'Taux mensuel par défaut (prêts)',
+  TAUX_INTERET_EPARGNE:      'Épargne classique (annuel)',
+  TAUX_INTERET_TERME:        'Compte à terme (annuel)',
+  TAUX_INTERET_MICRO_EPARGNE:'Micro-épargne (annuel)',
+  TAUX_INTERET_RETRAITE:     'Retraite (annuel)',
+  TAUX_INTERET_JEUNESSE:     'Compte jeunesse (annuel)',
+  TAUX_INTERET_TONTINE:      'Tontine (annuel)',
+  SOLDE_MINIMUM_OUVERTURE:   'Solde minimum d\'ouverture (HTG)',
+  PLAFOND_RETRAIT_JOURNALIER:'Plafond de retrait journalier (HTG)',
+  DEVISE_PRINCIPALE:         'Devise principale',
 };
 
 const HINTS: Record<string, string> = {
-  TAUX_PENALITE_JOURNALIER: '0.001 = 0,1 % par jour. Calculé sur le capital restant dû.',
-  DELAI_GRACE_RETARD: 'Nombre de jours après l\'échéance avant d\'appliquer les pénalités.',
-  TAUX_INTERET_EPARGNE: '0.03 = 3 % par an. Utilisé par défaut pour les nouveaux comptes épargne.',
-  SOLDE_MINIMUM_OUVERTURE: 'Montant minimum requis lors de l\'ouverture d\'un compte.',
-  PLAFOND_RETRAIT_JOURNALIER: 'Maximum autorisé par retrait en une journée (0 = illimité).',
+  TAUX_PENALITE_JOURNALIER:  '0.001 = 0,1 % par jour. Calculé sur le capital restant dû.',
+  DELAI_GRACE_RETARD:        'Nombre de jours après l\'échéance avant d\'appliquer les pénalités.',
+  TAUX_DEFAULT_PRET_MENSUEL: '0.03 = 3 % par mois. Taux suggéré à la création d\'un prêt.',
+  TAUX_INTERET_EPARGNE:      '0.03 = 3 % par an. Appliqué aux comptes Épargne classique.',
+  TAUX_INTERET_TERME:        '0.05 = 5 % par an. Appliqué aux comptes à terme.',
+  TAUX_INTERET_MICRO_EPARGNE:'0.02 = 2 % par an.',
+  TAUX_INTERET_RETRAITE:     '0.04 = 4 % par an.',
+  TAUX_INTERET_JEUNESSE:     '0.02 = 2 % par an.',
+  TAUX_INTERET_TONTINE:      '0 = pas d\'intérêt sur la tontine.',
+  SOLDE_MINIMUM_OUVERTURE:   'Montant minimum requis lors de l\'ouverture d\'un compte.',
+  PLAFOND_RETRAIT_JOURNALIER:'Maximum autorisé par retrait en une journée (0 = illimité).',
 };
 
 function ConfigField({ config, onSave, canEdit }: { config: Config; onSave: (cle: string, val: string) => Promise<void>; canEdit: boolean }) {
@@ -139,7 +157,7 @@ export default function AdministrationPage() {
           <span className="ml-3 text-sm" style={{ color: '#8b94b0' }}>Chargement des paramètres...</span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-5">
           {CATEGORIES.map((cat) => (
             <div key={cat.label} className="card overflow-hidden">
               <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: '1px solid #f0f2f9', background: cat.bg }}>

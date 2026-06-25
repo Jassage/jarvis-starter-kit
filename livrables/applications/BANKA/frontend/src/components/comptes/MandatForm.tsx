@@ -42,14 +42,26 @@ const DROITS_OPTIONS = [
   },
 ];
 
+type Mode = 'client' | 'externe';
+
 export default function MandatForm({ compteId, onClose, onSuccess }: Props) {
   const { createMandat } = useMandatStore();
-  const { searchClients } = useClientStore();
+  const { searchClients, createClient } = useClientStore();
 
+  const [mode, setMode] = useState<Mode>('client');
+
+  // Mode client existant
   const [clientOptions, setClientOptions] = useState<ComboboxOption[]>([]);
   const [clientLoading, setClientLoading] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedClientLabel, setSelectedClientLabel] = useState('');
+
+  // Mode personne externe
+  const [extNom, setExtNom] = useState('');
+  const [extPrenom, setExtPrenom] = useState('');
+  const [extTelephone, setExtTelephone] = useState('');
+  const [extPieceId, setExtPieceId] = useState('');
+
   const [droits, setDroits] = useState<string[]>(['CONSULTATION']);
   const [dateFin, setDateFin] = useState('');
   const [notes, setNotes] = useState('');
@@ -78,15 +90,46 @@ export default function MandatForm({ compteId, onClose, onSuccess }: Props) {
     );
   };
 
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setError('');
+    setSelectedClientId('');
+    setSelectedClientLabel('');
+    setExtNom('');
+    setExtPrenom('');
+    setExtTelephone('');
+    setExtPieceId('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClientId) { setError('Sélectionnez le bénéficiaire du mandat'); return; }
-    if (droits.length === 0) { setError('Sélectionnez au moins un droit'); return; }
     setError('');
+
+    if (droits.length === 0) { setError('Sélectionnez au moins un droit'); return; }
+
     setLoading(true);
     try {
+      let mandataireId = selectedClientId;
+
+      if (mode === 'externe') {
+        if (!extNom.trim()) { setError('Le nom est obligatoire'); setLoading(false); return; }
+        if (!extTelephone.trim()) { setError('Le téléphone est obligatoire'); setLoading(false); return; }
+        // Créer un client minimal pour cette personne externe
+        const nouveau = await createClient({
+          type: 'PARTICULIER',
+          nom: extNom.trim(),
+          prenom: extPrenom.trim() || undefined,
+          telephone: extTelephone.trim(),
+          pieceIdentite: extPieceId.trim() || undefined,
+          notes: 'Créé automatiquement via mandat',
+        });
+        mandataireId = nouveau.id;
+      } else {
+        if (!mandataireId) { setError('Sélectionnez le bénéficiaire du mandat'); setLoading(false); return; }
+      }
+
       await createMandat(compteId, {
-        mandataireId: selectedClientId,
+        mandataireId,
         droits,
         dateFin: dateFin || undefined,
         notes: notes || undefined,
@@ -119,28 +162,82 @@ export default function MandatForm({ compteId, onClose, onSuccess }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
-          {/* Bénéficiaire */}
+
+          {/* Toggle mode */}
           <div>
-            <div className="flex items-center gap-1.5 mb-2">
-              <label className="label mb-0">Bénéficiaire du mandat</label>
-              <Tooltip content="Le client qui recevra les droits délégués sur ce compte" position="right">
-                <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5" style={{ color: '#8b94b0' }}>
-                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/>
-                  <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                </svg>
-              </Tooltip>
+            <label className="label mb-2">Type de mandataire</label>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { key: 'client' as Mode, label: 'Client enregistré', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0' },
+                { key: 'externe' as Mode, label: 'Personne externe', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
+              ]).map(({ key, label, icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => switchMode(key)}
+                  className="flex items-center gap-2.5 p-3 rounded-xl text-left transition-all"
+                  style={{
+                    background: mode === key ? '#1e3a8a10' : '#f7f8fc',
+                    border: `2px solid ${mode === key ? '#1e3a8a' : '#e7eaf3'}`,
+                  }}
+                >
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: mode === key ? '#1e3a8a20' : '#f0f2f9', color: mode === key ? '#1e3a8a' : '#8b94b0' }}>
+                    <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5"><path d={icon} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                  <p className="text-xs font-semibold" style={{ color: mode === key ? '#1e3a8a' : '#4a5578' }}>{label}</p>
+                </button>
+              ))}
             </div>
-            <Combobox
-              options={clientOptions}
-              value={selectedClientId}
-              displayValue={selectedClientLabel}
-              onChange={(val, opt) => { setSelectedClientId(val); setSelectedClientLabel(opt?.label || ''); }}
-              onSearch={handleClientSearch}
-              loading={clientLoading}
-              placeholder="Rechercher un client..."
-              emptyMessage="Tapez au moins 2 caractères"
-            />
           </div>
+
+          {/* Bénéficiaire */}
+          {mode === 'client' ? (
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <label className="label mb-0">Bénéficiaire du mandat</label>
+                <Tooltip content="Recherchez parmi les clients existants" position="right">
+                  <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5" style={{ color: '#8b94b0' }}>
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/>
+                    <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
+                </Tooltip>
+              </div>
+              <Combobox
+                options={clientOptions}
+                value={selectedClientId}
+                displayValue={selectedClientLabel}
+                onChange={(val, opt) => { setSelectedClientId(val); setSelectedClientLabel(opt?.label || ''); }}
+                onSearch={handleClientSearch}
+                loading={clientLoading}
+                placeholder="Rechercher un client..."
+                emptyMessage="Tapez au moins 2 caractères"
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="p-3 rounded-xl text-xs" style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e' }}>
+                Cette personne sera enregistrée comme client pour assurer la traçabilité réglementaire.
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Prénom</label>
+                  <input type="text" value={extPrenom} onChange={(e) => setExtPrenom(e.target.value)} className="input" placeholder="ex: Marie" />
+                </div>
+                <div>
+                  <label className="label">Nom <span style={{ color: '#b91c1c' }}>*</span></label>
+                  <input type="text" value={extNom} onChange={(e) => setExtNom(e.target.value)} className="input" placeholder="ex: JEAN" required />
+                </div>
+              </div>
+              <div>
+                <label className="label">Téléphone <span style={{ color: '#b91c1c' }}>*</span></label>
+                <input type="tel" value={extTelephone} onChange={(e) => setExtTelephone(e.target.value)} className="input" placeholder="ex: +509 3700 0000" required />
+              </div>
+              <div>
+                <label className="label">Pièce d'identité (optionnel)</label>
+                <input type="text" value={extPieceId} onChange={(e) => setExtPieceId(e.target.value)} className="input" placeholder="CIN, passeport, etc." />
+              </div>
+            </div>
+          )}
 
           {/* Droits */}
           <div>
