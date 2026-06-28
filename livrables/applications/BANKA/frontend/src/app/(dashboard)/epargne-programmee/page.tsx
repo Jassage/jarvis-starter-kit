@@ -39,7 +39,7 @@ function clientNom(c: { nom?: string; prenom?: string; raisonSociale?: string; t
 
 export default function EpargneProgrammeePage() {
   const { utilisateur } = useAuthStore();
-  const canManage = ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'CAISSIER'].includes(utilisateur?.role || '');
+  const canManage = ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR'].includes(utilisateur?.role || '');
   const canExecute = ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR'].includes(utilisateur?.role || '');
 
   const [items, setItems] = useState<EpargneProgrammee[]>([]);
@@ -427,7 +427,7 @@ export default function EpargneProgrammeePage() {
               {/* Premier versement */}
               <div>
                 <label className="label">Date du premier versement <span style={{ color: '#b91c1c' }}>*</span></label>
-                <input type="date" value={prochainVersement} onChange={(e) => setProchainVersement(e.target.value)} className="input w-full" />
+                <input type="date" value={prochainVersement} onChange={(e) => setProchainVersement(e.target.value)} className="input w-full" min={new Date().toISOString().split('T')[0]} />
               </div>
 
               {/* Notes */}

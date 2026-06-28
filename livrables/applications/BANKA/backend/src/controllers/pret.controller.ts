@@ -63,6 +63,13 @@ export async function penalite(req: AuthRequest, res: Response, next: NextFuncti
   } catch (e) { next(e); }
 }
 
+export async function annuler(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const pret = await pretService.annulerPret(req.params.id, req.user!.userId, req.body.notes);
+    res.json(ok(pret, 'Prêt annulé'));
+  } catch (e) { next(e); }
+}
+
 export async function refreshRetards(_req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const updated = await pretService.mettreAJourRetards();

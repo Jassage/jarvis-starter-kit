@@ -26,7 +26,7 @@ export const useTransactionStore = create<TransactionState>((set) => ({
     try {
       const { data } = await api.get('/transactions', { params: opts });
       set({ transactions: data.data.items, total: data.data.total, pages: data.data.pages, isLoading: false });
-    } catch { set({ isLoading: false }); }
+    } catch (err) { set({ isLoading: false }); throw err; }
   },
 
   depot: async (payload) => {

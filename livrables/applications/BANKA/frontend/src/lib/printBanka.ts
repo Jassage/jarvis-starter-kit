@@ -42,7 +42,9 @@ ${html}
 
 export function formatMontantPrint(n: number | string, devise = 'HTG') {
   const v = typeof n === 'string' ? parseFloat(n) : n;
-  return new Intl.NumberFormat('fr-HT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + ' ' + devise;
+  const sign = v < 0 ? '-' : '';
+  const [intPart, decPart] = Math.abs(v).toFixed(2).split('.');
+  return `${sign}${intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')},${decPart} ${devise}`;
 }
 
 export function formatDatePrint(d: string | Date) {

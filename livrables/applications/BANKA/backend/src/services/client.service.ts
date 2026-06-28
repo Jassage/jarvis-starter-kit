@@ -78,12 +78,12 @@ export async function createClient(data: {
   numeroPiece?: string;
   telephone: string;
   email?: string;
-  adresse: string;
+  adresse?: string;
   profession?: string;
   notes?: string;
 }, userId?: string) {
   const numeroClient = await generateNumeroClient();
-  const client = await prisma.client.create({ data: { ...data, numeroClient } });
+  const client = await prisma.client.create({ data: { ...data, adresse: data.adresse ?? '', numeroClient } });
   if (userId) await createAuditLog({ userId, table: 'clients', action: 'CREATE', entiteId: client.id, nouveau: { numeroClient, type: client.type, telephone: client.telephone } });
   return client;
 }

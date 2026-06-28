@@ -42,7 +42,7 @@ export const useCompteStore = create<CompteState>((set) => ({
     try {
       const { data } = await api.get('/comptes', { params: { ...opts, limit: 20 } });
       set({ comptes: data.data.items, total: data.data.total, pages: data.data.pages, isLoading: false });
-    } catch { set({ isLoading: false }); }
+    } catch (err) { set({ isLoading: false }); throw err; }
   },
 
   searchComptes: async (query: string, statut = 'ACTIF') => {

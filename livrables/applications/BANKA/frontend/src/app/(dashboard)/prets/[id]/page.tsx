@@ -35,7 +35,7 @@ const LIGNE_STATUT_CHIP: Record<string, string> = {
 export default function PretDetailPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
-  const { fetchPret, approuver, rejeter, decaisser, rembourser } = usePretStore();
+  const { fetchPret, approuver, rejeter, annuler, decaisser, rembourser } = usePretStore();
   const { searchComptes } = useCompteStore();
   const { utilisateur } = useAuthStore();
   const toast = useToastStore();
@@ -95,6 +95,8 @@ export default function PretDetailPage() {
   // Drawers
   const [showConfirmApprouver, setShowConfirmApprouver] = useState(false);
   const [showConfirmRejeter, setShowConfirmRejeter] = useState(false);
+  const [showConfirmAnnuler, setShowConfirmAnnuler] = useState(false);
+  const [annulerNotes, setAnnulerNotes] = useState('');
   const [showDecaisser, setShowDecaisser] = useState(false);
   const [showRembourser, setShowRembourser] = useState(false);
 
@@ -165,6 +167,21 @@ export default function PretDetailPage() {
       await load();
     } catch {
       toast.error('Erreur', 'Impossible de rejeter ce dossier.');
+    } finally {
+      setAction(false);
+    }
+  };
+
+  const handleAnnuler = async () => {
+    setAction(true);
+    try {
+      await annuler(id, annulerNotes || undefined);
+      toast.warning('Prêt annulé', 'Le dossier a été annulé.');
+      setShowConfirmAnnuler(false);
+      setAnnulerNotes('');
+      await load();
+    } catch (err: any) {
+      toast.error('Erreur', err.response?.data?.error || 'Impossible d\'annuler ce dossier.');
     } finally {
       setAction(false);
     }
@@ -321,7 +338,7 @@ export default function PretDetailPage() {
 
         {/* Actions EN_ATTENTE */}
         {canValidate && pret.statut === 'EN_ATTENTE' && (
-          <div className="px-6 py-4 flex items-center gap-3" style={{ borderTop: '1px solid #f0f2f9' }}>
+          <div className="px-6 py-4 flex items-center gap-3 flex-wrap" style={{ borderTop: '1px solid #f0f2f9' }}>
             <p className="text-sm font-semibold mr-2" style={{ color: '#0b1733' }}>Décision :</p>
             <button onClick={() => setShowConfirmApprouver(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors" style={{ background: '#ecfdf5', color: '#047857' }}>
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -331,15 +348,23 @@ export default function PretDetailPage() {
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>
               Rejeter
             </button>
+            <button onClick={() => setShowConfirmAnnuler(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ml-auto" style={{ background: '#f3f4f6', color: '#6b7280' }}>
+              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Annuler le dossier
+            </button>
           </div>
         )}
 
         {/* Actions APPROUVE */}
         {canValidate && pret.statut === 'APPROUVE' && (
-          <div className="px-6 py-4" style={{ borderTop: '1px solid #f0f2f9' }}>
+          <div className="px-6 py-4 flex items-center gap-3" style={{ borderTop: '1px solid #f0f2f9' }}>
             <button onClick={() => setShowDecaisser(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors" style={{ background: '#eef2ff', color: '#1e40af' }}>
               <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M19 14l-7 7-7-7M12 3v18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               Procéder au décaissement
+            </button>
+            <button onClick={() => setShowConfirmAnnuler(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ml-auto" style={{ background: '#f3f4f6', color: '#6b7280' }}>
+              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Annuler le dossier
             </button>
           </div>
         )}
@@ -609,6 +634,43 @@ export default function PretDetailPage() {
               <button onClick={() => setShowDecaisser(false)} className="btn-ghost flex-1">Annuler</button>
               <button onClick={handleDecaisser} disabled={action || !decaisCompte} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50" style={{ background: 'linear-gradient(135deg, #1e3a8a, #2563eb)', color: 'white' }}>
                 {action ? 'En cours...' : 'Confirmer le décaissement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drawer — Annuler */}
+      {showConfirmAnnuler && (
+        <div className="drawer-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowConfirmAnnuler(false); }}>
+          <div className="drawer-panel" style={{ maxWidth: '460px' }}>
+            <div className="px-5 py-4 flex items-center gap-3 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #374151, #6b7280)' }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
+                <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" style={{ color: 'white' }}><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </div>
+              <div className="flex-1"><h2 className="font-bold" style={{ color: 'white' }}>Annuler le dossier</h2><p className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>{pret.reference}</p></div>
+              <button onClick={() => setShowConfirmAnnuler(false)} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.15)', color: 'white' }}><svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></button>
+            </div>
+            <div className="px-5 py-5 flex-1 space-y-4">
+              <p className="text-sm" style={{ color: '#4a5578' }}>
+                Vous allez annuler le dossier <strong>{pret.reference}</strong> de <strong>{pret.client ? nomClient(pret.client) : '—'}</strong>.
+                Cette action est irréversible.
+              </p>
+              <div>
+                <label className="label">Motif d'annulation <span style={{ color: '#8b94b0', fontWeight: 400 }}>optionnel</span></label>
+                <textarea
+                  value={annulerNotes}
+                  onChange={(e) => setAnnulerNotes(e.target.value)}
+                  className="input resize-none"
+                  rows={3}
+                  placeholder="Raison de l'annulation..."
+                />
+              </div>
+            </div>
+            <div className="px-5 py-4 flex gap-3" style={{ borderTop: '1px solid #f0f2f9', background: '#f7f8fc' }}>
+              <button onClick={() => setShowConfirmAnnuler(false)} className="btn-ghost flex-1">Retour</button>
+              <button onClick={handleAnnuler} disabled={action} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50" style={{ background: '#6b7280', color: 'white' }}>
+                {action ? 'En cours...' : 'Confirmer l\'annulation'}
               </button>
             </div>
           </div>

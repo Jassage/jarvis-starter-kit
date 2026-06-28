@@ -14,14 +14,40 @@ function getSecret(): string {
   return s;
 }
 
+function getRefreshSecret(): string {
+  const s = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+  if (!s) throw new Error('JWT_REFRESH_SECRET manquant dans les variables d\'environnement');
+  return s;
+}
+
 export function signToken(payload: JwtPayload): string {
   return jwt.sign(payload, getSecret(), { expiresIn: '8h' });
 }
 
 export function verifyToken(token: string): JwtPayload {
-  return jwt.verify(token, getSecret()) as unknown as JwtPayload;
+  const decoded = jwt.verify(token, getSecret()) as any;
+  if (decoded?.type === 'refresh') {
+    throw new Error('Token de type refresh non autorisé comme access token');
+  }
+  return decoded as JwtPayload;
 }
 
 export function signRefreshToken(userId: string): string {
-  return jwt.sign({ userId, type: 'refresh' }, getSecret(), { expiresIn: '30d' });
+  return jwt.sign({ userId, type: 'refresh' }, getRefreshSecret(), { expiresIn: '30d' });
+}
+
+export function verifyRefreshToken(token: string): { userId: string } {
+  const decoded = jwt.verify(token, getRefreshSecret()) as any;
+  if (decoded?.type !== 'refresh') throw new Error('Type de token invalide');
+  return { userId: decoded.userId };
+}
+
+export function signTempToken(userId: string): string {
+  return jwt.sign({ userId, type: '2fa_pending' }, getSecret(), { expiresIn: '5m' });
+}
+
+export function verifyTempToken(token: string): { userId: string } {
+  const decoded = jwt.verify(token, getSecret()) as any;
+  if (decoded?.type !== '2fa_pending') throw new Error('Token temporaire invalide');
+  return { userId: decoded.userId };
 }

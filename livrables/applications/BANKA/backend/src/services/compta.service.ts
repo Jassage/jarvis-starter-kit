@@ -25,13 +25,10 @@ export async function ensureComptesBase(): Promise<void> {
   }
 }
 
-const _numToId: Record<string, string> = {};
-
+// T3: Cache supprimé — il ne s'invalidait jamais en cas de suppression/recréation d'un compte comptable
 async function resolveCompteId(client: any, numero: string): Promise<string | null> {
-  if (_numToId[numero]) return _numToId[numero];
   const c = await client.compteComptable.findUnique({ where: { numero } });
-  if (c) { _numToId[numero] = c.id; return c.id; }
-  return null;
+  return c?.id ?? null;
 }
 
 export async function creerEcritureAuto(
@@ -207,18 +204,25 @@ export async function getGrandLivre(compteId: string, opts: { from?: Date; to?: 
 
 export async function getBilan(date?: Date) {
   const to = date || new Date();
-  const ecritures = await prisma.ecritureComptable.findMany({
-    where: { date: { lte: to } },
-    select: { montant: true, compteDebitId: true, compteCreditId: true },
-  });
 
-  const comptes = await prisma.compteComptable.findMany({ orderBy: { numero: 'asc' } });
+  // T1: Utiliser groupBy+_sum au lieu de charger toutes les écritures en mémoire
+  const [debits, credits, comptes] = await Promise.all([
+    prisma.ecritureComptable.groupBy({
+      by: ['compteDebitId'],
+      where: { date: { lte: to } },
+      _sum: { montant: true },
+    }),
+    prisma.ecritureComptable.groupBy({
+      by: ['compteCreditId'],
+      where: { date: { lte: to } },
+      _sum: { montant: true },
+    }),
+    prisma.compteComptable.findMany({ orderBy: { numero: 'asc' } }),
+  ]);
 
   const soldes: Record<string, number> = {};
-  for (const e of ecritures) {
-    soldes[e.compteDebitId]  = (soldes[e.compteDebitId]  || 0) + Number(e.montant);
-    soldes[e.compteCreditId] = (soldes[e.compteCreditId] || 0) - Number(e.montant);
-  }
+  for (const d of debits)  soldes[d.compteDebitId]  = (soldes[d.compteDebitId]  || 0) + Number(d._sum.montant || 0);
+  for (const c of credits) soldes[c.compteCreditId] = (soldes[c.compteCreditId] || 0) - Number(c._sum.montant || 0);
 
   const actifs    = comptes.filter((c) => c.type === 'ACTIF'    && (soldes[c.id] || 0) !== 0).map((c) => ({ numero: c.numero, intitule: c.intitule, solde: Math.abs(soldes[c.id] || 0) }));
   const passifs   = comptes.filter((c) => c.type === 'PASSIF'   && (soldes[c.id] || 0) !== 0).map((c) => ({ numero: c.numero, intitule: c.intitule, solde: Math.abs(soldes[c.id] || 0) }));
@@ -238,38 +242,38 @@ export async function getBilan(date?: Date) {
 // ─── Compte de résultat ───────────────────────────────────────────────────────
 
 export async function getResultat(from?: Date, to?: Date) {
-  const where: any = {};
-  if (from || to) {
-    where.date = {};
-    if (from) where.date.gte = from;
-    if (to) where.date.lte = to;
-  }
+  const dateWhere: any = {};
+  if (from) dateWhere.gte = from;
+  if (to)   dateWhere.lte = to;
+  const where = Object.keys(dateWhere).length ? { date: dateWhere } : {};
 
-  const ecritures = await prisma.ecritureComptable.findMany({
-    where,
-    select: { montant: true, compteDebitId: true, compteCreditId: true },
-  });
-
-  const comptes = await prisma.compteComptable.findMany({ orderBy: { numero: 'asc' } });
+  // T1: Utiliser groupBy+_sum au lieu de charger toutes les écritures en mémoire
+  const [debits, credits, comptes] = await Promise.all([
+    prisma.ecritureComptable.groupBy({
+      by: ['compteDebitId'],
+      where,
+      _sum: { montant: true },
+    }),
+    prisma.ecritureComptable.groupBy({
+      by: ['compteCreditId'],
+      where,
+      _sum: { montant: true },
+    }),
+    prisma.compteComptable.findMany({ orderBy: { numero: 'asc' } }),
+  ]);
 
   const mouv: Record<string, { debit: number; credit: number }> = {};
-  for (const e of ecritures) {
-    if (!mouv[e.compteDebitId])  mouv[e.compteDebitId]  = { debit: 0, credit: 0 };
-    if (!mouv[e.compteCreditId]) mouv[e.compteCreditId] = { debit: 0, credit: 0 };
-    mouv[e.compteDebitId].debit   += Number(e.montant);
-    mouv[e.compteCreditId].credit += Number(e.montant);
-  }
+  for (const d of debits)  { if (!mouv[d.compteDebitId])  mouv[d.compteDebitId]  = { debit: 0, credit: 0 }; mouv[d.compteDebitId].debit   += Number(d._sum.montant || 0); }
+  for (const c of credits) { if (!mouv[c.compteCreditId]) mouv[c.compteCreditId] = { debit: 0, credit: 0 }; mouv[c.compteCreditId].credit += Number(c._sum.montant || 0); }
 
   const produits = comptes.filter((c) => c.type === 'PRODUIT').map((c) => {
     const m = mouv[c.id] || { debit: 0, credit: 0 };
-    const montant = m.credit - m.debit;
-    return { numero: c.numero, intitule: c.intitule, montant };
+    return { numero: c.numero, intitule: c.intitule, montant: m.credit - m.debit };
   }).filter((c) => c.montant !== 0);
 
   const charges = comptes.filter((c) => c.type === 'CHARGE').map((c) => {
     const m = mouv[c.id] || { debit: 0, credit: 0 };
-    const montant = m.debit - m.credit;
-    return { numero: c.numero, intitule: c.intitule, montant };
+    return { numero: c.numero, intitule: c.intitule, montant: m.debit - m.credit };
   }).filter((c) => c.montant !== 0);
 
   const totalProduits = produits.reduce((s, c) => s + c.montant, 0);

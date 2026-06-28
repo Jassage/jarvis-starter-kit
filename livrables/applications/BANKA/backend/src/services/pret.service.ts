@@ -5,6 +5,7 @@ import { TypeAmortissement, Devise } from '@prisma/client';
 import { calculerTableau } from '../utils/amortissement';
 import { createAuditLog } from '../utils/audit';
 import { getConfig } from './configuration.service';
+import { creerEcritureAuto } from './compta.service';
 
 export async function listPrets(opts: {
   clientId?: string;
@@ -70,6 +71,10 @@ export async function creerPret(data: {
   userId: string;
 }) {
   const { clientId, agenceId, montant, tauxMensuel, dureeMois, typeAmortissement = 'DEGRESSIF', devise = 'HTG', objet, notes, userId } = data;
+
+  if (!montant || montant <= 0) throw new AppError(400, 'Le montant du prêt doit être positif');
+  if (tauxMensuel <= 0 || tauxMensuel > 30) throw new AppError(400, 'Le taux mensuel doit être entre 0 et 30%');
+  if (!Number.isInteger(dureeMois) || dureeMois < 1 || dureeMois > 360) throw new AppError(400, 'La durée doit être entre 1 et 360 mois');
 
   const client = await prisma.client.findUnique({ where: { id: clientId } });
   if (!client || client.statut !== 'ACTIF') throw new AppError(400, 'Client inactif ou introuvable');
@@ -191,6 +196,17 @@ export async function decaisserPret(data: {
       where: { id: pretId },
       data: { statut: 'EN_COURS', dateDecaissement: new Date() },
     });
+
+    // B9: Écriture comptable du décaissement — Débit 2000 (Prêts accordés) / Crédit 2600 (Dépôts clients)
+    await creerEcritureAuto(tx, {
+      debitNumero:  '2000',
+      creditNumero: '2600',
+      montant,
+      libelle: `Décaissement prêt ${pret.reference}`,
+      date: new Date(),
+      userId,
+    });
+
     await createAuditLog({ userId, table: 'prets', action: 'DECAISSEMENT', entiteId: pretId, nouveau: { statut: 'EN_COURS', compteDestinationId, montant } });
     return pretUpdated;
   });
@@ -206,9 +222,12 @@ export async function enregistrerRemboursement(data: {
 }) {
   const { pretId, montant, compteSourceId, sessionId, userId, type = 'MENSUALITE' } = data;
 
+  if (!montant || montant <= 0) throw new AppError(400, 'Le montant du remboursement doit être positif');
+
   const pret = await prisma.pret.findUnique({ where: { id: pretId }, include: { lignes: { orderBy: { numeroEcheance: 'asc' } } } });
   if (!pret) throw new AppError(404, 'Prêt introuvable');
   if (!['EN_COURS', 'EN_RETARD'].includes(pret.statut)) throw new AppError(400, 'Prêt non actif');
+  if (montant > Number(pret.resteARegler)) throw new AppError(400, `Le montant dépasse le reste à régler (${Number(pret.resteARegler).toFixed(2)} ${pret.devise})`);
 
   const compte = await prisma.compte.findUnique({ where: { id: compteSourceId } });
   if (!compte || compte.clientId !== pret.clientId) throw new AppError(400, 'Compte source invalide');
@@ -297,9 +316,48 @@ export async function enregistrerRemboursement(data: {
       },
     });
 
+    // Écritures comptables du remboursement
+    if (capital > 0) {
+      await creerEcritureAuto(tx, {
+        debitNumero:  '2600',
+        creditNumero: '2000',
+        montant: capital,
+        libelle: `Remboursement prêt ${pret.reference} — capital`,
+        date: new Date(),
+        userId,
+        transactionId: transaction.id,
+      });
+    }
+    if (interet + penaliteEffective > 0) {
+      await creerEcritureAuto(tx, {
+        debitNumero:  '2600',
+        creditNumero: '7100',
+        montant: interet + penaliteEffective,
+        libelle: `Remboursement prêt ${pret.reference} — intérêts/pénalités`,
+        date: new Date(),
+        userId,
+        transactionId: transaction.id,
+      });
+    }
+
     await createAuditLog({ userId, table: 'prets', action: 'REMBOURSEMENT', entiteId: pretId, nouveau: { montant, compteSourceId, nouveauResteARegler } });
     return { remboursement, transaction };
   });
+}
+
+export async function annulerPret(id: string, userId: string, notes?: string) {
+  const existing = await prisma.pret.findUnique({ where: { id } });
+  if (!existing) throw new AppError(404, 'Prêt introuvable');
+  if (!['EN_ATTENTE', 'APPROUVE'].includes(existing.statut)) {
+    throw new AppError(400, 'Seuls les prêts en attente ou approuvés peuvent être annulés');
+  }
+
+  const pret = await prisma.pret.update({
+    where: { id },
+    data: { statut: 'ANNULE', notes: notes ?? existing.notes ?? undefined },
+  });
+  await createAuditLog({ userId, table: 'prets', action: 'ANNULATION', entiteId: id, ancien: { statut: existing.statut }, nouveau: { statut: 'ANNULE', notes } });
+  return pret;
 }
 
 export async function calculerPenalite(pretId: string): Promise<{ penalite: number; joursRetard: number; tauxJournalier: number }> {

@@ -5,7 +5,7 @@ export async function listAgences() {
   return prisma.agence.findMany({
     orderBy: { nom: 'asc' },
     include: {
-      _count: { select: { utilisateurs: true, comptes: true, prets: true } },
+      _count: { select: { utilisateurs: true, comptes: true, prets: true, employes: true } },
     },
   });
 }
@@ -15,7 +15,7 @@ export async function getAgence(id: string) {
     where: { id },
     include: {
       utilisateurs: { select: { id: true, prenom: true, nom: true, role: true, actif: true } },
-      _count: { select: { comptes: true, prets: true, sessions: true } },
+      _count: { select: { comptes: true, prets: true, sessions: true, employes: true } },
     },
   });
   if (!agence) throw new AppError(404, 'Agence introuvable');

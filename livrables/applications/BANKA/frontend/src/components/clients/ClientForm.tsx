@@ -42,11 +42,14 @@ export default function ClientForm({ onClose, onSuccess, initial }: Props) {
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  const isValidTelephone = (t: string) => t.length >= 8 && /^[0-9+\s\-()]+$/.test(t);
+  const isValidEmail = (e: string) => !e || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
   const canAdvance = step === 0
     ? true
     : step === 1
     ? (form.type === 'INDIVIDUEL' ? !!(form.nom && form.prenom) : !!form.raisonSociale)
-    : !!(form.telephone && form.adresse);
+    : !!(form.telephone && form.adresse && isValidTelephone(form.telephone) && isValidEmail(form.email));
 
   const handleSubmit = async () => {
     setError('');
@@ -226,10 +229,16 @@ export default function ClientForm({ onClose, onSuccess, initial }: Props) {
                     </Tooltip>
                   </div>
                   <input value={form.telephone} onChange={(e) => set('telephone', e.target.value)} className="input" placeholder="+509 3700-0000" />
+                  {form.telephone && !isValidTelephone(form.telephone) && (
+                    <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>Format invalide (min. 8 chiffres, ex : +509 3700-0000)</p>
+                  )}
                 </div>
                 <div>
                   <label className="label">Email</label>
                   <input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} className="input" placeholder="client@exemple.ht" />
+                  {form.email && !isValidEmail(form.email) && (
+                    <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>Adresse email invalide</p>
+                  )}
                 </div>
               </div>
               <div>

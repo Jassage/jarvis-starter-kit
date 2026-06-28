@@ -49,13 +49,19 @@ export const useMandatStore = create<MandatState>((set) => ({
 
   createMandat: async (compteId, payload) => {
     await api.post(`/comptes/${compteId}/mandats`, payload);
+    const { data } = await api.get(`/comptes/${compteId}/mandats`);
+    set({ mandats: data.data });
   },
 
   updateMandat: async (compteId, mandatId, payload) => {
     await api.put(`/comptes/${compteId}/mandats/${mandatId}`, payload);
+    const { data } = await api.get(`/comptes/${compteId}/mandats`);
+    set({ mandats: data.data });
   },
 
   revoquerMandat: async (compteId, mandatId) => {
     await api.delete(`/comptes/${compteId}/mandats/${mandatId}`);
+    const { data } = await api.get(`/comptes/${compteId}/mandats`);
+    set({ mandats: data.data });
   },
 }));

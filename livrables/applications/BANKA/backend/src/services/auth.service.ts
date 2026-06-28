@@ -1,8 +1,25 @@
 import prisma from '../utils/prisma';
-import { signToken, signRefreshToken, verifyToken } from '../utils/jwt';
+import { signToken, signRefreshToken, verifyRefreshToken, signTempToken, verifyTempToken } from '../utils/jwt';
 import { hashPassword, comparePassword } from '../utils/hash';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
+// otplib v12 uses package exports not supported by classic node moduleResolution
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { authenticator } = require('otplib') as {
+  authenticator: {
+    generateSecret(): string;
+    keyuri(user: string, service: string, secret: string): string;
+    verify(opts: { token: string; secret: string }): boolean;
+  };
+};
+import QRCode from 'qrcode';
+
+function stripSensitive<T extends { motDePasse: string; twoFactorSecret?: string | null }>(
+  user: T,
+): Omit<T, 'motDePasse' | 'twoFactorSecret'> {
+  const { motDePasse: _, twoFactorSecret: __, ...safe } = user;
+  return safe as Omit<T, 'motDePasse' | 'twoFactorSecret'>;
+}
 
 export async function login(email: string, motDePasse: string) {
   const user = await prisma.utilisateur.findUnique({
@@ -14,6 +31,11 @@ export async function login(email: string, motDePasse: string) {
 
   const valid = await comparePassword(motDePasse, user.motDePasse);
   if (!valid) throw new AppError(401, 'Identifiants invalides');
+
+  if (user.twoFactorEnabled) {
+    const tempToken = signTempToken(user.id);
+    return { requiresTwoFactor: true as const, tempToken };
+  }
 
   const token = signToken({ userId: user.id, email: user.email, role: user.role, agenceId: user.agenceId });
   const refreshToken = signRefreshToken(user.id);
@@ -27,11 +49,91 @@ export async function login(email: string, motDePasse: string) {
 
   await createAuditLog({ userId: user.id, table: 'utilisateurs', action: 'LOGIN', entiteId: user.id, nouveau: { email: user.email, role: user.role } });
 
-  const { motDePasse: _, ...userSafe } = user;
-  return { token, refreshToken, utilisateur: userSafe };
+  return { requiresTwoFactor: false as const, token, refreshToken, utilisateur: stripSensitive(user) };
+}
+
+export async function verify2FA(tempToken: string, code: string) {
+  let userId: string;
+  try {
+    ({ userId } = verifyTempToken(tempToken));
+  } catch {
+    throw new AppError(401, 'Session expirée, veuillez vous reconnecter');
+  }
+
+  const user = await prisma.utilisateur.findUnique({
+    where: { id: userId },
+    include: { agence: { select: { id: true, code: true, nom: true } } },
+  });
+  if (!user || !user.actif) throw new AppError(401, 'Compte invalide');
+  if (!user.twoFactorEnabled || !user.twoFactorSecret) throw new AppError(400, '2FA non configurée');
+
+  const isValid = authenticator.verify({ token: code, secret: user.twoFactorSecret });
+  if (!isValid) throw new AppError(400, 'Code invalide ou expiré');
+
+  const token = signToken({ userId: user.id, email: user.email, role: user.role, agenceId: user.agenceId });
+  const refreshToken = signRefreshToken(user.id);
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30);
+
+  await prisma.refreshToken.create({
+    data: { token: refreshToken, utilisateurId: user.id, expiresAt },
+  });
+
+  await createAuditLog({ userId: user.id, table: 'utilisateurs', action: 'LOGIN_2FA', entiteId: user.id, nouveau: { email: user.email } });
+
+  return { token, refreshToken, utilisateur: stripSensitive(user) };
+}
+
+export async function setup2FA(userId: string) {
+  const user = await prisma.utilisateur.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(404, 'Utilisateur introuvable');
+  if (user.twoFactorEnabled) throw new AppError(400, 'La double authentification est déjà activée');
+
+  const secret = authenticator.generateSecret();
+  const otpauth = authenticator.keyuri(user.email, 'BANKA', secret);
+  const qrCodeDataUrl = await QRCode.toDataURL(otpauth);
+
+  await prisma.utilisateur.update({ where: { id: userId }, data: { twoFactorSecret: secret } });
+
+  return { secret, qrCodeDataUrl };
+}
+
+export async function enable2FA(userId: string, code: string) {
+  const user = await prisma.utilisateur.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(404, 'Utilisateur introuvable');
+  if (!user.twoFactorSecret) throw new AppError(400, "Configurez d'abord la double authentification");
+  if (user.twoFactorEnabled) throw new AppError(400, 'La double authentification est déjà activée');
+
+  const isValid = authenticator.verify({ token: code, secret: user.twoFactorSecret });
+  if (!isValid) throw new AppError(400, "Code invalide. Vérifiez l'heure de votre appareil.");
+
+  await prisma.utilisateur.update({ where: { id: userId }, data: { twoFactorEnabled: true } });
+  await createAuditLog({ userId, table: 'utilisateurs', action: 'ENABLE_2FA', entiteId: userId });
+}
+
+export async function disable2FA(userId: string, motDePasse: string, code: string) {
+  const user = await prisma.utilisateur.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(404, 'Utilisateur introuvable');
+  if (!user.twoFactorEnabled) throw new AppError(400, "La double authentification n'est pas activée");
+
+  const validPwd = await comparePassword(motDePasse, user.motDePasse);
+  if (!validPwd) throw new AppError(400, 'Mot de passe incorrect');
+
+  const isValid = authenticator.verify({ token: code, secret: user.twoFactorSecret! });
+  if (!isValid) throw new AppError(400, 'Code invalide');
+
+  await prisma.utilisateur.update({ where: { id: userId }, data: { twoFactorEnabled: false, twoFactorSecret: null } });
+  await createAuditLog({ userId, table: 'utilisateurs', action: 'DISABLE_2FA', entiteId: userId });
 }
 
 export async function refresh(refreshToken: string) {
+  try {
+    verifyRefreshToken(refreshToken);
+  } catch {
+    throw new AppError(401, 'Refresh token invalide ou expiré');
+  }
+
   const stored = await prisma.refreshToken.findUnique({
     where: { token: refreshToken },
     include: { utilisateur: true },
@@ -61,8 +163,7 @@ export async function getMe(userId: string) {
     include: { agence: { select: { id: true, code: true, nom: true } } },
   });
   if (!user) throw new AppError(404, 'Utilisateur introuvable');
-  const { motDePasse: _, ...userSafe } = user;
-  return userSafe;
+  return stripSensitive(user);
 }
 
 export async function changePassword(userId: string, ancienMdp: string, nouveauMdp: string) {
@@ -72,8 +173,15 @@ export async function changePassword(userId: string, ancienMdp: string, nouveauM
   const valid = await comparePassword(ancienMdp, user.motDePasse);
   if (!valid) throw new AppError(400, 'Ancien mot de passe incorrect');
 
+  if (nouveauMdp.length < 8) throw new AppError(400, 'Le mot de passe doit contenir au moins 8 caractères');
+
   const hash = await hashPassword(nouveauMdp);
-  await prisma.utilisateur.update({ where: { id: userId }, data: { motDePasse: hash } });
+
+  await prisma.$transaction([
+    prisma.utilisateur.update({ where: { id: userId }, data: { motDePasse: hash } }),
+    prisma.refreshToken.updateMany({ where: { utilisateurId: userId }, data: { revoked: true } }),
+  ]);
+
   await createAuditLog({ userId, table: 'utilisateurs', action: 'CHANGE_PASSWORD', entiteId: userId });
 }
 
@@ -84,7 +192,7 @@ export async function listUtilisateurs(agenceId?: string) {
     include: { agence: { select: { id: true, code: true, nom: true } } },
     orderBy: { nom: 'asc' },
   });
-  return users.map(({ motDePasse: _, ...u }) => u);
+  return users.map(stripSensitive);
 }
 
 export async function createUtilisateur(data: {
@@ -101,9 +209,8 @@ export async function createUtilisateur(data: {
     data: { ...data, motDePasse: hash, role: data.role as any },
     include: { agence: { select: { id: true, code: true, nom: true } } },
   });
-  const { motDePasse: _, ...userSafe } = user;
   if (createdBy) await createAuditLog({ userId: createdBy, table: 'utilisateurs', action: 'CREATE', entiteId: user.id, nouveau: { email: user.email, role: user.role } });
-  return userSafe;
+  return stripSensitive(user);
 }
 
 export async function updateUtilisateur(id: string, data: Partial<{ nom: string; prenom: string; telephone: string; role: string; agenceId: string; actif: boolean }>, updatedBy?: string) {
@@ -112,7 +219,6 @@ export async function updateUtilisateur(id: string, data: Partial<{ nom: string;
     data: data as any,
     include: { agence: { select: { id: true, code: true, nom: true } } },
   });
-  const { motDePasse: _, ...userSafe } = user;
   if (updatedBy) await createAuditLog({ userId: updatedBy, table: 'utilisateurs', action: 'UPDATE', entiteId: id, nouveau: data });
-  return userSafe;
+  return stripSensitive(user);
 }

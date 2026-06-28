@@ -197,6 +197,9 @@ export default function TransactionForm({ type, compteId, onClose, onSuccess }: 
     ? (selectedSource.devise === 'HTG' ? montantNum >= SEUIL_HTG : montantNum >= SEUIL_USD)
     : false;
 
+  const soldeDisponible = selectedSource ? Number(selectedSource.solde) : null;
+  const depasseSolde = (type === 'retrait' || type === 'virement') && soldeDisponible !== null && montantNum > soldeDisponible;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -204,6 +207,7 @@ export default function TransactionForm({ type, compteId, onClose, onSuccess }: 
     const sourceId = compteId || selectedSource?.id;
     if (!sourceId) { setError('Sélectionnez un compte'); return; }
     if (type === 'virement' && !selectedDest?.id) { setError('Sélectionnez le compte destination'); return; }
+    if (depasseSolde) { setError(`Solde insuffisant — solde disponible : ${formatMontant(soldeDisponible!, selectedSource.devise)}`); return; }
 
     setLoading(true);
     try {
@@ -337,6 +341,22 @@ export default function TransactionForm({ type, compteId, onClose, onSuccess }: 
               placeholder="ex: Retrait guichet, dépôt commercial, paiement facture..."
             />
           </div>
+
+          {/* Alerte solde insuffisant */}
+          {depasseSolde && montantNum > 0 && (
+            <div className="flex items-start gap-3 p-3.5 rounded-xl" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#b91c1c' }}>
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/>
+                <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+              <div>
+                <p className="text-sm font-semibold" style={{ color: '#991b1b' }}>Solde insuffisant</p>
+                <p className="text-xs mt-0.5" style={{ color: '#b91c1c' }}>
+                  Solde disponible : {formatMontant(soldeDisponible!, selectedSource.devise)}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Alerte seuil de validation */}
           {needsValidation && montantNum > 0 && (

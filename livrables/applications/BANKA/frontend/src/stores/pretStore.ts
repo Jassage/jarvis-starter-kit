@@ -13,6 +13,7 @@ interface PretState {
   createPret: (data: any) => Promise<any>;
   approuver: (id: string) => Promise<any>;
   rejeter: (id: string, notes?: string) => Promise<any>;
+  annuler: (id: string, notes?: string) => Promise<any>;
   decaisser: (id: string, data: any) => Promise<any>;
   rembourser: (id: string, data: any) => Promise<any>;
 }
@@ -29,7 +30,7 @@ export const usePretStore = create<PretState>((set) => ({
     try {
       const { data } = await api.get('/prets', { params: opts });
       set({ prets: data.data.items, total: data.data.total, pages: data.data.pages, isLoading: false });
-    } catch { set({ isLoading: false }); }
+    } catch (err) { set({ isLoading: false }); throw err; }
   },
 
   fetchPret: async (id) => {
@@ -50,6 +51,11 @@ export const usePretStore = create<PretState>((set) => ({
 
   rejeter: async (id, notes) => {
     const { data } = await api.patch(`/prets/${id}/rejeter`, { notes });
+    return data.data;
+  },
+
+  annuler: async (id, notes) => {
+    const { data } = await api.patch(`/prets/${id}/annuler`, { notes });
     return data.data;
   },
 

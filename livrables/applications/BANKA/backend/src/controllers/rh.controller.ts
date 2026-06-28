@@ -17,8 +17,14 @@ export async function deletePoste(req: AuthRequest, res: Response, next: NextFun
 
 export async function listEmployes(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { search, statut, page, limit } = req.query as Record<string, string>;
-    res.json(ok(await svc.listEmployes({ search, statut, page: page ? parseInt(page) : 1, limit: limit ? parseInt(limit) : 50 })));
+    const { search, statut, agenceId, page, limit } = req.query as Record<string, string>;
+    res.json(ok(await svc.listEmployes({ search, statut, agenceId, page: page ? parseInt(page) : 1, limit: limit ? parseInt(limit) : 50 })));
+  } catch (e) { next(e); }
+}
+export async function transfererEmploye(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { agenceId } = req.body;
+    res.json(ok(await svc.transfererEmploye(req.params.id, agenceId ?? null, req.user!.userId), 'Employé transféré'));
   } catch (e) { next(e); }
 }
 export async function createEmploye(req: AuthRequest, res: Response, next: NextFunction) {
@@ -81,6 +87,13 @@ export async function validerFiche(req: AuthRequest, res: Response, next: NextFu
   } catch (e) { next(e); }
 }
 
+export async function invaliderFiche(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await svc.invaliderFiche(req.params.id, req.user!.userId);
+    res.json(ok(result, 'Fiche repassée en brouillon'));
+  } catch (e) { next(e); }
+}
+
 export async function creerAvance(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const result = await svc.creerAvance(req.body, req.user!.userId);
@@ -99,6 +112,19 @@ export async function annulerAvance(req: AuthRequest, res: Response, next: NextF
   try {
     await svc.annulerAvance(req.params.id, req.user!.userId);
     res.json(ok(null, 'Avance annulée'));
+  } catch (e) { next(e); }
+}
+
+export async function creerCompteSysteme(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await svc.creerCompteSysteme(req.params.id, req.body, req.user!.userId);
+    res.status(201).json(ok(result, 'Compte système créé et lié'));
+  } catch (e) { next(e); }
+}
+export async function delierCompteSysteme(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    await svc.delierCompteSysteme(req.params.id, req.user!.userId);
+    res.json(ok(null, 'Compte système délié'));
   } catch (e) { next(e); }
 }
 

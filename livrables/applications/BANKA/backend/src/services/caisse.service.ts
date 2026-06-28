@@ -63,14 +63,10 @@ export async function getSessionActive(agenceId: string, devise: Devise = 'HTG')
       ouvertPar: { select: { nom: true, prenom: true } },
       transactions: {
         orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          reference: true,
-          type: true,
-          montant: true,
-          devise: true,
-          statut: true,
-          createdAt: true,
+        include: {
+          compteDebit:  { select: { numeroCompte: true, client: { select: { nom: true, prenom: true, raisonSociale: true } } } },
+          compteCredit: { select: { numeroCompte: true, client: { select: { nom: true, prenom: true, raisonSociale: true } } } },
+          creePar:      { select: { nom: true, prenom: true } },
         },
       },
     },

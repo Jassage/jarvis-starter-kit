@@ -139,6 +139,7 @@ export default function AgencesPage() {
 
   const nbActives = agences.filter((a) => a.actif).length;
   const totalPersonnel = agences.reduce((sum, a) => sum + (a._count?.utilisateurs || 0), 0);
+  const totalEmployes = agences.reduce((sum, a) => sum + (a._count?.employes || 0), 0);
   const totalComptes = agences.reduce((sum, a) => sum + (a._count?.comptes || 0), 0);
 
   return (
@@ -160,7 +161,7 @@ export default function AgencesPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="card card-blue p-4">
           <p className="text-xs font-medium" style={{ color: '#8b94b0' }}>Total agences</p>
           <p className="text-2xl font-bold mt-1" style={{ color: '#0b1733' }}>{agences.length}</p>
@@ -170,8 +171,12 @@ export default function AgencesPage() {
           <p className="text-2xl font-bold mt-1" style={{ color: '#047857' }}>{nbActives}</p>
         </div>
         <div className="card card-indigo p-4">
-          <p className="text-xs font-medium" style={{ color: '#8b94b0' }}>Personnel</p>
+          <p className="text-xs font-medium" style={{ color: '#8b94b0' }}>Agents (utilisateurs)</p>
           <p className="text-2xl font-bold mt-1" style={{ color: '#0b1733' }}>{totalPersonnel}</p>
+        </div>
+        <div className="card p-4" style={{ border: '1px solid #d1fae5' }}>
+          <p className="text-xs font-medium" style={{ color: '#8b94b0' }}>Employés RH</p>
+          <p className="text-2xl font-bold mt-1" style={{ color: '#047857' }}>{totalEmployes}</p>
         </div>
         <div className="card card-teal p-4">
           <p className="text-xs font-medium" style={{ color: '#8b94b0' }}>Comptes ouverts</p>
@@ -235,10 +240,14 @@ export default function AgencesPage() {
 
               {/* Stats */}
               {agence._count && (
-                <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="grid grid-cols-4 gap-2 mb-4">
                   <div className="text-center p-2 rounded-xl" style={{ background: '#f7f8fc' }}>
                     <p className="text-lg font-bold" style={{ color: '#0b1733' }}>{agence._count.utilisateurs}</p>
                     <p className="text-xs" style={{ color: '#8b94b0' }}>Agents</p>
+                  </div>
+                  <div className="text-center p-2 rounded-xl" style={{ background: '#d1fae5' }}>
+                    <p className="text-lg font-bold" style={{ color: '#047857' }}>{agence._count.employes}</p>
+                    <p className="text-xs" style={{ color: '#047857' }}>Employés</p>
                   </div>
                   <div className="text-center p-2 rounded-xl" style={{ background: '#f7f8fc' }}>
                     <p className="text-lg font-bold" style={{ color: '#0b1733' }}>{agence._count.comptes}</p>

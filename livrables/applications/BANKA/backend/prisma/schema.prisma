@@ -199,6 +199,13 @@ enum TypeElement {
   HEURE_SUP
 }
 
+enum StatutPointage {
+  PRESENT
+  ABSENT
+  RETARD
+  DEMI_JOURNEE
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Utilisateur {
@@ -208,9 +215,11 @@ model Utilisateur {
   nom        String
   prenom     String
   role       UserRole
-  actif      Boolean  @default(true)
-  telephone  String?
-  agenceId   String?
+  actif            Boolean  @default(true)
+  telephone        String?
+  twoFactorSecret  String?
+  twoFactorEnabled Boolean  @default(false)
+  agenceId         String?
   agence     Agence?  @relation(fields: [agenceId], references: [id])
 
   transactionsCreees   Transaction[]       @relation("TransactionCreateur")
@@ -229,10 +238,14 @@ model Utilisateur {
   avancesCrees         AvanceSalaire[]     @relation("AvanceCreePar")
   fichesPaieValidees   FichePaie[]         @relation("FicheValide")
   elementsVariablesCrees ElementVariable[] @relation("ElementVariableCreePar")
+  pointagesCrees         PointageEmploye[] @relation("PointageCreePar")
+  employe                Employe?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([agenceId])
+  @@index([role, actif])
   @@map("utilisateurs")
 }
 
@@ -248,6 +261,7 @@ model Agence {
   comptes      Compte[]
   prets        Pret[]
   sessions     SessionCaisse[]
+  employes     Employe[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -320,6 +334,10 @@ model Compte {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([clientId])
+  @@index([agenceId])
+  @@index([statut])
+  @@index([agenceId, statut])
   @@map("comptes")
 }
 
@@ -344,6 +362,7 @@ model SessionCaisse {
   updatedAt DateTime @updatedAt
 
   @@unique([agenceId, date, devise])
+  @@index([agenceId, statut])
   @@map("sessions_caisse")
 }
 
@@ -379,6 +398,18 @@ model Transaction {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Requêtes fréquentes : relevé compte, validation, stats, tendances
+  @@index([compteDebitId])
+  @@index([compteCreditId])
+  @@index([statut])
+  @@index([type])
+  @@index([creeParId])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@index([compteDebitId, statut])
+  @@index([compteCreditId, statut])
+  @@index([statut, createdAt])
+  @@index([type, statut, createdAt])
   @@map("transactions")
 }
 
@@ -420,6 +451,11 @@ model Pret {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([clientId])
+  @@index([agenceId])
+  @@index([statut])
+  @@index([agentCreditId])
+  @@index([agenceId, statut])
   @@map("prets")
 }
 
@@ -437,6 +473,9 @@ model LignePret {
 
   createdAt DateTime @default(now())
 
+  @@index([pretId])
+  @@index([statut])
+  @@index([dateEcheance, statut])
   @@map("lignes_pret")
 }
 
@@ -458,6 +497,8 @@ model RemboursementPret {
 
   createdAt DateTime @default(now())
 
+  @@index([pretId])
+  @@index([date])
   @@map("remboursements_pret")
 }
 
@@ -496,6 +537,13 @@ model EcritureComptable {
 
   createdAt DateTime @default(now())
 
+  // Critiques pour groupBy bilan/résultat et grand livre
+  @@index([compteDebitId])
+  @@index([compteCreditId])
+  @@index([date])
+  @@index([transactionId])
+  @@index([compteDebitId, date])
+  @@index([compteCreditId, date])
   @@map("ecritures_comptables")
 }
 
@@ -517,6 +565,9 @@ model MandatCompte {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  @@index([compteId])
+  @@index([mandataireId])
+  @@index([compteId, actif])
   @@map("mandats_compte")
 }
 
@@ -549,6 +600,8 @@ model Garantie {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
+  @@index([pretId])
+  @@index([statut])
   @@map("garanties")
 }
 
@@ -570,6 +623,9 @@ model EpargneProgrammee {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
+  @@index([actif, prochainVersement])
+  @@index([compteSourceId])
+  @@index([compteDestId])
   @@map("epargnes_programmees")
 }
 
@@ -590,6 +646,7 @@ model Poste {
 model Employe {
   id             String         @id @default(cuid())
   matricule      String         @unique
+  biometricId    Int?           @unique
   nom            String
   prenom         String
   telephone      String?
@@ -605,13 +662,22 @@ model Employe {
   compteId       String?
   compte         Compte?        @relation(fields: [compteId], references: [id])
   modeReglement  ModeReglement  @default(VIREMENT_BANKA)
+  agenceId       String?
+  agence         Agence?        @relation(fields: [agenceId], references: [id])
+  utilisateurId  String?        @unique
+  utilisateur    Utilisateur?   @relation(fields: [utilisateurId], references: [id])
   contrats       Contrat[]
   conges         Conge[]
   fichesPaie     FichePaie[]
   avances        AvanceSalaire[]
   elementsVariables ElementVariable[]
+  pointages      PointageEmploye[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+
+  @@index([statut])
+  @@index([posteId])
+  @@index([agenceId])
   @@map("employes")
 }
 
@@ -628,6 +694,9 @@ model Contrat {
   notes       String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+
+  @@index([employeId])
+  @@index([statut])
   @@map("contrats")
 }
 
@@ -644,6 +713,9 @@ model Conge {
   commentaire String?
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
+
+  @@index([employeId])
+  @@index([statut])
   @@map("conges")
 }
 
@@ -666,6 +738,8 @@ model FichePaie {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   @@unique([employeId, periode])
+  @@index([statut])
+  @@index([periode])
   @@map("fiches_paie")
 }
 
@@ -682,6 +756,10 @@ model AvanceSalaire {
   creePar          Utilisateur  @relation("AvanceCreePar", fields: [creeParId], references: [id])
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
+
+  @@index([employeId])
+  @@index([statut])
+  @@index([periodeDeduction])
   @@map("avances_salaire")
 }
 
@@ -698,6 +776,10 @@ model ElementVariable {
   creePar     Utilisateur @relation("ElementVariableCreePar", fields: [creeParId], references: [id])
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+
+  @@index([employeId])
+  @@index([periode])
+  @@index([employeId, periode])
   @@map("elements_variables")
 }
 
@@ -714,6 +796,10 @@ model AuditLog {
 
   createdAt DateTime @default(now())
 
+  @@index([utilisateurId])
+  @@index([table, action])
+  @@index([createdAt])
+  @@index([table, createdAt])
   @@map("audit_logs")
 }
 
@@ -727,5 +813,46 @@ model RefreshToken {
 
   createdAt DateTime @default(now())
 
+  @@index([utilisateurId])
+  @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+model PointageDevice {
+  id           String    @id @default(cuid())
+  nom          String
+  serialNumber String    @unique
+  commKey      String
+  actif        Boolean   @default(true)
+  derniereSync DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  pointages    PointageEmploye[]
+
+  @@map("pointage_devices")
+}
+
+model PointageEmploye {
+  id            String          @id @default(cuid())
+  employeId     String
+  employe       Employe         @relation(fields: [employeId], references: [id])
+  date          DateTime
+  heureArrivee  DateTime?
+  heureDepart   DateTime?
+  statut        StatutPointage  @default(PRESENT)
+  retardMinutes Int?
+  notes         String?
+  source        String          @default("MANUEL")
+  deviceId      String?
+  device        PointageDevice? @relation(fields: [deviceId], references: [id])
+  creeParId     String?
+  creePar       Utilisateur?    @relation("PointageCreePar", fields: [creeParId], references: [id])
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([employeId, date])
+  @@index([date])
+  @@index([employeId])
+  @@index([deviceId])
+  @@map("pointages")
 }

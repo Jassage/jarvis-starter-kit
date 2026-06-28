@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { formatMontant } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 
 const STATUT_META: Record<string, { label: string; color: string; bg: string }> = {
   BROUILLON: { label: 'Brouillon', color: '#4a5578', bg: '#f0f2f9' },
@@ -51,11 +52,14 @@ export default function PaiePage() {
   const [tab, setTab] = useState<'bulletins' | 'elements' | 'avances'>('bulletins');
   const [fiches, setFiches] = useState<FichePaie[]>([]);
   const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [mois, setMois] = useState(new Date().toISOString().slice(0, 7));
   const [generating, setGenerating] = useState(false);
   const [paying, setPaying] = useState(false);
   const [validating, setValidating] = useState<string | null>(null);
+  const [invalidating, setInvalidating] = useState<string | null>(null);
   const [payResult, setPayResult] = useState<any>(null);
 
   // Éléments variables
@@ -73,11 +77,17 @@ export default function PaiePage() {
   const [savingAvance, setSavingAvance] = useState(false);
   const [avanceError, setAvanceError] = useState('');
 
+  // Modales de confirmation
+  const [confirmPayer, setConfirmPayer] = useState(false);
+  const [confirmDeleteEl, setConfirmDeleteEl] = useState<string | null>(null);
+  const [confirmAnnulerAv, setConfirmAnnulerAv] = useState<string | null>(null);
+
   const loadFiches = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get(`/rh/paie?periode=${mois}&limit=50`);
+      const { data } = await api.get(`/rh/paie?periode=${mois}&limit=30&page=${page}`);
       setFiches(data.data.items); setTotal(data.data.total);
+      setPages(data.data.pages || 1);
     } catch { setFiches([]); } finally { setLoading(false); }
   };
 
@@ -102,7 +112,7 @@ export default function PaiePage() {
     } catch {}
   };
 
-  useEffect(() => { loadFiches(); loadElements(); }, [mois]);
+  useEffect(() => { loadFiches(); loadElements(); }, [mois, page]);
   useEffect(() => { loadAvances(); loadEmployes(); }, []);
 
   const handleGenerer = async () => {
@@ -119,10 +129,21 @@ export default function PaiePage() {
     finally { setValidating(null); }
   };
 
-  const handlePayer = async () => {
+  const handleInvalider = async (id: string) => {
+    setInvalidating(id);
+    try { await api.patch(`/rh/paie/${id}/invalider`); await loadFiches(); }
+    catch (e: any) { alert(e.response?.data?.message || 'Erreur'); }
+    finally { setInvalidating(null); }
+  };
+
+  const handlePayer = () => {
     const validees = fiches.filter((f) => f.statut === 'VALIDE').length;
     if (!validees) { alert('Aucune fiche validée. Validez d\'abord les bulletins avant de virer les salaires.'); return; }
-    if (!confirm(`Virer les salaires de ${validees} employé(s) validé(s) pour ${mois} ?`)) return;
+    setConfirmPayer(true);
+  };
+
+  const doHandlePayer = async () => {
+    setConfirmPayer(false);
     setPaying(true); setPayResult(null);
     try {
       const { data } = await api.post('/rh/paie/payer', { periode: mois });
@@ -172,16 +193,26 @@ export default function PaiePage() {
     finally { setSavingElement(false); }
   };
 
-  const handleDeleteElement = async (id: string) => {
-    if (!confirm('Supprimer cet élément variable ?')) return;
-    try { await api.delete(`/rh/elements-variables/${id}`); await loadElements(); }
-    catch (e: any) { alert(e.response?.data?.error || 'Erreur'); }
+  const handleDeleteElement = (id: string) => {
+    setConfirmDeleteEl(id);
   };
 
-  const handleAnnulerAvance = async (id: string) => {
-    if (!confirm('Annuler cette avance ? Le compte de l\'employé sera débité.')) return;
-    try { await api.patch(`/rh/avances/${id}/annuler`); await loadAvances(); }
+  const doHandleDeleteElement = async () => {
+    if (!confirmDeleteEl) return;
+    try { await api.delete(`/rh/elements-variables/${confirmDeleteEl}`); await loadElements(); }
     catch (e: any) { alert(e.response?.data?.error || 'Erreur'); }
+    finally { setConfirmDeleteEl(null); }
+  };
+
+  const handleAnnulerAvance = (id: string) => {
+    setConfirmAnnulerAv(id);
+  };
+
+  const doHandleAnnulerAvance = async () => {
+    if (!confirmAnnulerAv) return;
+    try { await api.patch(`/rh/avances/${confirmAnnulerAv}/annuler`); await loadAvances(); }
+    catch (e: any) { alert(e.response?.data?.error || 'Erreur'); }
+    finally { setConfirmAnnulerAv(null); }
   };
 
   const totalBrut = fiches.reduce((s, f) => s + Number(f.salaireBrut), 0);
@@ -385,6 +416,21 @@ export default function PaiePage() {
                                 Valider
                               </button>
                             )}
+                            {canManage && f.statut === 'VALIDE' && (
+                              <button
+                                onClick={() => handleInvalider(f.id)}
+                                disabled={invalidating === f.id}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                                style={{ background: '#f3f4f6', color: '#6b7280' }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#e5e7eb'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = '#f3f4f6'}
+                              >
+                                {invalidating === f.id ? <Spin color="#6b7280" /> : (
+                                  <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                )}
+                                Invalider
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -414,6 +460,19 @@ export default function PaiePage() {
                     </tr>
                   </tfoot>
                 </table>
+              </div>
+            )}
+            {pages > 1 && (
+              <div className="px-5 py-4 flex items-center justify-between" style={{ borderTop: '1px solid #f0f2f9' }}>
+                <p className="text-sm" style={{ color: '#8b94b0' }}>
+                  Page <span className="font-semibold" style={{ color: '#0b1733' }}>{page}</span> sur {pages}
+                  <span className="ml-2" style={{ color: '#d1d5e4' }}>·</span>
+                  <span className="ml-2">{total} bulletin{total > 1 ? 's' : ''}</span>
+                </p>
+                <div className="flex gap-2">
+                  <button disabled={page === 1} onClick={() => setPage(page - 1)} className="btn-ghost text-xs disabled:opacity-40">← Précédent</button>
+                  <button disabled={page === pages} onClick={() => setPage(page + 1)} className="btn-ghost text-xs disabled:opacity-40">Suivant →</button>
+                </div>
               </div>
             )}
           </div>
@@ -680,6 +739,36 @@ export default function PaiePage() {
           </div>
         </div>
       )}
+
+      {/* Modales de confirmation */}
+      <ConfirmModal
+        open={confirmPayer}
+        variant="primary"
+        title="Virer les salaires"
+        message={`Virer les salaires de ${fiches.filter((f) => f.statut === 'VALIDE').length} employé(s) validé(s) pour ${new Date(mois + '-02').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })} ?`}
+        confirmLabel="Virer"
+        loading={paying}
+        onConfirm={doHandlePayer}
+        onCancel={() => setConfirmPayer(false)}
+      />
+      <ConfirmModal
+        open={confirmDeleteEl !== null}
+        variant="danger"
+        title="Supprimer l'élément variable"
+        message="Cet élément sera définitivement supprimé et ne sera plus inclus dans les bulletins."
+        confirmLabel="Supprimer"
+        onConfirm={doHandleDeleteElement}
+        onCancel={() => setConfirmDeleteEl(null)}
+      />
+      <ConfirmModal
+        open={confirmAnnulerAv !== null}
+        variant="warning"
+        title="Annuler l'avance"
+        message="L'avance sera annulée et le montant recrédité sur le compte de l'employé."
+        confirmLabel="Confirmer l'annulation"
+        onConfirm={doHandleAnnulerAvance}
+        onCancel={() => setConfirmAnnulerAv(null)}
+      />
 
       {/* Drawer — Nouvelle avance */}
       {showAvanceForm && (

@@ -49,6 +49,8 @@ export default function ContratsPage() {
 
   const [contrats, setContrats]     = useState<Contrat[]>([]);
   const [total, setTotal]           = useState(0);
+  const [pages, setPages]           = useState(1);
+  const [page, setPage]             = useState(1);
   const [loading, setLoading]       = useState(true);
   const [filterStatut, setFilterStatut] = useState('');
 
@@ -91,15 +93,16 @@ export default function ContratsPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: '50' });
+      const params = new URLSearchParams({ limit: '30', page: String(page) });
       if (filterStatut) params.set('statut', filterStatut);
       const { data } = await api.get(`/rh/contrats?${params}`);
       setContrats(data.data.items);
       setTotal(data.data.total);
+      setPages(data.data.pages || 1);
     } catch { setContrats([]); } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [filterStatut]);
+  useEffect(() => { load(); }, [filterStatut, page]);
 
   const searchEmployes = async (q: string) => {
     setEmpSearch(q);
@@ -216,7 +219,7 @@ export default function ContratsPage() {
           const active = filterStatut === s;
           const sc = s ? STATUT_COLORS[s] : null;
           return (
-            <button key={s} onClick={() => setFilterStatut(s)}
+            <button key={s} onClick={() => { setFilterStatut(s); setPage(1); }}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
               style={{
                 background: active ? (sc ? sc.bg : '#0b1733') : '#f0f2f9',
@@ -391,6 +394,19 @@ export default function ContratsPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        {pages > 1 && (
+          <div className="px-5 py-4 flex items-center justify-between" style={{ borderTop: '1px solid #f0f2f9' }}>
+            <p className="text-sm" style={{ color: '#8b94b0' }}>
+              Page <span className="font-semibold" style={{ color: '#0b1733' }}>{page}</span> sur {pages}
+              <span className="ml-2" style={{ color: '#d1d5e4' }}>·</span>
+              <span className="ml-2">{total} contrat{total > 1 ? 's' : ''}</span>
+            </p>
+            <div className="flex gap-2">
+              <button disabled={page === 1} onClick={() => setPage(page - 1)} className="btn-ghost text-xs disabled:opacity-40">← Précédent</button>
+              <button disabled={page === pages} onClick={() => setPage(page + 1)} className="btn-ghost text-xs disabled:opacity-40">Suivant →</button>
+            </div>
           </div>
         )}
       </div>

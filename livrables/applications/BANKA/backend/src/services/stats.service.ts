@@ -116,32 +116,39 @@ export async function getRapportJournalier(date: Date, agenceId?: string) {
 }
 
 export async function getTendance(jours: number = 7) {
-  const days = [];
+  // T2: Remplace jours×2 requêtes séquentielles par UNE seule requête sur la période complète
+  const fin = new Date();
+  fin.setHours(23, 59, 59, 999);
+  const debut = new Date();
+  debut.setDate(debut.getDate() - (jours - 1));
+  debut.setHours(0, 0, 0, 0);
+
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      statut: 'VALIDEE',
+      type: { in: ['DEPOT', 'RETRAIT'] },
+      createdAt: { gte: debut, lte: fin },
+    },
+    select: { type: true, montant: true, createdAt: true },
+  });
+
+  // Initialiser tous les jours à 0 (pour les jours sans transaction)
+  const slots: Record<string, { depots: number; retraits: number }> = {};
   for (let i = jours - 1; i >= 0; i--) {
-    const debut = new Date();
-    debut.setDate(debut.getDate() - i);
-    debut.setHours(0, 0, 0, 0);
-    const fin = new Date(debut);
-    fin.setHours(23, 59, 59, 999);
-
-    const [depots, retraits] = await Promise.all([
-      prisma.transaction.aggregate({
-        where: { type: 'DEPOT', statut: 'VALIDEE', createdAt: { gte: debut, lte: fin } },
-        _sum: { montant: true },
-      }),
-      prisma.transaction.aggregate({
-        where: { type: 'RETRAIT', statut: 'VALIDEE', createdAt: { gte: debut, lte: fin } },
-        _sum: { montant: true },
-      }),
-    ]);
-
-    days.push({
-      date: debut.toISOString().slice(0, 10),
-      depots: Number(depots._sum.montant || 0),
-      retraits: Number(retraits._sum.montant || 0),
-    });
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    slots[d.toISOString().slice(0, 10)] = { depots: 0, retraits: 0 };
   }
-  return days;
+
+  // Agréger côté Node (données déjà filtrées côté DB)
+  for (const tx of transactions) {
+    const key = tx.createdAt.toISOString().slice(0, 10);
+    if (!slots[key]) continue;
+    if (tx.type === 'DEPOT')   slots[key].depots   += Number(tx.montant);
+    if (tx.type === 'RETRAIT') slots[key].retraits += Number(tx.montant);
+  }
+
+  return Object.entries(slots).map(([date, { depots, retraits }]) => ({ date, depots, retraits }));
 }
 
 export async function getAlertes() {

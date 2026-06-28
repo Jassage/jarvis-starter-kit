@@ -43,8 +43,9 @@ export const useAuditStore = create<AuditState>((set) => ({
         pages: data.data.pages,
         isLoading: false,
       });
-    } catch {
+    } catch (err) {
       set({ isLoading: false });
+      throw err;
     }
   },
 }));

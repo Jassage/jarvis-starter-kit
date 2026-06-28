@@ -116,7 +116,7 @@ export default function MandatForm({ compteId, onClose, onSuccess }: Props) {
         if (!extTelephone.trim()) { setError('Le téléphone est obligatoire'); setLoading(false); return; }
         // Créer un client minimal pour cette personne externe
         const nouveau = await createClient({
-          type: 'PARTICULIER',
+          type: 'INDIVIDUEL',
           nom: extNom.trim(),
           prenom: extPrenom.trim() || undefined,
           telephone: extTelephone.trim(),

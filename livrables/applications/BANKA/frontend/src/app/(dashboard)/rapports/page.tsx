@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import api from '@/lib/api';
 import { formatMontant, formatDate, nomClient, STATUT_PRET_LABELS, TYPE_TRANSACTION_LABELS } from '@/lib/utils';
 import { openPrintWindow, formatMontantPrint, formatDatePrint, bankaHeader } from '@/lib/printBanka';
@@ -484,7 +485,7 @@ export default function RapportsPage() {
                           <span className="text-sm" style={{ color: '#4a5578' }}>{pret.dateDecaissement ? formatDate(pret.dateDecaissement) : '—'}</span>
                         </td>
                         <td className="px-5 py-4">
-                          <a href={`/prets/${pret.id}`} className="text-xs font-semibold" style={{ color: '#2563eb' }}>Voir dossier →</a>
+                          <Link href={`/prets/${pret.id}`} className="text-xs font-semibold" style={{ color: '#2563eb' }}>Voir dossier →</Link>
                         </td>
                       </tr>
                     ))}

@@ -48,6 +48,8 @@ export default function CongesPage() {
 
   const [conges, setConges]         = useState<Conge[]>([]);
   const [total, setTotal]           = useState(0);
+  const [pages, setPages]           = useState(1);
+  const [page, setPage]             = useState(1);
   const [loading, setLoading]       = useState(true);
   const [filterStatut, setFilterStatut] = useState('');
   const [processing, setProcessing] = useState<string | null>(null);
@@ -65,15 +67,16 @@ export default function CongesPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: '50' });
+      const params = new URLSearchParams({ limit: '30', page: String(page) });
       if (filterStatut) params.set('statut', filterStatut);
       const { data } = await api.get(`/rh/conges?${params}`);
       setConges(data.data.items);
       setTotal(data.data.total);
+      setPages(data.data.pages || 1);
     } catch { setConges([]); } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [filterStatut]);
+  useEffect(() => { load(); }, [filterStatut, page]);
 
   const handleAction = async (id: string, statut: 'APPROUVE' | 'REFUSE') => {
     setProcessing(id);
@@ -138,12 +141,14 @@ export default function CongesPage() {
             )}
           </p>
         </div>
-        <button onClick={openForm} className="btn-primary flex items-center gap-2">
-          <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
-            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-          Nouvelle demande
-        </button>
+        {canApprove && (
+          <button onClick={openForm} className="btn-primary flex items-center gap-2">
+            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            Nouvelle demande
+          </button>
+        )}
       </div>
 
       {/* KPI */}
@@ -172,7 +177,7 @@ export default function CongesPage() {
           const active = filterStatut === s;
           const sm = s ? STATUT_META[s] : null;
           return (
-            <button key={s} onClick={() => setFilterStatut(s)}
+            <button key={s} onClick={() => { setFilterStatut(s); setPage(1); }}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
               style={{
                 background: active ? (sm ? sm.bg : '#0b1733') : '#f0f2f9',
@@ -325,6 +330,19 @@ export default function CongesPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        {pages > 1 && (
+          <div className="px-5 py-4 flex items-center justify-between" style={{ borderTop: '1px solid #f0f2f9' }}>
+            <p className="text-sm" style={{ color: '#8b94b0' }}>
+              Page <span className="font-semibold" style={{ color: '#0b1733' }}>{page}</span> sur {pages}
+              <span className="ml-2" style={{ color: '#d1d5e4' }}>·</span>
+              <span className="ml-2">{total} demande{total > 1 ? 's' : ''}</span>
+            </p>
+            <div className="flex gap-2">
+              <button disabled={page === 1} onClick={() => setPage(page - 1)} className="btn-ghost text-xs disabled:opacity-40">← Précédent</button>
+              <button disabled={page === pages} onClick={() => setPage(page + 1)} className="btn-ghost text-xs disabled:opacity-40">Suivant →</button>
+            </div>
           </div>
         )}
       </div>

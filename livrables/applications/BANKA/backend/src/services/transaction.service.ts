@@ -5,6 +5,8 @@ import { TypeTransaction, Devise } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { createAuditLog } from '../utils/audit';
 import { creerEcritureAuto } from './compta.service';
+import { getConfig } from './configuration.service';
+import { withRetry } from '../utils/withRetry';
 
 const SEUIL_HTG = parseFloat(process.env.SEUIL_VALIDATION_HTG || '50000');
 const SEUIL_USD = parseFloat(process.env.SEUIL_VALIDATION_USD || '500');
@@ -32,23 +34,26 @@ export async function effectuerDepot(data: {
   const { compteId, montant, motif, userId } = data;
   if (montant <= 0) throw new AppError(400, 'Le montant doit être positif');
 
-  const compte = await prisma.compte.findUnique({ where: { id: compteId } });
-  if (!compte) throw new AppError(404, 'Compte introuvable');
-  if (compte.statut !== 'ACTIF') throw new AppError(400, 'Compte inactif ou suspendu');
+  const comptePre = await prisma.compte.findUnique({ where: { id: compteId } });
+  if (!comptePre) throw new AppError(404, 'Compte introuvable');
+  if (comptePre.statut !== 'ACTIF') throw new AppError(400, 'Compte inactif ou suspendu');
 
-  const sessionId = await resolveSessionId(compte.agenceId, compte.devise, data.sessionId);
+  const sessionId = await resolveSessionId(comptePre.agenceId, comptePre.devise, data.sessionId);
   const reference = await generateReferenceTransaction('DEPOT');
-  const soldeAvant = Number(compte.solde);
-  const soldeApres = soldeAvant + montant;
-  const needsValidation = seuilDepasse(montant, compte.devise);
+  const needsValidation = seuilDepasse(montant, comptePre.devise);
 
-  return prisma.$transaction(async (tx) => {
+  return withRetry(() => prisma.$transaction(async (tx) => {
+    // B1: Lire le solde À L'INTÉRIEUR de la transaction pour snapshot cohérent
+    const compteInTx = await tx.compte.findUnique({ where: { id: compteId }, select: { solde: true } });
+    const soldeAvant = Number(compteInTx!.solde);
+    const soldeApres = soldeAvant + montant;
+
     const transaction = await tx.transaction.create({
       data: {
         reference,
         type: 'DEPOT',
         montant,
-        devise: compte.devise,
+        devise: comptePre.devise,
         soldeAvant,
         soldeApres,
         motif,
@@ -60,9 +65,10 @@ export async function effectuerDepot(data: {
     });
 
     if (!needsValidation) {
+      // B1: Utiliser increment (relatif) et non une valeur absolue
       await tx.compte.update({
         where: { id: compteId },
-        data: { solde: soldeApres },
+        data: { solde: { increment: montant } },
       });
       await creerEcritureAuto(tx, {
         debitNumero:  '5700',
@@ -77,7 +83,7 @@ export async function effectuerDepot(data: {
 
     await createAuditLog({ userId, table: 'transactions', action: 'DEPOT', entiteId: transaction.id, nouveau: { montant, compteId, statut: transaction.statut } });
     return transaction;
-  });
+  }));
 }
 
 export async function effectuerRetrait(data: {
@@ -90,28 +96,51 @@ export async function effectuerRetrait(data: {
   const { compteId, montant, motif, userId } = data;
   if (montant <= 0) throw new AppError(400, 'Le montant doit être positif');
 
-  const compte = await prisma.compte.findUnique({ where: { id: compteId } });
-  if (!compte) throw new AppError(404, 'Compte introuvable');
-  if (compte.statut !== 'ACTIF') throw new AppError(400, 'Compte inactif ou suspendu');
+  const comptePre = await prisma.compte.findUnique({ where: { id: compteId } });
+  if (!comptePre) throw new AppError(404, 'Compte introuvable');
+  if (comptePre.statut !== 'ACTIF') throw new AppError(400, 'Compte inactif ou suspendu');
 
-  const soldeAvant = Number(compte.solde);
-  const soldeMinimum = Number(compte.soldeMinimum);
-  if (soldeAvant - montant < soldeMinimum) {
-    throw new AppError(400, `Solde insuffisant. Solde disponible : ${soldeAvant - soldeMinimum} ${compte.devise}`);
+  // B6: Vérification du plafond de retrait journalier depuis la configuration
+  const plafond = parseFloat(await getConfig('PLAFOND_RETRAIT_JOURNALIER') || '0');
+  if (plafond > 0 && montant > plafond) {
+    throw new AppError(400, `Ce retrait (${montant} ${comptePre.devise}) dépasse le plafond journalier autorisé (${plafond} ${comptePre.devise})`);
   }
 
-  const sessionId = await resolveSessionId(compte.agenceId, compte.devise, data.sessionId);
+  const sessionId = await resolveSessionId(comptePre.agenceId, comptePre.devise, data.sessionId);
   const reference = await generateReferenceTransaction('RETRAIT');
-  const soldeApres = soldeAvant - montant;
-  const needsValidation = seuilDepasse(montant, compte.devise);
+  const needsValidation = seuilDepasse(montant, comptePre.devise);
+  const soldeMinimum = Number(comptePre.soldeMinimum);
 
-  return prisma.$transaction(async (tx) => {
+  return withRetry(() => prisma.$transaction(async (tx) => {
+    if (!needsValidation) {
+      // B1: Vérification du solde + décrémentation atomique en une seule requête SQL
+      // WHERE solde >= soldeMinimum + montant garantit qu'aucune race condition n'est possible
+      const result = await tx.compte.updateMany({
+        where: { id: compteId, solde: { gte: soldeMinimum + montant } },
+        data: { solde: { decrement: montant } },
+      });
+      if (result.count === 0) {
+        const current = await tx.compte.findUnique({ where: { id: compteId }, select: { solde: true } });
+        const available = Number(current!.solde) - soldeMinimum;
+        throw new AppError(400, `Solde insuffisant. Solde disponible : ${available} ${comptePre.devise}`);
+      }
+    } else {
+      // Transaction en attente : vérifier le solde sans décrémenter
+      const current = await tx.compte.findUnique({ where: { id: compteId }, select: { solde: true } });
+      if (Number(current!.solde) - montant < soldeMinimum) {
+        throw new AppError(400, `Solde insuffisant. Solde disponible : ${Number(current!.solde) - soldeMinimum} ${comptePre.devise}`);
+      }
+    }
+
+    const soldeAvant = Number(comptePre.solde);
+    const soldeApres = soldeAvant - montant;
+
     const transaction = await tx.transaction.create({
       data: {
         reference,
         type: 'RETRAIT',
         montant,
-        devise: compte.devise,
+        devise: comptePre.devise,
         soldeAvant,
         soldeApres,
         motif,
@@ -123,10 +152,6 @@ export async function effectuerRetrait(data: {
     });
 
     if (!needsValidation) {
-      await tx.compte.update({
-        where: { id: compteId },
-        data: { solde: soldeApres },
-      });
       await creerEcritureAuto(tx, {
         debitNumero:  '2600',
         creditNumero: '5700',
@@ -140,7 +165,7 @@ export async function effectuerRetrait(data: {
 
     await createAuditLog({ userId, table: 'transactions', action: 'RETRAIT', entiteId: transaction.id, nouveau: { montant, compteId, statut: transaction.statut } });
     return transaction;
-  });
+  }));
 }
 
 export async function effectuerVirement(data: {
@@ -168,17 +193,37 @@ export async function effectuerVirement(data: {
 
   const soldeSourceAvant = Number(source.solde);
   const soldeSourceMin = Number(source.soldeMinimum);
-  if (soldeSourceAvant - montant < soldeSourceMin) {
-    throw new AppError(400, `Solde insuffisant sur le compte source`);
-  }
-
   const refDebit = await generateReferenceTransaction('VIREMENT_DEBIT');
-  const refCredit = refDebit.replace('VIR', 'VIR');
   const needsValidation = seuilDepasse(montant, source.devise);
   const sessionId = await resolveSessionId(source.agenceId, source.devise, data.sessionId);
 
-  return prisma.$transaction(async (tx) => {
-    const soldeDestAvant = Number(destination.solde);
+  return withRetry(() => prisma.$transaction(async (tx) => {
+    // B1: Lire les soldes À L'INTÉRIEUR de la transaction pour snapshot cohérent
+    const [sourceInTx, destInTx] = await Promise.all([
+      tx.compte.findUnique({ where: { id: compteSourceId }, select: { solde: true, soldeMinimum: true } }),
+      tx.compte.findUnique({ where: { id: compteDestinationId }, select: { solde: true } }),
+    ]);
+    const soldeSourceAvant = Number(sourceInTx!.solde);
+    const soldeSourceMin = Number(sourceInTx!.soldeMinimum);
+    const soldeDestAvant = Number(destInTx!.solde);
+
+    if (!needsValidation) {
+      // B1: Vérification du solde + décrémentation atomique en une seule requête SQL
+      const result = await tx.compte.updateMany({
+        where: { id: compteSourceId, solde: { gte: soldeSourceMin + montant } },
+        data: { solde: { decrement: montant } },
+      });
+      if (result.count === 0) {
+        const available = soldeSourceAvant - soldeSourceMin;
+        throw new AppError(400, `Solde insuffisant sur le compte source. Disponible : ${available} ${source.devise}`);
+      }
+      await tx.compte.update({ where: { id: compteDestinationId }, data: { solde: { increment: montant } } });
+    } else {
+      // Transaction en attente : vérifier le solde sans modifier
+      if (soldeSourceAvant - montant < soldeSourceMin) {
+        throw new AppError(400, `Solde insuffisant sur le compte source`);
+      }
+    }
 
     const txDebit = await tx.transaction.create({
       data: {
@@ -214,14 +259,9 @@ export async function effectuerVirement(data: {
       },
     });
 
-    if (!needsValidation) {
-      await tx.compte.update({ where: { id: compteSourceId }, data: { solde: soldeSourceAvant - montant } });
-      await tx.compte.update({ where: { id: compteDestinationId }, data: { solde: soldeDestAvant + montant } });
-    }
-
     await createAuditLog({ userId, table: 'transactions', action: 'VIREMENT', entiteId: txDebit.id, nouveau: { montant, compteSourceId, compteDestinationId, statut: txDebit.statut } });
     return txDebit;
-  });
+  }));
 }
 
 export async function validerTransaction(id: string, userId: string) {
@@ -232,7 +272,7 @@ export async function validerTransaction(id: string, userId: string) {
   if (!tx) throw new AppError(404, 'Transaction introuvable');
   if (tx.statut !== 'EN_ATTENTE') throw new AppError(400, 'Transaction déjà traitée');
 
-  return prisma.$transaction(async (p) => {
+  return withRetry(() => prisma.$transaction(async (p) => {
     const updated = await p.transaction.update({
       where: { id },
       data: { statut: 'VALIDEE', valideParId: userId },
@@ -252,7 +292,16 @@ export async function validerTransaction(id: string, userId: string) {
         transactionId: id,
       });
     } else if (tx.type === 'RETRAIT' && tx.compteDebitId) {
-      await p.compte.update({ where: { id: tx.compteDebitId }, data: { solde: { decrement: montant } } });
+      // B1: Vérification atomique du solde au moment de la validation
+      const compte = await p.compte.findUnique({ where: { id: tx.compteDebitId }, select: { soldeMinimum: true } });
+      const soldeMinimum = Number(compte?.soldeMinimum || 0);
+      const result = await p.compte.updateMany({
+        where: { id: tx.compteDebitId, solde: { gte: soldeMinimum + montant } },
+        data: { solde: { decrement: montant } },
+      });
+      if (result.count === 0) {
+        throw new AppError(400, 'Solde insuffisant pour valider ce retrait');
+      }
       await creerEcritureAuto(p, {
         debitNumero:  '2600',
         creditNumero: '5700',
@@ -262,18 +311,32 @@ export async function validerTransaction(id: string, userId: string) {
         userId,
         transactionId: id,
       });
-    } else if ((tx.type === 'VIREMENT_DEBIT' || tx.type === 'VIREMENT_CREDIT') && tx.compteDebitId && tx.compteCreditId) {
-      await p.compte.update({ where: { id: tx.compteDebitId }, data: { solde: { decrement: montant } } });
+    } else if (tx.type === 'VIREMENT_DEBIT' && tx.compteDebitId && tx.compteCreditId) {
+      // B4: Seul le VIREMENT_DEBIT modifie les soldes et valide la transaction jumelle
+      // Atomic check + decrement sur le compte source
+      const compteSource = await p.compte.findUnique({ where: { id: tx.compteDebitId }, select: { soldeMinimum: true } });
+      const soldeMinimum = Number(compteSource?.soldeMinimum || 0);
+      const result = await p.compte.updateMany({
+        where: { id: tx.compteDebitId, solde: { gte: soldeMinimum + montant } },
+        data: { solde: { decrement: montant } },
+      });
+      if (result.count === 0) {
+        throw new AppError(400, 'Solde insuffisant pour valider ce virement');
+      }
       await p.compte.update({ where: { id: tx.compteCreditId }, data: { solde: { increment: montant } } });
+      // Auto-valider la transaction crédit jumelle (elle ne modifie pas les soldes elle-même)
       await p.transaction.updateMany({
-        where: { reference: { startsWith: tx.reference.replace('-CR', '') }, statut: 'EN_ATTENTE' },
+        where: { reference: `${tx.reference}-CR`, statut: 'EN_ATTENTE' },
         data: { statut: 'VALIDEE', valideParId: userId },
       });
+    } else if (tx.type === 'VIREMENT_CREDIT') {
+      // B4: Le CREDIT seul ne doit pas modifier les soldes — valider le VIREMENT_DEBIT correspondant
+      throw new AppError(400, 'Veuillez valider la transaction de débit correspondante pour traiter ce virement');
     }
 
     await createAuditLog({ userId, table: 'transactions', action: 'VALIDATION', entiteId: id, nouveau: { statut: 'VALIDEE', valideParId: userId } });
     return updated;
-  });
+  }));
 }
 
 export async function rejeterTransaction(id: string, userId: string, motif?: string) {

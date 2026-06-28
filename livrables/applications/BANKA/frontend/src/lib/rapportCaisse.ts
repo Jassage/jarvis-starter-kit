@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { formatMontant, formatDatetime, TYPE_TRANSACTION_LABELS } from './utils';
+import { formatMontant, formatDatetime, TYPE_TRANSACTION_LABELS, STATUT_TX_LABELS } from './utils';
 
 const NAVY:  [number, number, number] = [30, 58, 138];
 const BLUE:  [number, number, number] = [37, 99, 235];
@@ -92,7 +92,7 @@ export function generateRapportCaisse(session: any, agenceNom: string) {
   const kpis = [
     { label: 'Solde ouverture',  value: formatMontant(session.soldeOuverture, 'HTG'),  color: DARK  },
     { label: 'Total dépôts',     value: `+${formatMontant(totalDepots, 'HTG')}`,        color: GREEN },
-    { label: 'Total retraits',   value: `-${formatMontant(totalRetraits, 'HTG')}`,      color: RED   },
+    { label: 'Total retraits',   value: totalRetraits > 0 ? `-${formatMontant(totalRetraits, 'HTG')}` : formatMontant(0, 'HTG'), color: RED   },
     { label: 'Solde théorique',  value: formatMontant(soldeTheo, 'HTG'),               color: NAVY  },
     ...(soldeFerm !== null ? [
       { label: 'Solde fermeture', value: formatMontant(soldeFerm, 'HTG'),                color: DARK  },
@@ -138,10 +138,12 @@ export function generateRapportCaisse(session: any, agenceNom: string) {
       tx.reference || '—',
       TYPE_TRANSACTION_LABELS[tx.type] || tx.type,
       formatDatetime(tx.createdAt),
-      tx.compteCredit?.numeroCompte || tx.compteDebit?.numeroCompte || '—',
+      isDebit
+        ? (tx.compteDebit?.numeroCompte  || '—')
+        : (tx.compteCredit?.numeroCompte || '—'),
       isDebit ? '' : formatMontant(tx.montant, tx.devise),
       isDebit ? formatMontant(tx.montant, tx.devise) : '',
-      tx.statut || '—',
+      STATUT_TX_LABELS[tx.statut] || tx.statut || '—',
     ];
   });
 
@@ -154,11 +156,11 @@ export function generateRapportCaisse(session: any, agenceNom: string) {
     headStyles: { fillColor: [...NAVY], textColor: [...WHITE], fontStyle: 'bold', fontSize: 7.5 },
     alternateRowStyles: { fillColor: [...LIGHT] },
     columnStyles: {
-      0: { font: 'courier', cellWidth: 28 },
-      2: { cellWidth: 32 },
+      0: { font: 'courier', cellWidth: 38 },
+      2: { cellWidth: 30 },
       4: { halign: 'right', textColor: [...GREEN] },
       5: { halign: 'right', textColor: [...RED] },
-      6: { halign: 'center', cellWidth: 22 },
+      6: { halign: 'center', cellWidth: 20 },
     },
     margin: { left: 14, right: 14 },
   });

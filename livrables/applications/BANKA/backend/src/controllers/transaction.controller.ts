@@ -40,12 +40,13 @@ export async function rejeter(req: AuthRequest, res: Response, next: NextFunctio
 export async function list(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { compteId, type, statut, sessionId, from, to, page, limit } = req.query as Record<string, string>;
+    const parsedLimit = Math.min(limit ? parseInt(limit) : 30, 100); // T6: plafond à 100
     const result = await txService.listTransactions({
       compteId, type: type as any, statut, sessionId,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
       page: page ? parseInt(page) : 1,
-      limit: limit ? parseInt(limit) : 30,
+      limit: parsedLimit,
     });
     res.json(ok(result));
   } catch (e) { next(e); }

@@ -310,7 +310,19 @@ export default function PostesPage() {
               )}
               <div>
                 <label className="label">Département</label>
-                <input value={fDept} onChange={(e) => setFDept(e.target.value)} placeholder="ex: Opérations" className="input w-full" />
+                <input
+                  value={fDept}
+                  onChange={(e) => setFDept(e.target.value)}
+                  placeholder="ex: Opérations"
+                  className="input w-full"
+                  list="dept-suggestions"
+                  autoComplete="off"
+                />
+                <datalist id="dept-suggestions">
+                  {Array.from(new Set(postes.map((p) => p.departement).filter(Boolean))).map((d) => (
+                    <option key={d} value={d!} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label className="label">Fourchette salariale (HTG)</label>

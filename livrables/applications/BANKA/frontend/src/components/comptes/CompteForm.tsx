@@ -97,13 +97,15 @@ export default function CompteForm({ clientId, onClose, onSuccess }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const initial = form.soldeInitial ? parseFloat(form.soldeInitial) : 0;
+    const minimum = form.soldeMinimum ? parseFloat(form.soldeMinimum) : 0;
+    if (minimum > initial) {
+      setError('Le solde minimum ne peut pas dépasser le solde initial');
+      return;
+    }
     setLoading(true);
     try {
-      await createCompte({
-        ...form,
-        soldeInitial: form.soldeInitial ? parseFloat(form.soldeInitial) : 0,
-        soldeMinimum: form.soldeMinimum ? parseFloat(form.soldeMinimum) : 0,
-      });
+      await createCompte({ ...form, soldeInitial: initial, soldeMinimum: minimum });
       onSuccess();
     } catch (err: any) {
       setError(err.response?.data?.error || 'Erreur lors de la création');
@@ -246,6 +248,9 @@ export default function CompteForm({ clientId, onClose, onSuccess }: Props) {
                 <input type="number" min="0" step="0.01" value={form.soldeMinimum} onChange={(e) => set('soldeMinimum', e.target.value)} className="input pr-14" placeholder="0.00" />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#f0f2f9', color: '#4a5578' }}>{form.devise}</span>
               </div>
+              {form.soldeMinimum && form.soldeInitial && parseFloat(form.soldeMinimum) > parseFloat(form.soldeInitial) && (
+                <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>Le minimum ne peut pas dépasser le solde initial</p>
+              )}
             </div>
           </div>
 

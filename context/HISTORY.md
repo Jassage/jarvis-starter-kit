@@ -7,6 +7,43 @@
 
 ---
 
+## 2026-06-28
+
+### BANKA : formatage compact, agences RH, compte système employé, blocage caisse
+
+**Formatage compact des montants (nouveau) :**
+- Fonction `formatMontantCompact` ajoutée dans `frontend/src/lib/utils.ts` : affiche les grands montants en K/M/Md HTG (ex : "1,2 M HTG") avec le montant exact au survol via l'attribut `title`
+- Appliquée sur toutes les cartes KPI du dashboard principal (solde total, encours crédit, dépôts/retraits du jour, net jour, tendances 7j) et du dashboard RH (masse salariale)
+- Bannière rouge "Caisse fermée" sur le dashboard avec lien direct vers /caisse
+
+**Module Agences — enrichissement RH :**
+- Champ `agenceId` ajouté au modèle `Employe` (relation optionnelle vers `Agence`)
+- Schéma Prisma mis à jour et synchronisé via `npx prisma db push` (shadow DB P1014 sur `avances_salaire` rendait `migrate dev` impossible)
+- `listAgences` et `getAgence` incluent désormais `_count.employes`
+- Page agences : 5e KPI "Employés RH" affiché, grille détail par agence étendue (4 colonnes : Agents, Employés, Comptes, Prêts)
+- Filtre par agence sur la liste des employés (dropdown → `?agenceId=` param)
+- Badge agence sur chaque carte employé
+
+**Transfert d'employé entre agences (nouveau) :**
+- Endpoint `PATCH /rh/employes/:id/agence` : valide que la nouvelle agence existe et est active, rejette si c'est la même, enregistre un audit log `TRANSFERT`
+- Modal "Transfert" dans la page employés : affiche l'agence actuelle, dropdown de la liste des agences actives, confirmation → appel API
+
+**Création de compte système depuis la fiche employé (nouveau) :**
+- Endpoint `POST /rh/employes/:id/compte-systeme` : crée un `Utilisateur` (email + mot de passe haché + rôle) et lie son id à l'employé via `utilisateurId` (unique)
+- Endpoint `DELETE /rh/employes/:id/compte-systeme` : délie le compte sans le supprimer
+- Modèle `Employe` enrichi : `utilisateurId String? @unique`, relation bidirectionnelle avec `Utilisateur`
+- Frontend : bouton personne sur chaque carte employé (vert = compte lié → clic pour délier ; gris = pas de compte → clic pour créer). Modal avec champs email + rôle (6 options) + mot de passe
+
+**Blocage des transactions sans caisse ouverte (nouveau) :**
+- Middleware `requireCaisseOuverte` dans `backend/src/middleware/caisse.ts` : cherche une `SessionCaisse` active pour l'agence de l'utilisateur connecté ; les utilisateurs sans `agenceId` (siège) passent directement
+- Appliqué sur `POST /transactions/depot`, `/retrait` et `/virement`
+- Retourne 403 avec message clair si la caisse est fermée
+
+**Correction technique :**
+- Backend bloqué par DLL lock (processus PID 20008 tenant le fichier généré Prisma) : tué manuellement, `npx prisma generate` relancé, backend redémarré sur PID 27012
+
+---
+
 ## 2026-06-25
 
 ### BANKA : module RH complet, mandats externes, bug caisse corrigé

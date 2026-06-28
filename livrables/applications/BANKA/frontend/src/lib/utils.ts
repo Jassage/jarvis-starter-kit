@@ -7,10 +7,27 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatMontant(montant: number | string, devise: string = 'HTG'): string {
   const n = typeof montant === 'string' ? parseFloat(montant) : montant;
-  return new Intl.NumberFormat('fr-HT', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n) + ' ' + devise;
+  // Custom formatter: guarantees plain spaces as thousands separator.
+  // Intl.NumberFormat with fr-HT produced " /" artifacts; fr-FR uses U+202F
+  // which some PDF renderers drop. Regex approach is safe everywhere.
+  const sign = n < 0 ? '-' : '';
+  const [intPart, decPart] = Math.abs(n).toFixed(2).split('.');
+  const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return `${sign}${intFormatted},${decPart} ${devise}`;
+}
+
+export function formatMontantCompact(montant: number | string, devise: string = 'HTG'): string {
+  const n = typeof montant === 'string' ? parseFloat(montant) : montant;
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  const fmt = (v: number) => {
+    const r = Math.round(v * 10) / 10;
+    return Number.isInteger(r) ? r.toFixed(0) : r.toFixed(1).replace('.', ',');
+  };
+  if (abs >= 1_000_000_000) return `${sign}${fmt(abs / 1_000_000_000)} Md ${devise}`;
+  if (abs >= 1_000_000)     return `${sign}${fmt(abs / 1_000_000)} M ${devise}`;
+  if (abs >= 1_000)         return `${sign}${fmt(abs / 1_000)} K ${devise}`;
+  return formatMontant(n, devise);
 }
 
 export function formatDate(date: string | Date): string {
@@ -67,20 +84,20 @@ export const STATUT_PRET_LABELS: Record<string, string> = {
 };
 
 export const TYPE_COMPTE_LABELS: Record<string, string> = {
-  EPARGNE:      'Épargne',
-  COURANT:      'Courant',
-  TERME:        'Terme fixe',
-  JOINT:        'Compte joint',
-  MICRO_EPARGNE:'Micro-épargne',
-  TONTINE:      'Tontine / Sol',
-  RETRAITE:     'Épargne retraite',
-  JEUNESSE:     'Compte jeunesse',
-  CREDIT:       'Ligne de crédit',
+  EPARGNE:       'Épargne',
+  COURANT:       'Courant',
+  TERME:         'Terme fixe',
+  JOINT:         'Compte joint',
+  MICRO_EPARGNE: 'Micro-épargne',
+  TONTINE:       'Tontine / Sol',
+  RETRAITE:      'Épargne retraite',
+  JEUNESSE:      'Compte jeunesse',
+  CREDIT:        'Ligne de crédit',
 };
 
 export const STATUT_COMPTE_LABELS: Record<string, string> = {
-  ACTIF: 'Actif',
-  INACTIF: 'Inactif',
+  ACTIF:    'Actif',
+  INACTIF:  'Inactif',
   SUSPENDU: 'Suspendu',
-  CLOTURE: 'Clôturé',
+  CLOTURE:  'Clôturé',
 };

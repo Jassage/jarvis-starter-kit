@@ -51,6 +51,9 @@ export async function createEpargne(data: {
   if (!dst || dst.statut !== 'ACTIF') throw new AppError(400, 'Compte destination inactif ou introuvable');
   if (data.compteSourceId === data.compteDestId) throw new AppError(400, 'Source et destination doivent être différents');
   if (data.montant <= 0) throw new AppError(400, 'Montant invalide');
+  const prochain = new Date(data.prochainVersement);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (prochain < today) throw new AppError(400, 'La date du prochain versement ne peut pas être dans le passé');
 
   const ep = await (prisma as any).epargneProgrammee.create({
     data: {
@@ -82,7 +85,7 @@ export async function toggleEpargne(id: string, userId: string) {
   return updated;
 }
 
-export async function executerEpargnes(userId: string) {
+export async function executerEpargnes(userId?: string) {
   const now = new Date();
   const dues = await (prisma as any).epargneProgrammee.findMany({
     where: { actif: true, prochainVersement: { lte: now } },
@@ -122,13 +125,15 @@ export async function executerEpargnes(userId: string) {
         });
       });
 
-      await createAuditLog({
-        userId,
-        table: 'epargnes_programmees',
-        action: 'EXECUTION',
-        entiteId: ep.id,
-        nouveau: { montant, compteSource: ep.compteSourceId, compteDest: ep.compteDestId },
-      });
+      if (userId) {
+        await createAuditLog({
+          userId,
+          table: 'epargnes_programmees',
+          action: 'EXECUTION',
+          entiteId: ep.id,
+          nouveau: { montant, compteSource: ep.compteSourceId, compteDest: ep.compteDestId },
+        });
+      }
 
       results.executees++;
     } catch (err: any) {

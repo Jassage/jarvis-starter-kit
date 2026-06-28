@@ -10,7 +10,7 @@ export interface Agence {
   telephone?: string;
   actif: boolean;
   createdAt: string;
-  _count?: { utilisateurs: number; comptes: number; prets: number };
+  _count?: { utilisateurs: number; comptes: number; prets: number; employes: number };
 }
 
 interface AgenceState {
@@ -30,7 +30,7 @@ export const useAgenceStore = create<AgenceState>((set, get) => ({
     try {
       const { data } = await api.get('/agences');
       set({ agences: data.data, isLoading: false });
-    } catch { set({ isLoading: false }); }
+    } catch (err) { set({ isLoading: false }); throw err; }
   },
 
   createAgence: async (payload) => {

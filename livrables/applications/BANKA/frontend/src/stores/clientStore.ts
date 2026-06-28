@@ -43,7 +43,7 @@ export const useClientStore = create<ClientState>((set) => ({
     try {
       const { data } = await api.get('/clients', { params: { ...opts, limit: 20 } });
       set({ clients: data.data.items, total: data.data.total, pages: data.data.pages, currentPage: opts.page || 1, isLoading: false });
-    } catch { set({ isLoading: false }); }
+    } catch (err) { set({ isLoading: false }); throw err; }
   },
 
   fetchClient: async (id) => {

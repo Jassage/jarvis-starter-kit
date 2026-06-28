@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import api from '@/lib/api';
-import { formatMontant } from '@/lib/utils';
+import { formatMontant, formatMontantCompact } from '@/lib/utils';
 
 interface Stats {
   totalClients: number;
@@ -15,6 +15,21 @@ interface Stats {
   depotsAujourdhui: number;
   retraitsAujourdhui: number;
   encoursCredit: number;
+}
+
+interface Alertes {
+  txEnAttente: number;
+  pretsEnRetard: number;
+  echeancesAujourdhui: number;
+  total: number;
+}
+
+interface TxRecente {
+  id: string; reference: string; type: string;
+  montant: number; devise: string; createdAt: string;
+  statut: string;
+  compteDebit?: { numeroCompte: string };
+  compteCredit?: { numeroCompte: string };
 }
 
 interface TendancePoint { date: string; depots: number; retraits: number; }
@@ -111,18 +126,32 @@ function TendanceChart({ data }: { data: TendancePoint[] }) {
   );
 }
 
+const TX_TYPE_CONFIG: Record<string, { label: string; color: string; sign: string }> = {
+  DEPOT:             { label: 'Dépôt',     color: '#047857', sign: '+' },
+  RETRAIT:           { label: 'Retrait',   color: '#b91c1c', sign: '-' },
+  VIREMENT_DEBIT:    { label: 'Virement',  color: '#1d4ed8', sign: '-' },
+  VIREMENT_CREDIT:   { label: 'Virement',  color: '#1d4ed8', sign: '+' },
+  REMBOURSEMENT_PRET:{ label: 'Rembt.',    color: '#6d28d9', sign: '-' },
+};
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [alertes, setAlertes] = useState<Alertes | null>(null);
   const [tendance, setTendance] = useState<TendancePoint[]>([]);
+  const [txRecentes, setTxRecentes] = useState<TxRecente[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       api.get('/stats/dashboard'),
       api.get('/stats/tendance?jours=7'),
-    ]).then(([s, t]) => {
+      api.get('/stats/alertes'),
+      api.get('/transactions?limit=5&statut=VALIDEE'),
+    ]).then(([s, t, a, tx]) => {
       setStats(s.data.data);
       setTendance(t.data.data);
+      setAlertes(a.data.data);
+      setTxRecentes(tx.data.data?.items || []);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -150,8 +179,8 @@ export default function DashboardPage() {
         <div className="relative grid lg:grid-cols-2 gap-6">
           <div>
             <p className="text-blue-200 text-sm font-medium mb-2">SOLDE TOTAL DES COMPTES CLIENTS</p>
-            <p className="text-white text-4xl lg:text-5xl font-bold tracking-tight">{formatMontant(stats.soldeTotal, 'HTG')}</p>
-            <p className="text-blue-200 text-sm mt-2">Encours crédit : <span className="font-semibold text-white">{formatMontant(stats.encoursCredit, 'HTG')}</span></p>
+            <p title={formatMontant(stats.soldeTotal, 'HTG')} className="text-white text-4xl lg:text-5xl font-bold tracking-tight">{formatMontantCompact(stats.soldeTotal, 'HTG')}</p>
+            <p className="text-blue-200 text-sm mt-2">Encours crédit : <span title={formatMontant(stats.encoursCredit, 'HTG')} className="font-semibold text-white">{formatMontantCompact(stats.encoursCredit, 'HTG')}</span></p>
             <div className="flex gap-3 mt-6">
               <Link href="/transactions" className="px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all hover:scale-105" style={{ background: 'white', color: '#1e3a8a' }}>
                 <Icon name="plus" className="w-4 h-4" /> Nouvelle transaction
@@ -169,7 +198,7 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-xs font-medium">Dépôts du jour</span>
               </div>
-              <p className="text-white text-xl font-bold">{formatMontant(stats.depotsAujourdhui, 'HTG')}</p>
+              <p title={formatMontant(stats.depotsAujourdhui, 'HTG')} className="text-white text-xl font-bold">{formatMontantCompact(stats.depotsAujourdhui, 'HTG')}</p>
             </div>
             <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
               <div className="flex items-center gap-2 mb-2 text-red-300">
@@ -178,13 +207,13 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-xs font-medium">Retraits du jour</span>
               </div>
-              <p className="text-white text-xl font-bold">{formatMontant(stats.retraitsAujourdhui, 'HTG')}</p>
+              <p title={formatMontant(stats.retraitsAujourdhui, 'HTG')} className="text-white text-xl font-bold">{formatMontantCompact(stats.retraitsAujourdhui, 'HTG')}</p>
             </div>
             <div className="col-span-2 rounded-2xl p-4 flex items-center justify-between" style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
               <div>
                 <p className="text-xs text-blue-200 mb-1">NET DU JOUR</p>
-                <p className={`text-2xl font-bold ${netJour >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
-                  {netJour >= 0 ? '+' : ''}{formatMontant(netJour, 'HTG')}
+                <p title={formatMontant(netJour, 'HTG')} className={`text-2xl font-bold ${netJour >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {netJour >= 0 ? '+' : ''}{formatMontantCompact(netJour, 'HTG')}
                 </p>
               </div>
               <div className="text-right">
@@ -244,14 +273,14 @@ export default function DashboardPage() {
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <div className="p-3 rounded-xl" style={{ background: '#ecfdf5' }}>
                   <p className="text-xs font-medium mb-1" style={{ color: '#047857' }}>Total dépôts (7j)</p>
-                  <p className="font-bold" style={{ color: '#047857' }}>
-                    {formatMontant(tendance.reduce((s, d) => s + d.depots, 0), 'HTG')}
+                  <p title={formatMontant(tendance.reduce((s, d) => s + d.depots, 0), 'HTG')} className="font-bold" style={{ color: '#047857' }}>
+                    {formatMontantCompact(tendance.reduce((s, d) => s + d.depots, 0), 'HTG')}
                   </p>
                 </div>
                 <div className="p-3 rounded-xl" style={{ background: '#fef2f2' }}>
                   <p className="text-xs font-medium mb-1" style={{ color: '#b91c1c' }}>Total retraits (7j)</p>
-                  <p className="font-bold" style={{ color: '#b91c1c' }}>
-                    {formatMontant(tendance.reduce((s, d) => s + d.retraits, 0), 'HTG')}
+                  <p title={formatMontant(tendance.reduce((s, d) => s + d.retraits, 0), 'HTG')} className="font-bold" style={{ color: '#b91c1c' }}>
+                    {formatMontantCompact(tendance.reduce((s, d) => s + d.retraits, 0), 'HTG')}
                   </p>
                 </div>
               </div>
@@ -278,8 +307,73 @@ export default function DashboardPage() {
               </Link>
             </div>
           )}
+          {alertes && alertes.echeancesAujourdhui > 0 && (
+            <div className="flex items-start gap-3 p-4 rounded-xl mt-3" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                <Icon name="doc" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold" style={{ color: '#991b1b' }}>
+                  {alertes.echeancesAujourdhui} échéance{alertes.echeancesAujourdhui > 1 ? 's' : ''} à encaisser aujourd'hui
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: '#b91c1c' }}>Prêts avec mensualité due à la date du jour</p>
+              </div>
+              <Link href="/prets?statut=EN_COURS" className="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap" style={{ background: '#b91c1c', color: 'white' }}>
+                Voir les prêts
+              </Link>
+            </div>
+          )}
+          {alertes && alertes.pretsEnRetard > 0 && (
+            <div className="flex items-start gap-3 p-4 rounded-xl mt-3" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                <Icon name="alert" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold" style={{ color: '#991b1b' }}>
+                  {alertes.pretsEnRetard} prêt{alertes.pretsEnRetard > 1 ? 's' : ''} en retard de paiement
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: '#b91c1c' }}>Des pénalités de retard s'accumulent</p>
+              </div>
+              <Link href="/prets?statut=EN_RETARD" className="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap" style={{ background: '#b91c1c', color: 'white' }}>
+                Gérer
+              </Link>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Transactions récentes */}
+      {txRecentes.length > 0 && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold tracking-tight" style={{ color: '#0b1733' }}>Dernières transactions</h3>
+            <Link href="/transactions" className="text-xs font-semibold flex items-center gap-1" style={{ color: '#2563eb' }}>
+              Tout voir <span>→</span>
+            </Link>
+          </div>
+          <div className="space-y-1">
+            {txRecentes.map((tx) => {
+              const cfg = TX_TYPE_CONFIG[tx.type] ?? { label: tx.type, color: '#4a5578', sign: '' };
+              const compte = tx.compteCredit?.numeroCompte || tx.compteDebit?.numeroCompte || '—';
+              return (
+                <div key={tx.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: `${cfg.color}15`, color: cfg.color }}>
+                    <Icon name={tx.type === 'DEPOT' ? 'up' : tx.type === 'RETRAIT' ? 'down' : 'arrows'} className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate" style={{ color: '#0b1733' }}>{cfg.label} · {compte}</p>
+                    <p className="text-xs" style={{ color: '#8b94b0' }}>{tx.reference}</p>
+                  </div>
+                  <p className="text-sm font-bold flex-shrink-0" style={{ color: cfg.color }}>
+                    {cfg.sign}{formatMontant(tx.montant, tx.devise)}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

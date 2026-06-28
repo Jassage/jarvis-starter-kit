@@ -1,4 +1,5 @@
 import prisma from '../utils/prisma';
+import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
 
 const MANDATAIRE_SELECT = {
@@ -30,7 +31,12 @@ export async function createMandat(
   const existing = await prisma.mandatCompte.findFirst({
     where: { compteId, mandataireId: data.mandataireId, actif: true },
   });
-  if (existing) throw new Error('Ce client dispose déjà d\'un mandat actif sur ce compte');
+  if (existing) throw new AppError(409, 'Ce client dispose déjà d\'un mandat actif sur ce compte');
+
+  if (data.dateFin) {
+    const fin = new Date(data.dateFin);
+    if (fin <= new Date()) throw new AppError(400, 'La date de fin du mandat doit être dans le futur');
+  }
 
   const mandat = await prisma.mandatCompte.create({
     data: {

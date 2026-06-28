@@ -63,3 +63,34 @@ export async function updateUtilisateur(req: AuthRequest, res: Response, next: N
     res.json(ok(user));
   } catch (e) { next(e); }
 }
+
+export async function verify2FA(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { tempToken, code } = req.body;
+    const result = await authService.verify2FA(tempToken, code);
+    res.json(ok(result, 'Connexion réussie'));
+  } catch (e) { next(e); }
+}
+
+export async function setup2FA(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await authService.setup2FA(req.user!.userId);
+    res.json(ok(result));
+  } catch (e) { next(e); }
+}
+
+export async function enable2FA(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { code } = req.body;
+    await authService.enable2FA(req.user!.userId, code);
+    res.json(ok(null, 'Double authentification activée'));
+  } catch (e) { next(e); }
+}
+
+export async function disable2FA(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { motDePasse, code } = req.body;
+    await authService.disable2FA(req.user!.userId, motDePasse, code);
+    res.json(ok(null, 'Double authentification désactivée'));
+  } catch (e) { next(e); }
+}

@@ -5,6 +5,8 @@ import { useAuthStore } from '@/stores/authStore';
 import { formatMontant, formatDatetime, nomClient, TYPE_TRANSACTION_LABELS, STATUT_TX_LABELS } from '@/lib/utils';
 import TransactionForm from '@/components/transactions/TransactionForm';
 import { useToastStore } from '@/stores/toastStore';
+import Link from 'next/link';
+import api from '@/lib/api';
 
 const STATUT_CHIP: Record<string, string> = {
   VALIDEE: 'chip chip-success',
@@ -30,9 +32,17 @@ export default function TransactionsPage() {
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState<'depot' | 'retrait' | 'virement' | null>(null);
   const canValidate = ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR'].includes(utilisateur?.role || '');
+  const [caisseOuverte, setCaisseOuverte] = useState<boolean | null>(null);
 
   const load = () => fetchTransactions({ ...filters, page, limit: 30 });
   useEffect(() => { load(); }, [filters, page]);
+
+  useEffect(() => {
+    if (!utilisateur?.agenceId) { setCaisseOuverte(null); return; }
+    api.get('/caisse/active')
+      .then(({ data }) => setCaisseOuverte(!!data.data))
+      .catch(() => setCaisseOuverte(false));
+  }, [utilisateur?.agenceId]);
 
   const [rejetId, setRejetId] = useState<string | null>(null);
   const [rejetMotif, setRejetMotif] = useState('');
@@ -67,6 +77,23 @@ export default function TransactionsPage() {
 
   return (
     <div className="space-y-5 animate-slide-up min-w-0">
+      {/* Banner caisse fermée */}
+      {caisseOuverte === false && (
+        <div className="flex items-center gap-4 p-4 rounded-2xl" style={{ background: '#fef2f2', border: '1.5px solid #fecaca' }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+              <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-sm" style={{ color: '#991b1b' }}>Caisse non ouverte</p>
+            <p className="text-xs mt-0.5" style={{ color: '#b91c1c' }}>Aucune transaction ne peut être enregistrée tant que la session de caisse n'est pas ouverte.</p>
+          </div>
+          <Link href="/caisse" className="px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap" style={{ background: '#b91c1c', color: 'white' }}>
+            Ouvrir la caisse →
+          </Link>
+        </div>
+      )}
       {/* Quick actions */}
       <div className="grid grid-cols-3 gap-3">
         <button onClick={() => setShowForm('depot')} className="card card-hover p-4 text-left flex items-center gap-3 transition-transform hover:scale-[1.02]">
