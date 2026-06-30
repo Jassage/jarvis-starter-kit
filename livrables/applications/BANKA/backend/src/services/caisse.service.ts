@@ -42,6 +42,12 @@ export async function fermerSession(id: string, userId: string, soldeFermeture: 
   if (!session) throw new AppError(404, 'Session introuvable');
   if (session.statut !== 'OUVERTE') throw new AppError(400, 'Session déjà fermée');
 
+  // Bloquer la fermeture tant que des transactions en attente de validation sont rattachées à cette session
+  const txEnAttente = await prisma.transaction.count({ where: { sessionId: id, statut: 'EN_ATTENTE' } });
+  if (txEnAttente > 0) {
+    throw new AppError(400, `Impossible de fermer la caisse : ${txEnAttente} transaction(s) en attente de validation. Validez ou rejetez-les d'abord.`);
+  }
+
   const updated = await prisma.sessionCaisse.update({
     where: { id },
     data: { statut: 'FERMEE', fermeParId: userId, soldeFermeture, notes },

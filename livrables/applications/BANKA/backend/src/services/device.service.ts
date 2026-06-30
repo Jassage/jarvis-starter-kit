@@ -5,47 +5,48 @@ import { createAuditLog } from '../utils/audit';
 // ─── CRUD Appareils ──────────────────────────────────────────────────────────
 
 export async function listDevices() {
-  return (prisma as any).pointageDevice.findMany({
+  return prisma.pointageDevice.findMany({
     orderBy: { createdAt: 'asc' },
     include: { _count: { select: { pointages: true } } },
   });
 }
 
 export async function createDevice(data: { nom: string; serialNumber: string; commKey: string }, userId: string) {
-  const existing = await (prisma as any).pointageDevice.findUnique({ where: { serialNumber: data.serialNumber } });
+  const existing = await prisma.pointageDevice.findUnique({ where: { serialNumber: data.serialNumber } });
   if (existing) throw new AppError(409, 'Numéro de série déjà enregistré');
-  const device = await (prisma as any).pointageDevice.create({ data });
+  const device = await prisma.pointageDevice.create({ data });
   await createAuditLog({ userId, table: 'pointage_devices', action: 'CREATE', entiteId: device.id, nouveau: data });
   return device;
 }
 
 export async function updateDevice(id: string, data: { nom?: string; commKey?: string; actif?: boolean }, userId: string) {
-  const device = await (prisma as any).pointageDevice.findUnique({ where: { id } });
+  const device = await prisma.pointageDevice.findUnique({ where: { id } });
   if (!device) throw new AppError(404, 'Appareil introuvable');
-  const updated = await (prisma as any).pointageDevice.update({ where: { id }, data });
+  const updated = await prisma.pointageDevice.update({ where: { id }, data });
   await createAuditLog({ userId, table: 'pointage_devices', action: 'UPDATE', entiteId: id, nouveau: data });
   return updated;
 }
 
 export async function deleteDevice(id: string, userId: string) {
-  const device = await (prisma as any).pointageDevice.findUnique({ where: { id }, include: { _count: { select: { pointages: true } } } });
+  const device = await prisma.pointageDevice.findUnique({ where: { id }, include: { _count: { select: { pointages: true } } } });
   if (!device) throw new AppError(404, 'Appareil introuvable');
   if (device._count.pointages > 0) throw new AppError(400, 'Impossible de supprimer un appareil ayant des pointages associés');
-  await (prisma as any).pointageDevice.delete({ where: { id } });
+  await prisma.pointageDevice.delete({ where: { id } });
   await createAuditLog({ userId, table: 'pointage_devices', action: 'DELETE', entiteId: id });
 }
 
 // ─── ZKTeco ADMS ─────────────────────────────────────────────────────────────
 
 export async function findDeviceBySN(serialNumber: string, commKey?: string) {
-  const device = await (prisma as any).pointageDevice.findUnique({ where: { serialNumber } });
+  const device = await prisma.pointageDevice.findUnique({ where: { serialNumber } });
   if (!device || !device.actif) return null;
-  if (commKey && device.commKey && device.commKey !== commKey) return null;
+  // Si l'appareil a une CommKey configurée, la requête doit la fournir correctement
+  if (device.commKey && device.commKey !== commKey) return null;
   return device;
 }
 
 export async function touchDevice(serialNumber: string) {
-  await (prisma as any).pointageDevice.update({
+  await prisma.pointageDevice.update({
     where: { serialNumber },
     data: { derniereSync: new Date() },
   });
@@ -66,19 +67,19 @@ export async function processAttLogLine(line: string, deviceId: string, deviceSN
 
   if (isNaN(pin) || !datetime) return false;
 
-  const employe = await (prisma as any).employe.findFirst({ where: { biometricId: pin } });
+  const employe = await prisma.employe.findFirst({ where: { biometricId: pin } });
   if (!employe) return false;
 
   const ts   = new Date(datetime);
   const date = dateOnly(ts);
 
-  const existing = await (prisma as any).pointageEmploye.findUnique({
+  const existing = await prisma.pointageEmploye.findUnique({
     where: { employeId_date: { employeId: employe.id, date } },
   });
 
   if (!existing) {
     // Première pointée du jour → arrivée
-    await (prisma as any).pointageEmploye.create({
+    await prisma.pointageEmploye.create({
       data: {
         employeId:    employe.id,
         date,
@@ -98,7 +99,7 @@ export async function processAttLogLine(line: string, deviceId: string, deviceSN
   if (isCheckout || (!isCheckout && !existing.heureDepart && existing.heureArrivee)) {
     // Deuxième pointée → départ
     if (!existing.heureDepart || ts > new Date(existing.heureDepart)) {
-      await (prisma as any).pointageEmploye.update({
+      await prisma.pointageEmploye.update({
         where: { id: existing.id },
         data: { heureDepart: ts, deviceId },
       });

@@ -9,14 +9,27 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(10, 'Refresh token invalide'),
 });
 
+const motDePasseComplexe = z
+  .string()
+  .min(12, 'Minimum 12 caractères')
+  .max(128)
+  .regex(/[a-z]/, 'Doit contenir au moins une minuscule')
+  .regex(/[A-Z]/, 'Doit contenir au moins une majuscule')
+  .regex(/[0-9]/, 'Doit contenir au moins un chiffre')
+  .regex(/[^A-Za-z0-9]/, 'Doit contenir au moins un caractère spécial');
+
 export const changePasswordSchema = z.object({
   ancienMotDePasse: z.string().min(1, 'Ancien mot de passe requis'),
-  nouveauMotDePasse: z
-    .string()
-    .min(8, 'Le nouveau mot de passe doit contenir au moins 8 caractères')
-    .max(128)
-    .regex(/[A-Z]/, 'Doit contenir au moins une majuscule')
-    .regex(/[0-9]/, 'Doit contenir au moins un chiffre'),
+  nouveauMotDePasse: motDePasseComplexe,
+});
+
+export const requestPasswordResetSchema = z.object({
+  email: z.string().email('Email invalide').max(254),
+});
+
+export const confirmPasswordResetSchema = z.object({
+  token: z.string().length(64, 'Token invalide'),
+  nouveauMotDePasse: motDePasseComplexe,
 });
 
 const otpCode = z.string().regex(/^\d{6}$/, 'Code OTP à 6 chiffres requis');

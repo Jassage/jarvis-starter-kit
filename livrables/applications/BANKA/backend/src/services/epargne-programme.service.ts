@@ -21,8 +21,8 @@ export async function listEpargnes(opts: { compteId?: string; actif?: boolean; p
   if (actif !== undefined) where.actif = actif;
 
   const [total, items] = await Promise.all([
-    (prisma as any).epargneProgrammee.count({ where }),
-    (prisma as any).epargneProgrammee.findMany({
+    prisma.epargneProgrammee.count({ where }),
+    prisma.epargneProgrammee.findMany({
       where, skip, take: limit,
       orderBy: { prochainVersement: 'asc' },
       include: {
@@ -55,12 +55,12 @@ export async function createEpargne(data: {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   if (prochain < today) throw new AppError(400, 'La date du prochain versement ne peut pas être dans le passé');
 
-  const ep = await (prisma as any).epargneProgrammee.create({
+  const ep = await prisma.epargneProgrammee.create({
     data: {
       compteSourceId: data.compteSourceId,
       compteDestId: data.compteDestId,
       montant: data.montant,
-      frequence: data.frequence,
+      frequence: data.frequence as any,
       prochainVersement: new Date(data.prochainVersement),
       notes: data.notes,
       creeParId: userId,
@@ -75,9 +75,9 @@ export async function createEpargne(data: {
 }
 
 export async function toggleEpargne(id: string, userId: string) {
-  const ep = await (prisma as any).epargneProgrammee.findUnique({ where: { id } });
+  const ep = await prisma.epargneProgrammee.findUnique({ where: { id } });
   if (!ep) throw new AppError(404, 'Épargne programmée introuvable');
-  const updated = await (prisma as any).epargneProgrammee.update({
+  const updated = await prisma.epargneProgrammee.update({
     where: { id },
     data: { actif: !ep.actif },
   });
@@ -87,7 +87,7 @@ export async function toggleEpargne(id: string, userId: string) {
 
 export async function executerEpargnes(userId?: string) {
   const now = new Date();
-  const dues = await (prisma as any).epargneProgrammee.findMany({
+  const dues = await prisma.epargneProgrammee.findMany({
     where: { actif: true, prochainVersement: { lte: now } },
     include: {
       compteSource: true,

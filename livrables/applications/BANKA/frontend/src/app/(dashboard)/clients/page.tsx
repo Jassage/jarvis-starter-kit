@@ -71,7 +71,8 @@ export default function ClientsPage() {
               placeholder="Rechercher par nom, téléphone, numéro client..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="input pl-10"
+              className="input"
+              style={{ paddingLeft: '2.5rem' }}
             />
           </div>
           <select value={type} onChange={(e) => { setType(e.target.value); setPage(1); }} className="input max-w-[180px]">

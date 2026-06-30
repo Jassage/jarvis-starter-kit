@@ -33,8 +33,8 @@ export async function listPointages(opts: {
   }
 
   const [total, items] = await Promise.all([
-    (prisma as any).pointageEmploye.count({ where }),
-    (prisma as any).pointageEmploye.findMany({
+    prisma.pointageEmploye.count({ where }),
+    prisma.pointageEmploye.findMany({
       where, skip, take: limit,
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       include: {
@@ -50,12 +50,12 @@ export async function getJournalier(date: string) {
   const next = new Date(d); next.setDate(next.getDate() + 1);
 
   const [employes, pointages] = await Promise.all([
-    (prisma as any).employe.findMany({
+    prisma.employe.findMany({
       where: { statut: 'ACTIF' },
       orderBy: [{ departement: 'asc' }, { nom: 'asc' }],
       select: { id: true, nom: true, prenom: true, matricule: true, departement: true, poste: { select: { intitule: true } } },
     }),
-    (prisma as any).pointageEmploye.findMany({
+    prisma.pointageEmploye.findMany({
       where: { date: { gte: d, lt: next } },
       select: { id: true, employeId: true, statut: true, heureArrivee: true, heureDepart: true, retardMinutes: true, notes: true },
     }),
@@ -79,7 +79,7 @@ export async function upsertPointage(data: {
   retardMinutes?: number;
   notes?: string;
 }, userId: string) {
-  const employe = await (prisma as any).employe.findUnique({ where: { id: data.employeId } });
+  const employe = await prisma.employe.findUnique({ where: { id: data.employeId } });
   if (!employe) throw new AppError(404, 'Employé introuvable');
 
   const d = dateOnly(new Date(data.date));
@@ -87,12 +87,12 @@ export async function upsertPointage(data: {
   const heureArrivee = data.heureArrivee ? new Date(`${data.date}T${data.heureArrivee}:00`) : null;
   const heureDepart  = data.heureDepart  ? new Date(`${data.date}T${data.heureDepart}:00`)  : null;
 
-  const result = await (prisma as any).pointageEmploye.upsert({
+  const result = await prisma.pointageEmploye.upsert({
     where: { employeId_date: { employeId: data.employeId, date: d } },
     create: {
       employeId:     data.employeId,
       date:          d,
-      statut:        data.statut,
+      statut:        data.statut as any,
       heureArrivee,
       heureDepart,
       retardMinutes: data.retardMinutes ?? null,
@@ -100,7 +100,7 @@ export async function upsertPointage(data: {
       creeParId:     userId,
     },
     update: {
-      statut:        data.statut,
+      statut:        data.statut as any,
       heureArrivee,
       heureDepart,
       retardMinutes: data.retardMinutes ?? null,
@@ -131,19 +131,19 @@ export async function bulkUpsertPointage(entries: Array<{
       const heureArrivee = entry.heureArrivee ? new Date(`${date}T${entry.heureArrivee}:00`) : null;
       const heureDepart  = entry.heureDepart  ? new Date(`${date}T${entry.heureDepart}:00`)  : null;
 
-      const existing = await (prisma as any).pointageEmploye.findUnique({
+      const existing = await prisma.pointageEmploye.findUnique({
         where: { employeId_date: { employeId: entry.employeId, date: d } },
       });
 
       if (existing) {
-        await (prisma as any).pointageEmploye.update({
+        await prisma.pointageEmploye.update({
           where: { id: existing.id },
-          data: { statut: entry.statut, heureArrivee, heureDepart, retardMinutes: entry.retardMinutes ?? null, notes: entry.notes ?? null },
+          data: { statut: entry.statut as any, heureArrivee, heureDepart, retardMinutes: entry.retardMinutes ?? null, notes: entry.notes ?? null },
         });
         updated++;
       } else {
-        await (prisma as any).pointageEmploye.create({
-          data: { employeId: entry.employeId, date: d, statut: entry.statut, heureArrivee, heureDepart, retardMinutes: entry.retardMinutes ?? null, notes: entry.notes ?? null, creeParId: userId },
+        await prisma.pointageEmploye.create({
+          data: { employeId: entry.employeId, date: d, statut: entry.statut as any, heureArrivee, heureDepart, retardMinutes: entry.retardMinutes ?? null, notes: entry.notes ?? null, creeParId: userId },
         });
         created++;
       }
@@ -157,9 +157,9 @@ export async function bulkUpsertPointage(entries: Array<{
 }
 
 export async function deletePointage(id: string, userId: string) {
-  const p = await (prisma as any).pointageEmploye.findUnique({ where: { id } });
+  const p = await prisma.pointageEmploye.findUnique({ where: { id } });
   if (!p) throw new AppError(404, 'Pointage introuvable');
-  await (prisma as any).pointageEmploye.delete({ where: { id } });
+  await prisma.pointageEmploye.delete({ where: { id } });
   await createAuditLog({ userId, table: 'pointages', action: 'DELETE', entiteId: id });
 }
 
@@ -170,12 +170,12 @@ export async function getStats(periode: string, employeId?: string) {
   const where: any = { date: { gte: dateDebut, lt: dateFin } };
   if (employeId) where.employeId = employeId;
 
-  const pointages = await (prisma as any).pointageEmploye.findMany({
+  const pointages = await prisma.pointageEmploye.findMany({
     where,
     include: { employe: { select: { id: true, nom: true, prenom: true, matricule: true, departement: true } } },
   });
 
-  const totalActifs = await (prisma as any).employe.count({ where: { statut: 'ACTIF' } });
+  const totalActifs = await prisma.employe.count({ where: { statut: 'ACTIF' } });
 
   const parEmploye: Record<string, { employe: any; present: number; absent: number; retard: number; demiJournee: number; total: number }> = {};
   for (const p of pointages) {

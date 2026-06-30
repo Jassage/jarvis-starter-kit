@@ -7,7 +7,194 @@
 
 ---
 
+## 2026-06-30 (après-midi)
+
+### SYGS-IMFP : module Messagerie — pièces jointes + accusés de livraison/lecture + corrections
+
+**Pièces jointes :**
+- Schéma Prisma étendu : enum `AttachmentType` (PHOTO/DOCUMENT/VOICE) + 4 champs nullable sur `Message` (`attachmentUrl`, `attachmentType`, `fileName`, `fileSize`). Synchronisé via `prisma db push` (drift migration existant empêchait `migrate dev`).
+- `src/middleware/upload.ts` : `attachmentStorage` (diskStorage, destination dynamique par catégorie : `uploads/attachments/photos|documents|voice`) + `uploadAttachment = multer(...).single("file")` (10 Mo max, fileFilter par mimetype).
+- `src/server.ts` : static serve `/uploads/attachments` + fix CORP header (`Cross-Origin-Resource-Policy: cross-origin`) sur les 3 routes statiques uploads — nécessaire car Helmet 8 pose `same-origin` globalement, bloquant le chargement cross-origin des images/audio depuis le frontend (port 3000 vs backend port 5000).
+- `src/socket/io.ts` (nouveau) : singleton `setIO`/`getIO` pour accéder à l'instance Socket.io depuis les contrôleurs REST.
+- `POST /api/messages/conversations/:id/attachment` : upload multer → service `sendAttachment` → diffusion `new_message` vers `conv:{id}` ET `user:{participantId}` (garantit livraison même si conversation pas ouverte).
+- Frontend : bouton trombone (fichier) + bouton micro (MediaRecorder vocal), rendu des bulles par type (img miniature / icône+téléchargement / `<audio controls>`), aperçu ConversationList (📷 Photo / 📄 Document / 🎤 Message vocal).
+
+**Accusés de livraison/lecture (style WhatsApp) :**
+- Schéma : `ConversationParticipant.lastDeliveredAt DateTime?` ajouté (miroir de `lastReadAt`).
+- `markDelivered(conversationId, userId)` : bump `lastDeliveredAt = now()`, appelé dans `getMessages()` (REST fetch = livraison) et dans le handler socket `ack_delivered`.
+- `markAsRead` modifié pour retourner le timestamp + émettre `message_status {conversationId, userId, lastReadAt}` vers `conv:{id}` (l'expéditeur sait en temps réel que c'est lu).
+- Socket : event `ack_delivered` (client → serveur si message d'un autre) → `markDelivered` → `message_status {lastDeliveredAt}` vers `conv:{id}`.
+- Frontend : `getConversations()` expose `lastReadAt`/`lastDeliveredAt` par participant. `ChatWindow` calcule le statut de chaque message envoyé vs les timestamps des autres participants : ✓ gris = Envoyé, ✓✓ gris = Livré (tous ont reçu), ✓✓ bleu = Lu (tous ont ouvert). Groupe : lu = TOUS les membres ont vu. Mise à jour en temps réel via listener `message_status` dans `useSocket`.
+- Diffusion `new_message` étendue : en plus de `conv:{id}`, émis vers `user:{participantId}` de chaque participant → badge non-lus mis à jour en temps réel même si la conversation n'est pas ouverte.
+
+**Bug réinscriptions corrigé :**
+- `GET /api/enrollments/fee-structures` retournait 404 (code ENROLLMENT_NOT_FOUND). Cause : même bug d'ordre de routes Express qu'en 2026-06-14 (Présence) — `GET /:id` déclaré avant `GET /fee-structures`, Express interceptait "fee-structures" comme id. Corrigé en déplaçant `/fee-structures` avant `/:id` dans `enrollmentRoutes.ts`.
+
+**Bug modal Nouvelle conversation corrigé :**
+- `UserRow` défini comme composant à l'intérieur du corps de `NewConversationModal` → remount React à chaque re-render → clics annulés si un re-render tombait entre mousedown et mouseup (fréquent avec les mises à jour temps réel de la messagerie). Corrigé en déplaçant `UserRow` au niveau module.
+
+---
+
+## 2026-06-30
+
+### Lancement du projet GESCOM (ERP commercial) — socle technique (Phase 0)
+
+**Contexte :** nouveau client signé, entreprise commerciale avec 1 boutique (détail) + 1 entrepôt grossiste, stocks séparés, devise HTG, 5-20 utilisateurs. Modules attendus : Stock/inventaire, Ventes/facturation, Achats/fournisseurs, Comptabilité de base. Demande explicite de Jaslin : tout mettre en place avant de développer les écrans métier.
+
+**Exploration préalable :** patterns réutilisés de BANKA (architecture controllers/services/routes, auth JWT + refresh rotatif, RBAC, audit log, comptabilité en partie double) et de MEDIKA (module Pharmacie comme modèle pour mouvements de stock typés et commandes fournisseurs avec réception ligne par ligne).
+
+**Livré (Phase 0 — socle uniquement, pas d'écrans métier) :**
+- Schéma Prisma complet pour les 4 modules : Identité/Emplacements (Utilisateur, RefreshToken, AuditLog, Emplacement BOUTIQUE/ENTREPOT), Stock/Produits (Produit, StockEmplacement par site, MouvementStock typé, Transfert/LigneTransfert), Ventes (Client particulier/grossiste, Vente/LigneVente), Achats (Fournisseur, CommandeFournisseur/LigneCommande avec réception partielle), Comptabilité (CompteComptable plan réduit à 9 comptes, EcritureComptable partie double, EcritureEchec)
+- RBAC à 5 rôles : SUPER_ADMIN, GERANT, VENDEUR, MAGASINIER, COMPTABLE
+- Auth JWT (cookie httpOnly + refresh rotatif), audit log, gestion d'erreurs, rate limiting — backend Express 4 + TypeScript + Prisma 5
+- Frontend Next.js App Router : login + layout dashboard protégé (hydratation Zustand avant redirect), store d'auth
+- Base PostgreSQL `gescom` créée, migrée, seedée (plan comptable, 2 emplacements, admin démo `admin@gescom.ht` / `Admin@123`, produits/client/fournisseur d'exemple)
+- `.claude/launch.json` : configs `gescom-backend` (port 4002) et `gescom-frontend` (port 3003)
+- Backend et frontend à 0 erreur TypeScript, login vérifié de bout en bout en navigateur (cookie JWT posé, dashboard affiché avec rôle)
+
+**Incident :** deux installations npm parallèles du frontend ont corrompu `node_modules` (erreurs TAR_ENTRY lors de l'extraction de `next`). Résolu par nettoyage complet et réinstallation unique.
+
+**Prochaine étape :** Phase 1 — CRUD Produits + Stock par emplacement, mouvements, alertes de seuil. Roadmap complète : Phase 2 Ventes/Facturation, Phase 3 Achats/Fournisseurs, Phase 4 Transferts, Phase 5 Comptabilité, Phase 6 Rapports.
+
+---
+
+## 2026-06-29 (après-midi)
+
+### SYGS-IMFP : module Messagerie (Socket.io)
+
+**Backend :**
+- 3 modèles Prisma : `Conversation` (DIRECT/GROUP), `ConversationParticipant` (lastReadAt pour accusé de lecture), `Message`. Migration appliquée via `prisma migrate dev --name add_messaging`
+- `socket.io` installé. `server.ts` migré de `app.listen` vers `createServer(app)` + `SocketServer(httpServer)` — Socket.io partage le même port HTTP (5000)
+- Auth socket : middleware JWT qui vérifie le token via `verifyJwtToken` + `UserService.getUserProfile` avant d'autoriser la connexion
+- Events socket : `join_conversation`, `leave_conversation`, `send_message` (callback ACK), `typing`
+- REST : `GET /messages/conversations`, `POST /messages/conversations`, `GET /messages/conversations/:id/messages`, `PATCH /messages/conversations/:id/read`, `GET /messages/unread-count`, `GET /messages/users`
+
+**Frontend :**
+- `socket.io-client` installé. `useSocket.ts` : connexion singleton (survit aux navigations entre routes), disconnect sur logout
+- `messageStore.ts` (Zustand, non persisté) : conversations, messages par conversationId, totalUnread, toutes les actions CRUD
+- Composants : `MessagingPage` (layout split responsive), `ConversationList` (filtrage par nom, badges non-lus), `ChatWindow` (bulles de messages groupées par date, indicateur frappe, Entrée pour envoyer), `NewConversationModal` (onglet Direct + onglet Groupe avec recherche)
+- `useSocket()` initialisé dans `Index.tsx` — connexion dès que l'utilisateur est authentifié
+- Sidebar : badge rouge sur l'icône messagerie (nombre de non-lus), s'efface quand l'onglet est actif et sans non-lus
+- Page messagerie sans padding (contrairement aux autres pages) : `overflow-hidden` sur le `main` quand `activeTab === "messaging"`
+- Messagerie ouverte à tous les rôles (Admin, Directeur, Secrétaire, Comptable, Professeur, Élève)
+- 0 erreur TypeScript frontend + backend après `prisma generate`
+
+---
+
+## 2026-06-29
+
+### BANKA : audit sécurité complet + corrections critiques (Semaines 1–4) + reset mot de passe
+
+**Audit :** analyse ligne par ligne du backend et du frontend par un senior developer fictif. Résultat : 4 semaines de corrections classées par criticité.
+
+**Semaine 1 — Sécurité critique :**
+- JWT_REFRESH_SECRET rendu obligatoire (throw si absent)
+- RBAC ajouté sur toutes les routes non protégées (caisse, comptes, prêts, taux de change)
+- `requireCaisseOuverte` câblé sur POST virement cross-devise
+
+**Semaine 2 — Atomicité des transactions :**
+- `validerTransaction` et `rejeterTransaction` : findUnique déplacé DANS `$transaction` + compare-and-swap via `updateMany({ where: { statut: 'EN_ATTENTE' } })` → 0 race condition possible
+- `rejeterTransaction` : rejet symétrique du jumeau VIREMENT_CREDIT associé
+- `setTaux` : atomique (désactive l'ancien + crée le nouveau dans une seule transaction)
+- `annulerAvance` : remboursement compte dans la même transaction que le changement de statut
+- `withRetry` enveloppant les $transaction pour absorber les deadlocks PostgreSQL
+
+**Semaine 3 — Sécurité auth :**
+- Politique mot de passe : 12 caractères min, maj+min+chiffre+spécial (`PASSWORD_REGEX`)
+- Révocation automatique des refresh tokens sur désactivation d'un compte (`actif: false`)
+- Droits mandats : whitelist stricte (`DROITS_VALIDES = ['CONSULTATION', 'DEPOT', 'RETRAIT', 'VIREMENT', 'SIGNATURE']`)
+- CommKey ZKTeco : correction du bypass (vérification même si device n'a pas de commKey défini)
+- Rate limiting sur `/iclock` (60 req/min)
+
+**Semaine 4 — Conformité et qualité :**
+- `deleteClient` : soft delete (INACTIF) avec guards (comptes actifs, prêts non soldés)
+- `EcritureEchec` : champs résolution (resolu, resoluAt, resoluParId) + endpoints GET/PATCH dans compta.routes
+- `listContrats` : effet de bord `expirerContratsEchus` extrait en route dédiée `POST /contrats/expire`
+- Ratio solvabilité BRH : calculé depuis les écritures comptables classe 1 (au lieu de placeholder)
+- N+1 corrigé dans `getRapportBRH` (clientsMap) et `genererFichesPaie` (3 queries batch + Maps)
+- Migration `prisma migrate deploy` : 6 migrations en attente appliquées
+
+**Reset mot de passe par email :**
+- Token opaque 256-bit (crypto.randomBytes), usage unique, 1h expiry, stocké haché en DB (PasswordResetToken model)
+- Retourne toujours 200 (pas d'énumération email)
+- Révoque toutes les sessions actives sur réinitialisation
+- `utils/email.ts` : transport nodemailer avec template HTML
+- Rate limit 5 req/15min sur les endpoints de reset
+- Pages frontend : `/reset-password/request` (email) + `/reset-password` (nouveau MDP avec checklist live)
+- Env vars requises : `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `FRONTEND_URL`
+
+**Nettoyage final :**
+- 100 occurrences `(prisma as any)` supprimées sur 7 fichiers après `prisma generate`
+- 0 erreur TypeScript (`npx tsc --noEmit`)
+
+**Bug UI corrigé — spans sur inputs :**
+- Cause : `.input` dans globals.css définit `padding` shorthand → écrase les `pl-*`/`pr-*` Tailwind (même spécificité, globals.css gagne)
+- Fix root : `.input` → `:where(.input)` dans globals.css (spécificité 0, les utilitaires Tailwind gagnent toujours)
+- Fix explicites : inline `style={{ paddingRight/Left }}` sur tous les inputs affectés (TransactionForm, CompteForm, PretForm, caisse page x2, recherche x4)
+
+**Vérification comptabilité :**
+- Module marqué "manquant" dans CONTEXT.md en réalité 100% implémenté
+- Backend : 12 routes, service complet (plan comptable CRUD, journal CRUD, grand livre, bilan, compte de résultat, dashboard, réconciliation échecs)
+- Frontend : 6 pages (/compta/dashboard, /journal, /grand-livre, /bilan, /resultat, /plan-comptable)
+- CONTEXT.md corrigé
+
+---
+
 ## 2026-06-28
+
+### BANKA : Priorités 2 & 3 — frais, KYC, AML, SSE, taux de change, rapport BRH, redesign login
+
+**Frais automatiques (M4) :**
+- `frais.service.ts` : 3 fonctions — `preleverFraisTenueCompte` (mensuel, depuis config `FRAIS_TENUE_COMPTE_MENSUEL`), `preleverFraisDossierPret` (% sur montant décaissé, config `FRAIS_DOSSIER_PRET_TAUX`), `preleverFraisVirement` (% sur montant virement, config `FRAIS_VIREMENT_TAUX`)
+- Câblés dans `transaction.service.ts` (après crédit destination) et `pret.service.ts` (après décaissement)
+
+**KYC renforcé (M5) :**
+- `client.schemas.ts` : `refineClient` exige `pieceIdentite` + `numeroPiece` pour `typeClient === 'INDIVIDUEL'`, âge ≥ 18 calculé avec précision mois/jour
+- `ClientForm.tsx` : champ `dateNaissance` avec affichage de l'âge en temps réel, labels avec astérisque, message d'erreur inline
+
+**AML — Anti-blanchiment (M6) :**
+- `aml.service.ts` (nouveau) : 4 détecteurs fire-and-forget (`SEUIL_DECLARE`, `STRUCTURATION` sur 24h, `VELOCITE_ELEVEE` > 10 tx/h, `MANDATAIRE_BLACKLIST`)
+- Modèle `AlerteAML` + migration + routes AUDITEUR (`GET /aml`, `PATCH /aml/:id/traiter`)
+- Appelé via `Promise.allSettled()` après chaque transaction (dépôt, retrait, virement)
+- Page `/aml` : 4 cards stats, filtres, tableau paginé, bouton "Marquer traitée"
+
+**SSE — Notifications temps réel (M7) :**
+- `sse.service.ts` + `sse.routes.ts` : `requireAuthSSE` (token en query param car EventSource ne supporte pas les headers custom), heartbeat 30s
+- `useSSE.ts` (hook frontend) : auto-reconnect 10 tentatives
+- `Header.tsx` : flash de la cloche 3s sur `TRANSACTION_EN_ATTENTE` et `ALERTE_AML`, incrément compteur en temps réel
+
+**Taux de change (M8) :**
+- `TauxChange` model + migration, `tauxChange.service.ts` : `getTauxActif`, `setTaux` (désactive le précédent), `effectuerVirementCross` (atomique dans `prisma.$transaction`, taux achat si source USD, taux vente si destination USD)
+- Page `/taux-change` : affichage taux actif USD, formulaire SUPERVISEUR+, virement cross-devise avec résumé, historique des taux
+
+**Rapport BRH (M9) :**
+- `getRapportBRH()` : ratio liquidité (actifs liquides / dépôts ≥ 20%), ratio solvabilité (placeholder ≥ 8%), top 5 grandes expositions (% encours par emprunteur, seuil 10%), comptes capitaux classe 1
+- Page `/rapport-brh` : `RatioCard` avec barre de conformité + badge conforme/non conforme, bouton Imprimer
+
+**Remboursement anticipé (M10) :**
+- `enregistrerRemboursement` : si `type === 'ANTICIPEE'`, supprime les lignes EN_ATTENTE/EN_RETARD et recalcule le tableau via `calculerTableau` à partir de la première échéance restante
+
+**SYSCOHADA étendu :**
+- `COMPTES_BASE` étendu de 8 à 31 comptes (classes 1, 2, 4, 5, 6, 7)
+
+**Sidebar et navigation :**
+- 3 entrées ajoutées : Taux de change (exchange), Rapport BRH (flag), Alertes AML (triangle warning), avec RBAC appropriés
+
+**Seed config :**
+- `prisma/seed-config.ts` : insère idempotent 8 clés (`AML_SEUIL_HTG`, `AML_SEUIL_USD`, `FRAIS_TENUE_COMPTE_MENSUEL`, `FRAIS_DOSSIER_PRET_TAUX`, `FRAIS_VIREMENT_TAUX`, `TAUX_PENALITE_JOURNALIER`, `DELAI_GRACE_RETARD`, `PLAFOND_RETRAIT_JOURNALIER`)
+- Script : `npm run db:seed-config`
+
+**Redesign page login :**
+- Style sombre inspiré de l'AMAG Académie : fond navy plein écran avec grille de points et halos lumineux
+- Carte deux panneaux semi-transparente (backdrop-blur) : panneau gauche (icône banque, badge "★ SYSTÈME BANCAIRE" doré, titre BANKA/ERP Bancaire, carrousel de tips bancaires) + panneau droit (label "PORTAIL BANCAIRE", champs avec icônes et focus effect, bouton bleu, comptes démo cliquables)
+- reCAPTCHA supprimé, 2FA conservée
+
+**Bugs corrigés :**
+- `--no-engine` Prisma : client regénéré avec moteur complet après libération du verrou DLL
+- Double décrémentation dans `enregistrerRemboursement` supprimée
+- `return withRetry(...)` → `const result = await withRetry(...)` pour permettre le code fire-and-forget après la transaction
+
+---
 
 ### BANKA : formatage compact, agences RH, compte système employé, blocage caisse
 

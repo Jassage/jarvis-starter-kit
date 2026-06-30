@@ -28,6 +28,12 @@ const CATEGORIES: { label: string; cles: string[]; icon: string; color: string; 
     color: '#7c3aed', bg: '#f5f3ff',
     cles: ['SOLDE_MINIMUM_OUVERTURE', 'PLAFOND_RETRAIT_JOURNALIER', 'DEVISE_PRINCIPALE'],
   },
+  {
+    label: 'Frais & Conformité AML',
+    icon: 'M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z',
+    color: '#dc2626', bg: '#fef2f2',
+    cles: ['FRAIS_OUVERTURE_COMPTE', 'FRAIS_TENUE_COMPTE_MENSUEL', 'FRAIS_DOSSIER_PRET_TAUX', 'FRAIS_VIREMENT_TAUX', 'AML_SEUIL_HTG', 'AML_SEUIL_USD'],
+  },
 ];
 
 const LABELS: Record<string, string> = {
@@ -44,9 +50,15 @@ const LABELS: Record<string, string> = {
   TAUX_INTERET_RETRAITE:     'Retraite (annuel)',
   TAUX_INTERET_JEUNESSE:     'Compte jeunesse (annuel)',
   TAUX_INTERET_TONTINE:      'Tontine (annuel)',
-  SOLDE_MINIMUM_OUVERTURE:   'Solde minimum d\'ouverture (HTG)',
-  PLAFOND_RETRAIT_JOURNALIER:'Plafond de retrait journalier (HTG)',
-  DEVISE_PRINCIPALE:         'Devise principale',
+  SOLDE_MINIMUM_OUVERTURE:    'Solde minimum d\'ouverture (HTG)',
+  PLAFOND_RETRAIT_JOURNALIER: 'Plafond de retrait journalier (HTG)',
+  DEVISE_PRINCIPALE:          'Devise principale',
+  FRAIS_OUVERTURE_COMPTE:     'Frais d\'ouverture de compte (HTG)',
+  FRAIS_TENUE_COMPTE_MENSUEL: 'Frais de tenue de compte (HTG/mois)',
+  FRAIS_DOSSIER_PRET_TAUX:    'Frais de dossier prêt (%)',
+  FRAIS_VIREMENT_TAUX:        'Frais de virement (%)',
+  AML_SEUIL_HTG:              'Seuil déclaration BRH — HTG',
+  AML_SEUIL_USD:              'Seuil déclaration BRH — USD',
 };
 
 const HINTS: Record<string, string> = {
@@ -59,8 +71,14 @@ const HINTS: Record<string, string> = {
   TAUX_INTERET_RETRAITE:     '0.04 = 4 % par an.',
   TAUX_INTERET_JEUNESSE:     '0.02 = 2 % par an.',
   TAUX_INTERET_TONTINE:      '0 = pas d\'intérêt sur la tontine.',
-  SOLDE_MINIMUM_OUVERTURE:   'Montant minimum requis lors de l\'ouverture d\'un compte.',
-  PLAFOND_RETRAIT_JOURNALIER:'Maximum autorisé par retrait en une journée (0 = illimité).',
+  SOLDE_MINIMUM_OUVERTURE:    'Montant minimum requis lors de l\'ouverture d\'un compte.',
+  PLAFOND_RETRAIT_JOURNALIER: 'Maximum autorisé par retrait en une journée (0 = illimité).',
+  FRAIS_OUVERTURE_COMPTE:     'Montant fixe prélevé lors de l\'ouverture d\'un compte. Le client doit déposer au moins le minimum requis + ces frais. 0 = désactivé.',
+  FRAIS_TENUE_COMPTE_MENSUEL: 'Montant fixe débité chaque mois sur les comptes COURANT, ÉPARGNE et MICRO-ÉPARGNE actifs. 0 = désactivé.',
+  FRAIS_DOSSIER_PRET_TAUX:    'Pourcentage prélevé sur le montant décaissé lors de l\'octroi d\'un prêt. Ex : 2 = 2 %. 0 = désactivé.',
+  FRAIS_VIREMENT_TAUX:        'Pourcentage prélevé sur chaque virement. Ex : 0.5 = 0,5 %. 0 = désactivé.',
+  AML_SEUIL_HTG:              'Au-dessus de ce seuil, chaque transaction déclenche automatiquement une alerte AML (obligation BRH).',
+  AML_SEUIL_USD:              'Même règle pour les transactions en USD (obligation BRH).',
 };
 
 function ConfigField({ config, onSave, canEdit }: { config: Config; onSave: (cle: string, val: string) => Promise<void>; canEdit: boolean }) {
@@ -157,7 +175,7 @@ export default function AdministrationPage() {
           <span className="ml-3 text-sm" style={{ color: '#8b94b0' }}>Chargement des paramètres...</span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
           {CATEGORIES.map((cat) => (
             <div key={cat.label} className="card overflow-hidden">
               <div className="px-5 py-4 flex items-center gap-3" style={{ borderBottom: '1px solid #f0f2f9', background: cat.bg }}>

@@ -20,9 +20,11 @@ router.post('/employes/:id/compte-systeme',  requireAuth, requireAdmin, ctrl.cre
 router.delete('/employes/:id/compte-systeme',requireAuth, requireAdmin, ctrl.delierCompteSysteme);
 
 // B7: Contrats — lecture pour superviseurs+, gestion par superviseurs+
-router.get('/contrats',            requireAuth, requireSupervisor, ctrl.listContrats);
-router.post('/contrats',           requireAuth, requireSupervisor, ctrl.createContrat);
+router.get('/contrats',                requireAuth, requireSupervisor, ctrl.listContrats);
+router.post('/contrats',               requireAuth, requireSupervisor, ctrl.createContrat);
 router.patch('/contrats/:id/resilier', requireAuth, requireSupervisor, ctrl.resilierContrat);
+// Job d'expiration — à appeler manuellement ou via cron, réservé aux admins
+router.post('/contrats/expire',        requireAuth, requireAdmin, ctrl.expirerContrats);
 
 // B7: Congés — lecture pour superviseurs+, approbation/refus par superviseurs+
 router.get('/conges',              requireAuth, requireSupervisor, ctrl.listConges);

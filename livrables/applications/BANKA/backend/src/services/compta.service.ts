@@ -5,14 +5,41 @@ import { createAuditLog } from '../utils/audit';
 // ─── Comptes de base & écritures automatiques ─────────────────────────────────
 
 const COMPTES_BASE = [
-  { numero: '5700', intitule: 'Caisse / Espèces',           type: 'ACTIF'    },
-  { numero: '2600', intitule: 'Dépôts clients',              type: 'PASSIF'   },
-  { numero: '2000', intitule: 'Prêts accordés',              type: 'ACTIF'    },
-  { numero: '7100', intitule: "Produits d'intérêts",         type: 'PRODUIT'  },
-  { numero: '7020', intitule: 'Frais et commissions',        type: 'PRODUIT'  },
-  { numero: '6400', intitule: 'Charges de personnel',        type: 'CHARGE'   },
-  { numero: '4600', intitule: 'Salaires nets à payer',       type: 'PASSIF'   },
-  { numero: '4700', intitule: 'Cotisations sociales dues',   type: 'PASSIF'   },
+  // Classe 1 — Capitaux propres
+  { numero: '1000', intitule: 'Capital social',                          type: 'PASSIF'  },
+  { numero: '1100', intitule: 'Réserves légales',                        type: 'PASSIF'  },
+  { numero: '1200', intitule: 'Report à nouveau',                        type: 'PASSIF'  },
+  { numero: '1300', intitule: "Résultat de l'exercice",                  type: 'PASSIF'  },
+  // Classe 2 — Opérations de crédit
+  { numero: '2000', intitule: 'Prêts accordés',                          type: 'ACTIF'   },
+  { numero: '2100', intitule: 'Provisions pour créances douteuses',      type: 'ACTIF'   },
+  { numero: '2200', intitule: 'Immobilisations corporelles',             type: 'ACTIF'   },
+  // Classe 2 — Ressources clientèle
+  { numero: '2600', intitule: 'Dépôts à vue clients',                   type: 'PASSIF'  },
+  { numero: '2610', intitule: 'Dépôts à terme',                         type: 'PASSIF'  },
+  { numero: '2620', intitule: 'Épargnes programmées',                    type: 'PASSIF'  },
+  // Classe 4 — Tiers
+  { numero: '4000', intitule: 'Fournisseurs',                            type: 'PASSIF'  },
+  { numero: '4400', intitule: 'État — impôts et taxes à payer',          type: 'PASSIF'  },
+  { numero: '4500', intitule: 'Intérêts à payer sur dépôts',             type: 'PASSIF'  },
+  { numero: '4600', intitule: 'Salaires nets à payer',                   type: 'PASSIF'  },
+  { numero: '4700', intitule: 'Cotisations sociales dues',               type: 'PASSIF'  },
+  // Classe 5 — Trésorerie
+  { numero: '5200', intitule: 'Banque correspondante',                   type: 'ACTIF'   },
+  { numero: '5700', intitule: 'Caisse / Espèces',                       type: 'ACTIF'   },
+  { numero: '5800', intitule: 'Virements internes en cours',             type: 'ACTIF'   },
+  // Classe 6 — Charges
+  { numero: '6100', intitule: 'Intérêts versés sur dépôts',              type: 'CHARGE'  },
+  { numero: '6200', intitule: 'Dotations aux provisions',                type: 'CHARGE'  },
+  { numero: '6300', intitule: "Charges d'exploitation",                  type: 'CHARGE'  },
+  { numero: '6400', intitule: 'Charges de personnel',                    type: 'CHARGE'  },
+  { numero: '6500', intitule: 'Impôts et taxes',                         type: 'CHARGE'  },
+  // Classe 7 — Produits
+  { numero: '7000', intitule: 'Intérêts sur prêts',                     type: 'PRODUIT' },
+  { numero: '7020', intitule: 'Frais et commissions',                    type: 'PRODUIT' },
+  { numero: '7050', intitule: 'Pénalités de retard',                     type: 'PRODUIT' },
+  { numero: '7100', intitule: "Produits d'intérêts créditeurs",          type: 'PRODUIT' },
+  { numero: '7200', intitule: "Autres produits d'exploitation",          type: 'PRODUIT' },
 ];
 
 export async function ensureComptesBase(): Promise<void> {
@@ -62,9 +89,54 @@ export async function creerEcritureAuto(
         transactionId: data.transactionId ?? null,
       } as any,
     });
-  } catch {
-    // Ne jamais bloquer une opération bancaire à cause d'une erreur comptable
+  } catch (err) {
+    // L'opération bancaire ne doit pas être bloquée par une erreur comptable,
+    // mais l'échec est tracé pour réconciliation manuelle par le comptable.
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[COMPTA] Écriture en échec — réconciliation requise:', message, data);
+    try {
+      await prisma.ecritureEchec.create({
+        data: {
+          debitNumero:   data.debitNumero,
+          creditNumero:  data.creditNumero,
+          montant:       data.montant,
+          libelle:       data.libelle,
+          erreur:        message,
+          transactionId: data.transactionId ?? null,
+          userId:        data.userId,
+        },
+      });
+    } catch {
+      // Si même la table de fallback échoue, on laisse le log console comme dernière trace
+    }
   }
+}
+
+// ─── Réconciliation des écritures en échec ────────────────────────────────────
+
+export async function listEchecsComptables(opts: { resolu?: boolean; page?: number; limit?: number }) {
+  const { resolu, page = 1, limit = 30 } = opts;
+  const skip = (page - 1) * limit;
+  const where: any = {};
+  if (resolu !== undefined) where.resolu = resolu;
+  const [total, items] = await Promise.all([
+    prisma.ecritureEchec.count({ where }),
+    prisma.ecritureEchec.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' } }),
+  ]);
+  return { items, total, page, limit, pages: Math.ceil(total / limit) };
+}
+
+export async function resoudreEchecComptable(id: string, userId: string) {
+  const echec = await prisma.ecritureEchec.findUnique({ where: { id } });
+  if (!echec) throw new AppError(404, 'Écriture en échec introuvable');
+  if (echec.resolu) throw new AppError(400, 'Écriture déjà résolue');
+
+  const updated = await prisma.ecritureEchec.update({
+    where: { id },
+    data: { resolu: true, resoluAt: new Date(), resoluParId: userId },
+  });
+  await createAuditLog({ userId, table: 'ecritures_echec', action: 'RESOLUTION', entiteId: id });
+  return updated;
 }
 
 // ─── Plan comptable ────────────────────────────────────────────────────────────

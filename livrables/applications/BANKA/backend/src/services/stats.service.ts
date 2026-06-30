@@ -172,31 +172,49 @@ export async function getPAR(agenceId?: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const par30 = new Date(today);
-  par30.setDate(par30.getDate() - 30);
-  const par90 = new Date(today);
-  par90.setDate(par90.getDate() - 90);
+  const seuil30 = new Date(today);
+  seuil30.setDate(seuil30.getDate() - 30);
+  const seuil90 = new Date(today);
+  seuil90.setDate(seuil90.getDate() - 90);
 
-  const where = agenceId ? { agenceId } : {};
+  const pretWhere = agenceId ? { agenceId } : {};
 
-  const [encours, retard30, retard90] = await Promise.all([
+  // Encours total (dénominateur du PAR)
+  const encours = await prisma.pret.aggregate({
+    where: { ...pretWhere, statut: { in: ['EN_COURS', 'EN_RETARD'] } },
+    _sum: { resteARegler: true },
+  });
+  const totalEncours = Number(encours._sum.resteARegler || 0);
+
+  // PAR correct : un prêt est en PAR30 si sa PREMIÈRE ÉCHÉANCE IMPAYÉE date de plus de 30 jours.
+  // On identifie les pretIds ayant une LignePret EN_RETARD avec dateEcheance <= aujourd'hui - 30j.
+  const pretIdsPar30 = await prisma.lignePret.findMany({
+    where: { statut: { in: ['EN_RETARD', 'PARTIELLEMENT_PAYE'] }, dateEcheance: { lte: seuil30 } },
+    select: { pretId: true },
+    distinct: ['pretId'],
+  });
+  const pretIdsPar90 = await prisma.lignePret.findMany({
+    where: { statut: { in: ['EN_RETARD', 'PARTIELLEMENT_PAYE'] }, dateEcheance: { lte: seuil90 } },
+    select: { pretId: true },
+    distinct: ['pretId'],
+  });
+
+  const ids30 = pretIdsPar30.map((l) => l.pretId);
+  const ids90 = pretIdsPar90.map((l) => l.pretId);
+
+  const [retard30, retard90] = await Promise.all([
     prisma.pret.aggregate({
-      where: { ...where, statut: { in: ['EN_COURS', 'EN_RETARD'] } },
-      _sum: { resteARegler: true },
-    }),
-    prisma.pret.aggregate({
-      where: { ...where, statut: 'EN_RETARD', datePremierRdv: { lte: par30 } },
+      where: { ...pretWhere, id: { in: ids30 }, statut: { in: ['EN_COURS', 'EN_RETARD'] } },
       _sum: { resteARegler: true },
       _count: { id: true },
     }),
     prisma.pret.aggregate({
-      where: { ...where, statut: 'EN_RETARD', datePremierRdv: { lte: par90 } },
+      where: { ...pretWhere, id: { in: ids90 }, statut: { in: ['EN_COURS', 'EN_RETARD'] } },
       _sum: { resteARegler: true },
       _count: { id: true },
     }),
   ]);
 
-  const totalEncours = Number(encours._sum.resteARegler || 0);
   const montantRetard30 = Number(retard30._sum.resteARegler || 0);
   const montantRetard90 = Number(retard90._sum.resteARegler || 0);
 
@@ -204,5 +222,78 @@ export async function getPAR(agenceId?: string) {
     encoursTotalCredit: totalEncours,
     par30: { montant: montantRetard30, count: retard30._count.id, ratio: totalEncours > 0 ? (montantRetard30 / totalEncours) * 100 : 0 },
     par90: { montant: montantRetard90, count: retard90._count.id, ratio: totalEncours > 0 ? (montantRetard90 / totalEncours) * 100 : 0 },
+  };
+}
+
+// ─── Rapport prudentiel BRH ────────────────────────────────────────────────────
+// Normes indicatives pour IMF en Haïti (BRH circulaire 112-1) :
+//   Ratio de liquidité    : actifs liquides / dépôts à vue >= 20%
+//   Ratio de solvabilité  : fonds propres / total actifs >= 8%
+//   Grande exposition     : un seul emprunteur >= 10% des fonds propres
+export async function getRapportBRH() {
+  const [
+    caisseSoldes,
+    depotVue,
+    encoursPrets,
+    capitauxPropres,
+    [creditClass1, debitClass1],
+    grandEmprunteur,
+  ] = await Promise.all([
+    prisma.compte.aggregate({ where: { type: { in: ['COURANT', 'EPARGNE'] as any }, statut: 'ACTIF' }, _sum: { solde: true } }),
+    prisma.compte.aggregate({ where: { type: { in: ['COURANT', 'EPARGNE', 'MICRO_EPARGNE'] as any }, statut: 'ACTIF' }, _sum: { solde: true } }),
+    prisma.pret.aggregate({ where: { statut: { in: ['DECAISSE', 'EN_COURS', 'EN_RETARD'] } }, _sum: { resteARegler: true } }),
+    prisma.compteComptable.findMany({ where: { numero: { startsWith: '1' }, actif: true }, select: { numero: true, intitule: true } }),
+    // Fonds propres = solde net des écritures sur comptes de capitaux propres (classe 1 SYSCOHADA)
+    Promise.all([
+      prisma.ecritureComptable.aggregate({ _sum: { montant: true }, where: { compteCredit: { numero: { startsWith: '1' } } } }),
+      prisma.ecritureComptable.aggregate({ _sum: { montant: true }, where: { compteDebit:  { numero: { startsWith: '1' } } } }),
+    ]),
+    prisma.pret.groupBy({
+      by: ['clientId'],
+      where: { statut: { in: ['DECAISSE', 'EN_COURS', 'EN_RETARD'] } },
+      _sum: { resteARegler: true },
+      orderBy: { _sum: { resteARegler: 'desc' } },
+      take: 5,
+    }),
+  ]);
+
+  const liquidites = Number(caisseSoldes._sum.solde || 0);
+  const depots = Number(depotVue._sum.solde || 0);
+  const encours = Number(encoursPrets._sum.resteARegler || 0);
+  const totalActifEstime = encours + liquidites;
+  const fondsPropresSolde = Number(creditClass1._sum.montant || 0) - Number(debitClass1._sum.montant || 0);
+
+  const ratioLiquidite = depots > 0 ? (liquidites / depots) * 100 : null;
+  const ratioSolvabilite = totalActifEstime > 0 ? (fondsPropresSolde / totalActifEstime) * 100 : null;
+
+  // Clients des plus grands emprunteurs en un seul appel — élimination du N+1
+  const clientIds = grandEmprunteur.map((g) => g.clientId);
+  const clientsMap = new Map(
+    (await prisma.client.findMany({
+      where: { id: { in: clientIds } },
+      select: { id: true, nom: true, prenom: true, raisonSociale: true, type: true },
+    })).map((c) => [c.id, c])
+  );
+
+  const grandesExpositions = grandEmprunteur.map((g) => {
+    const client = clientsMap.get(g.clientId);
+    const montant = Number(g._sum.resteARegler || 0);
+    return {
+      clientId: g.clientId,
+      nomClient: client?.type === 'ENTREPRISE' ? client.raisonSociale : `${client?.prenom || ''} ${client?.nom || ''}`.trim(),
+      montantExpose: montant,
+      pourcentageEncours: encours > 0 ? (montant / encours) * 100 : 0,
+    };
+  });
+
+  return {
+    dateRapport: new Date(),
+    indicateurs: { liquidites, depots, encours, totalActifEstime, fondsPropresSolde },
+    ratios: {
+      liquidite:    { valeur: ratioLiquidite,    seuilBRH: 20, conforme: ratioLiquidite    !== null ? ratioLiquidite    >= 20 : null },
+      solvabilite:  { valeur: ratioSolvabilite,  seuilBRH:  8, conforme: ratioSolvabilite  !== null ? ratioSolvabilite  >=  8 : null },
+    },
+    grandesExpositions,
+    comptesCapitaux: capitauxPropres,
   };
 }

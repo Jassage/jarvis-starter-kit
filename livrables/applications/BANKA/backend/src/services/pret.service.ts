@@ -6,6 +6,7 @@ import { calculerTableau } from '../utils/amortissement';
 import { createAuditLog } from '../utils/audit';
 import { getConfig } from './configuration.service';
 import { creerEcritureAuto } from './compta.service';
+import { preleverFraisDossierPret } from './frais.service';
 
 export async function listPrets(opts: {
   clientId?: string;
@@ -173,7 +174,7 @@ export async function decaisserPret(data: {
   const soldeAvant = Number(compte.solde);
 
   return prisma.$transaction(async (tx) => {
-    await tx.transaction.create({
+    const txDecaissement = await tx.transaction.create({
       data: {
         reference,
         type: 'DECAISSEMENT_PRET',
@@ -191,13 +192,16 @@ export async function decaisserPret(data: {
     });
 
     await tx.compte.update({ where: { id: compteDestinationId }, data: { solde: { increment: montant } } });
+    await preleverFraisDossierPret({ pretId, compteId: compteDestinationId, montantPret: montant, devise: pret.devise as string, userId, tx });
 
+    // Transition APPROUVE → DECAISSE : les fonds sont versés, les remboursements n'ont pas encore commencé.
+    // Le premier remboursement fera passer le prêt en EN_COURS.
     const pretUpdated = await tx.pret.update({
       where: { id: pretId },
-      data: { statut: 'EN_COURS', dateDecaissement: new Date() },
+      data: { statut: 'DECAISSE', dateDecaissement: new Date() },
     });
 
-    // B9: Écriture comptable du décaissement — Débit 2000 (Prêts accordés) / Crédit 2600 (Dépôts clients)
+    // Écriture comptable du décaissement liée à sa transaction — Débit 2000 / Crédit 2600
     await creerEcritureAuto(tx, {
       debitNumero:  '2000',
       creditNumero: '2600',
@@ -205,6 +209,7 @@ export async function decaisserPret(data: {
       libelle: `Décaissement prêt ${pret.reference}`,
       date: new Date(),
       userId,
+      transactionId: txDecaissement.id,
     });
 
     await createAuditLog({ userId, table: 'prets', action: 'DECAISSEMENT', entiteId: pretId, nouveau: { statut: 'EN_COURS', compteDestinationId, montant } });
@@ -226,14 +231,11 @@ export async function enregistrerRemboursement(data: {
 
   const pret = await prisma.pret.findUnique({ where: { id: pretId }, include: { lignes: { orderBy: { numeroEcheance: 'asc' } } } });
   if (!pret) throw new AppError(404, 'Prêt introuvable');
-  if (!['EN_COURS', 'EN_RETARD'].includes(pret.statut)) throw new AppError(400, 'Prêt non actif');
+  if (!['DECAISSE', 'EN_COURS', 'EN_RETARD'].includes(pret.statut)) throw new AppError(400, 'Prêt non actif');
   if (montant > Number(pret.resteARegler)) throw new AppError(400, `Le montant dépasse le reste à régler (${Number(pret.resteARegler).toFixed(2)} ${pret.devise})`);
 
   const compte = await prisma.compte.findUnique({ where: { id: compteSourceId } });
   if (!compte || compte.clientId !== pret.clientId) throw new AppError(400, 'Compte source invalide');
-
-  const soldeAvant = Number(compte.solde);
-  if (soldeAvant < montant) throw new AppError(400, 'Solde insuffisant');
 
   const prochaineLigne = pret.lignes.find((l) => l.statut === 'EN_ATTENTE' || l.statut === 'EN_RETARD');
 
@@ -264,8 +266,20 @@ export async function enregistrerRemboursement(data: {
   const reference = await generateReferenceTransaction('REMBOURSEMENT_PRET');
   const nouveauMontantRembourse = Number(pret.montantRembourse) + montant;
   const nouveauResteARegler = Math.max(0, Number(pret.resteARegler) - montant);
-
   return prisma.$transaction(async (tx) => {
+    // Décrémentation atomique : la vérification et la mise à jour sont une seule opération SQL
+    // Cela évite toute race condition entre deux remboursements simultanés
+    const result = await tx.compte.updateMany({
+      where: { id: compteSourceId, solde: { gte: montant } },
+      data: { solde: { decrement: montant } },
+    });
+    if (result.count === 0) {
+      const current = await tx.compte.findUnique({ where: { id: compteSourceId }, select: { solde: true } });
+      throw new AppError(400, `Solde insuffisant. Solde disponible : ${Number(current!.solde)} ${pret.devise}`);
+    }
+
+    const soldeAvant = Number(compte.solde);
+
     const remboursement = await tx.remboursementPret.create({
       data: {
         pretId,
@@ -296,8 +310,6 @@ export async function enregistrerRemboursement(data: {
       },
     });
 
-    await tx.compte.update({ where: { id: compteSourceId }, data: { solde: { decrement: montant } } });
-
     if (prochaineLigne) {
       await tx.lignePret.update({
         where: { id: prochaineLigne.id },
@@ -305,7 +317,9 @@ export async function enregistrerRemboursement(data: {
       });
     }
 
-    const nouveauStatut = nouveauResteARegler <= 0 ? 'SOLDE' : pret.statut;
+    // Premier remboursement sur un prêt DECAISSE : on passe en EN_COURS
+    const statutCourant = pret.statut === 'DECAISSE' ? 'EN_COURS' : pret.statut;
+    const nouveauStatut = nouveauResteARegler <= 0 ? 'SOLDE' : statutCourant;
 
     await tx.pret.update({
       where: { id: pretId },
@@ -315,6 +329,33 @@ export async function enregistrerRemboursement(data: {
         statut: nouveauStatut,
       },
     });
+
+    // Recalcul de l'échéancier sur remboursement anticipé partiel
+    if (type === 'ANTICIPEE' && nouveauResteARegler > 0) {
+      const lignesRestantes = pret.lignes.filter((l) => l.statut === 'EN_ATTENTE' || l.statut === 'EN_RETARD');
+      if (lignesRestantes.length > 0) {
+        await tx.lignePret.deleteMany({
+          where: { pretId, statut: { in: ['EN_ATTENTE', 'EN_RETARD'] } },
+        });
+        // tauxMensuel est déjà stocké en décimal (divisé à la création), pas de /100 supplémentaire
+        const taux = Number(pret.tauxMensuel);
+        const nbMois = lignesRestantes.length;
+        const dateBase = new Date(lignesRestantes[0].dateEcheance);
+        const nouvellesLignes = calculerTableau(nouveauResteARegler, taux, nbMois, pret.typeAmortissement, dateBase);
+        const offsetNum = pret.lignes.filter((l) => l.statut === 'PAYE' || l.statut === 'PARTIELLEMENT_PAYE').length;
+        await tx.lignePret.createMany({
+          data: nouvellesLignes.map((l, i) => ({
+            pretId,
+            numeroEcheance: offsetNum + i + 1,
+            dateEcheance: l.dateEcheance,
+            capital: l.capital,
+            interet: l.interet,
+            mensualite: l.mensualite,
+            capitalRestant: l.capitalRestant,
+          })),
+        });
+      }
+    }
 
     // Écritures comptables du remboursement
     if (capital > 0) {
@@ -386,7 +427,7 @@ export async function calculerPenalite(pretId: string): Promise<{ penalite: numb
 export async function mettreAJourRetards(): Promise<number> {
   const now = new Date();
   const pretsEnCours = await prisma.pret.findMany({
-    where: { statut: 'EN_COURS' },
+    where: { statut: { in: ['DECAISSE', 'EN_COURS'] } },
     include: { lignes: { where: { statut: { in: ['EN_ATTENTE'] }, dateEcheance: { lt: now } } } },
   });
 

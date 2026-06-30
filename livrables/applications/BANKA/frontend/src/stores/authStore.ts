@@ -16,8 +16,6 @@ interface Utilisateur {
 
 interface AuthState {
   utilisateur: Utilisateur | null;
-  token: string | null;
-  refreshToken: string | null;
   isLoading: boolean;
   requiresTwoFactor: boolean;
   tempToken: string | null;
@@ -32,8 +30,6 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       utilisateur: null,
-      token: null,
-      refreshToken: null,
       isLoading: false,
       requiresTwoFactor: false,
       tempToken: null,
@@ -47,10 +43,8 @@ export const useAuthStore = create<AuthState>()(
             set({ isLoading: false, requiresTwoFactor: true, tempToken: result.tempToken });
             return;
           }
-          const { token, refreshToken, utilisateur } = result;
-          localStorage.setItem('banka_token', token);
-          localStorage.setItem('banka_refresh', refreshToken);
-          set({ token, refreshToken, utilisateur, isLoading: false, requiresTwoFactor: false, tempToken: null });
+          // Les tokens access + refresh sont dans des cookies httpOnly posés par le serveur
+          set({ utilisateur: result.utilisateur, isLoading: false, requiresTwoFactor: false, tempToken: null });
         } catch (e) {
           set({ isLoading: false });
           throw e;
@@ -62,10 +56,8 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { tempToken } = get();
           const { data } = await api.post('/auth/2fa/verify', { tempToken, code });
-          const { token, refreshToken, utilisateur } = data.data;
-          localStorage.setItem('banka_token', token);
-          localStorage.setItem('banka_refresh', refreshToken);
-          set({ token, refreshToken, utilisateur, isLoading: false, requiresTwoFactor: false, tempToken: null });
+          // Les cookies httpOnly sont posés par le serveur dans la réponse
+          set({ utilisateur: data.data.utilisateur, isLoading: false, requiresTwoFactor: false, tempToken: null });
         } catch (e) {
           set({ isLoading: false });
           throw e;
@@ -74,12 +66,10 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
-          const { refreshToken } = get();
-          if (refreshToken) await api.post('/auth/logout', { refreshToken });
+          // Le serveur lit le refresh token depuis le cookie et le révoque, puis clear les deux cookies
+          await api.post('/auth/logout', {});
         } catch {}
-        localStorage.removeItem('banka_token');
-        localStorage.removeItem('banka_refresh');
-        set({ utilisateur: null, token: null, refreshToken: null, requiresTwoFactor: false, tempToken: null });
+        set({ utilisateur: null, requiresTwoFactor: false, tempToken: null });
       },
 
       setUser: (utilisateur) => set({ utilisateur }),
@@ -88,11 +78,8 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'banka-auth',
-      partialize: (state) => ({
-        utilisateur: state.utilisateur,
-        token: state.token,
-        refreshToken: state.refreshToken,
-      }),
+      // On ne persiste que l'info utilisateur (display), jamais les tokens
+      partialize: (state) => ({ utilisateur: state.utilisateur }),
     }
   )
 );

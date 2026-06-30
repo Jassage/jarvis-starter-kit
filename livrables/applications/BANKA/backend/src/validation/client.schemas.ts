@@ -6,7 +6,8 @@ const telephoneHT = z
   .max(20)
   .regex(/^[0-9+\s\-()]+$/, 'Format de téléphone invalide');
 
-export const createClientSchema = z.object({
+// Schéma de base sans superRefine pour pouvoir appeler .partial() sur la mise à jour
+const clientBaseSchema = z.object({
   type: z.enum(['INDIVIDUEL', 'ENTREPRISE']),
   telephone: telephoneHT,
   adresse: z.string().max(500).trim().optional().or(z.literal('')),
@@ -26,13 +27,48 @@ export const createClientSchema = z.object({
   // Entreprise
   raisonSociale: z.string().max(200).trim().optional(),
   nif: z.string().max(50).optional(),
-}).superRefine((data, ctx) => {
+});
+
+function refineClient(data: z.infer<typeof clientBaseSchema>, ctx: z.RefinementCtx) {
   if (data.type === 'INDIVIDUEL') {
-    if (!data.nom?.trim()) ctx.addIssue({ code: 'custom', path: ['nom'], message: 'Nom requis pour un client individuel' });
+    if (!data.nom?.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['nom'], message: 'Nom requis pour un client individuel' });
+    }
+    if (!data.pieceIdentite?.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['pieceIdentite'], message: 'Type de pièce d\'identité requis' });
+    }
+    if (!data.numeroPiece?.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['numeroPiece'], message: 'Numéro de pièce d\'identité requis' });
+    }
+    if (data.dateNaissance) {
+      const ddn = new Date(data.dateNaissance);
+      const aujourd = new Date();
+      const age = aujourd.getFullYear() - ddn.getFullYear() - (
+        aujourd.getMonth() < ddn.getMonth() ||
+        (aujourd.getMonth() === ddn.getMonth() && aujourd.getDate() < ddn.getDate()) ? 1 : 0
+      );
+      if (age < 18) {
+        ctx.addIssue({ code: 'custom', path: ['dateNaissance'], message: 'Le client doit être majeur (18 ans minimum)' });
+      }
+    }
   }
   if (data.type === 'ENTREPRISE') {
     if (!data.raisonSociale?.trim()) ctx.addIssue({ code: 'custom', path: ['raisonSociale'], message: 'Raison sociale requise pour une entreprise' });
   }
+}
+
+export const createClientSchema = clientBaseSchema.superRefine(refineClient);
+
+// La mise à jour rend tous les champs optionnels — le superRefine ne s'applique que si type est fourni
+export const updateClientSchema = clientBaseSchema.partial().superRefine((data, ctx) => {
+  if (data.type) refineClient(data as z.infer<typeof clientBaseSchema>, ctx);
+});
+
+export const changeStatutClientSchema = z.object({
+  statut: z.enum(['ACTIF', 'INACTIF', 'SUSPENDU', 'BLACKLISTE'], {
+    errorMap: () => ({ message: 'Statut invalide. Valeurs acceptées : ACTIF, INACTIF, SUSPENDU, BLACKLISTE' }),
+  }),
+  motif: z.string().max(500).optional(),
 });
 
 export const createCompteSchema = z.object({

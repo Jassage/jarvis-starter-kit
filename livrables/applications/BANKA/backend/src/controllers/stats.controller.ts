@@ -41,3 +41,10 @@ export async function alertes(_req: AuthRequest, res: Response, next: NextFuncti
     res.json(ok(result));
   } catch (e) { next(e); }
 }
+
+export async function rapportBRH(_req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await statsService.getRapportBRH();
+    res.json(ok(result));
+  } catch (e) { next(e); }
+}

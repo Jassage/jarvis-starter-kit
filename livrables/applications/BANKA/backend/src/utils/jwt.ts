@@ -15,8 +15,8 @@ function getSecret(): string {
 }
 
 function getRefreshSecret(): string {
-  const s = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
-  if (!s) throw new Error('JWT_REFRESH_SECRET manquant dans les variables d\'environnement');
+  const s = process.env.JWT_REFRESH_SECRET;
+  if (!s) throw new Error('JWT_REFRESH_SECRET manquant dans les variables d\'environnement — doit être distinct de JWT_SECRET');
   return s;
 }
 

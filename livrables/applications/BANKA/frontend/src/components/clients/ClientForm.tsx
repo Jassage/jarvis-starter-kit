@@ -33,6 +33,7 @@ export default function ClientForm({ onClose, onSuccess, initial }: Props) {
     email: initial?.email || '',
     adresse: initial?.adresse || '',
     profession: initial?.profession || '',
+    dateNaissance: initial?.dateNaissance ? new Date(initial.dateNaissance).toISOString().slice(0, 10) : '',
     pieceIdentite: initial?.pieceIdentite || 'NIN',
     numeroPiece: initial?.numeroPiece || '',
     notes: initial?.notes || '',
@@ -45,10 +46,23 @@ export default function ClientForm({ onClose, onSuccess, initial }: Props) {
   const isValidTelephone = (t: string) => t.length >= 8 && /^[0-9+\s\-()]+$/.test(t);
   const isValidEmail = (e: string) => !e || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
+  const getAge = (ddn: string): number | null => {
+    if (!ddn) return null;
+    const d = new Date(ddn);
+    const now = new Date();
+    let age = now.getFullYear() - d.getFullYear();
+    if (now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate())) age--;
+    return age;
+  };
+  const ageDdn = form.dateNaissance ? getAge(form.dateNaissance) : null;
+  const ageError = ageDdn !== null && ageDdn < 18;
+
   const canAdvance = step === 0
     ? true
     : step === 1
-    ? (form.type === 'INDIVIDUEL' ? !!(form.nom && form.prenom) : !!form.raisonSociale)
+    ? (form.type === 'INDIVIDUEL'
+        ? !!(form.nom && form.prenom && form.numeroPiece && !ageError)
+        : !!form.raisonSociale)
     : !!(form.telephone && form.adresse && isValidTelephone(form.telephone) && isValidEmail(form.email));
 
   const handleSubmit = async () => {
@@ -172,11 +186,27 @@ export default function ClientForm({ onClose, onSuccess, initial }: Props) {
                     <label className="label">Profession</label>
                     <input value={form.profession} onChange={(e) => set('profession', e.target.value)} className="input" placeholder="Commerçante, Agriculteur, Enseignant..." />
                   </div>
+                  <div>
+                    <label className="label">Date de naissance</label>
+                    <input
+                      type="date"
+                      value={form.dateNaissance}
+                      onChange={(e) => set('dateNaissance', e.target.value)}
+                      max={new Date().toISOString().slice(0, 10)}
+                      className="input"
+                    />
+                    {ageError && (
+                      <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>Le client doit être majeur (18 ans minimum)</p>
+                    )}
+                    {ageDdn !== null && !ageError && (
+                      <p className="text-xs mt-1" style={{ color: '#059669' }}>{ageDdn} ans</p>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <div className="flex items-center gap-1.5 mb-1.5">
-                        <label className="label mb-0">Pièce d'identité</label>
-                        <Tooltip content="Type du document officiel présenté lors de l'inscription" position="right">
+                        <label className="label mb-0">Pièce d'identité *</label>
+                        <Tooltip content="Document officiel obligatoire pour l'inscription KYC" position="right">
                           <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5" style={{ color: '#8b94b0' }}><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/><path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                         </Tooltip>
                       </div>
@@ -185,8 +215,9 @@ export default function ClientForm({ onClose, onSuccess, initial }: Props) {
                       </select>
                     </div>
                     <div>
-                      <label className="label">Numéro de pièce</label>
+                      <label className="label">Numéro de pièce *</label>
                       <input value={form.numeroPiece} onChange={(e) => set('numeroPiece', e.target.value)} className="input font-mono" placeholder="00-00-00-XXXX" />
+                      {!form.numeroPiece && <p className="text-xs mt-1" style={{ color: '#b91c1c' }}>Requis</p>}
                     </div>
                   </div>
                 </>

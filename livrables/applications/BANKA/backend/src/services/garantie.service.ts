@@ -6,7 +6,7 @@ export async function listGaranties(pretId: string) {
   const pret = await prisma.pret.findUnique({ where: { id: pretId } });
   if (!pret) throw new AppError(404, 'Prêt introuvable');
 
-  return (prisma as any).garantie.findMany({
+  return prisma.garantie.findMany({
     where: { pretId },
     orderBy: { createdAt: 'desc' },
     include: { creePar: { select: { nom: true, prenom: true } } },
@@ -27,10 +27,10 @@ export async function createGarantie(
   const pret = await prisma.pret.findUnique({ where: { id: pretId } });
   if (!pret) throw new AppError(404, 'Prêt introuvable');
 
-  const garantie = await (prisma as any).garantie.create({
+  const garantie = await prisma.garantie.create({
     data: {
       pretId,
-      type: data.type,
+      type: data.type as any,
       description: data.description,
       valeurEstimee: data.valeurEstimee,
       dateConstit: data.dateConstit || new Date(),
@@ -56,15 +56,15 @@ export async function updateGarantie(
   data: { statut?: string; description?: string; valeurEstimee?: number; dateLevee?: Date; notes?: string },
   userId: string
 ) {
-  const existing = await (prisma as any).garantie.findUnique({ where: { id } });
+  const existing = await prisma.garantie.findUnique({ where: { id } });
   if (!existing) throw new AppError(404, 'Garantie introuvable');
 
-  const updated = await (prisma as any).garantie.update({
+  const updated = await prisma.garantie.update({
     where: { id },
     data: {
       ...data,
       dateLevee: data.statut === 'LEVEE' && !existing.dateLevee ? new Date() : data.dateLevee,
-    },
+    } as any,
     include: { creePar: { select: { nom: true, prenom: true } } },
   });
 

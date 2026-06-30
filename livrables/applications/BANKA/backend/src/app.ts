@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { errorHandler } from './middleware/errorHandler';
 import { apiRateLimit } from './middleware/rateLimiter';
@@ -21,6 +22,9 @@ import rhRoutes from './routes/rh.routes';
 import pointageRoutes from './routes/pointage.routes';
 import deviceRoutes from './routes/device.routes';
 import iclockRoutes from './routes/iclock.routes';
+import amlRoutes from './routes/aml.routes';
+import sseRoutes from './routes/sse.routes';
+import tauxChangeRoutes from './routes/tauxChange.routes';
 import { ensureComptesBase } from './services/compta.service';
 
 const app = express();
@@ -29,6 +33,7 @@ const origins = (process.env.CORS_ORIGINS || 'http://localhost:3001').split(',')
 
 app.use(helmet());
 app.use(cors({ origin: origins, credentials: true }));
+app.use(cookieParser());
 // Limite à 1 Mo — une API bancaire ne reçoit jamais de payloads volumineux
 app.use(express.json({ limit: '1mb' }));
 
@@ -58,7 +63,12 @@ app.use('/api/compta', comptaRoutes);
 app.use('/api/rh', rhRoutes);
 app.use('/api/rh/pointage', pointageRoutes);
 app.use('/api/rh/pointage/devices', deviceRoutes);
+app.use('/api/aml', amlRoutes);
+app.use('/api/sse', sseRoutes);
+app.use('/api/taux-change', tauxChangeRoutes);
 // ZKTeco ADMS — monté à la racine, pas sous /api (protocole propriétaire)
+// Les appareils font un heartbeat toutes les 10s → 60 req/min par IP est généreux sans être abusable
+app.use('/iclock', rateLimit({ windowMs: 60 * 1000, max: 60, message: 'REJECT' }));
 app.use('/iclock', iclockRoutes);
 
 app.use(errorHandler);

@@ -102,7 +102,8 @@ function SearchAccountField({
               onChange={(e) => { onSearch(e.target.value); setOpen(true); }}
               onFocus={() => setOpen(true)}
               placeholder="N° compte ou nom du client..."
-              className="input pl-10"
+              className="input"
+              style={{ paddingLeft: '2.5rem' }}
             />
             {srchLoading && (
               <svg className="animate-spin w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" style={{ color: '#2563eb' }}>
@@ -313,9 +314,9 @@ export default function TransactionForm({ type, compteId, onClose, onSuccess }: 
                 step="0.01"
                 value={montant}
                 onChange={(e) => setMontant(e.target.value)}
-                className="input pr-24 text-lg font-semibold"
+                className="input text-lg font-semibold"
                 placeholder="0.00"
-                style={{ fontSize: '1.125rem' }}
+                style={{ fontSize: '1.125rem', paddingRight: '5.5rem' }}
               />
               <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold px-2 py-1 rounded-lg" style={{ background: '#f0f2f9', color: '#4a5578' }}>
                 {selectedSource?.devise || 'HTG'}

@@ -46,6 +46,12 @@ export async function createContrat(req: AuthRequest, res: Response, next: NextF
 export async function resilierContrat(req: AuthRequest, res: Response, next: NextFunction) {
   try { res.json(ok(await svc.resilierContrat(req.params.id, req.user!.userId), 'Contrat résilié')); } catch (e) { next(e); }
 }
+export async function expirerContrats(_req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await svc.expirerContratsEchus();
+    res.json(ok(result, `${result.count} contrat(s) expiré(s)`));
+  } catch (e) { next(e); }
+}
 
 export async function listConges(req: AuthRequest, res: Response, next: NextFunction) {
   try {

@@ -1,7 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCompteStore } from '@/stores/compteStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfigurationStore } from '@/stores/configurationStore';
 import Tooltip from '@/components/ui/Tooltip';
 import { formatMontant } from '@/lib/utils';
 
@@ -80,6 +81,7 @@ const TYPE_OPTIONS = [
 export default function CompteForm({ clientId, onClose, onSuccess }: Props) {
   const { createCompte } = useCompteStore();
   const { utilisateur } = useAuthStore();
+  const { configs, fetchConfigs } = useConfigurationStore();
   const [form, setForm] = useState({
     clientId: clientId || '',
     agenceId: utilisateur?.agenceId || '',
@@ -92,6 +94,13 @@ export default function CompteForm({ clientId, onClose, onSuccess }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => { if (configs.length === 0) fetchConfigs(); }, []);
+
+  const getConf = (cle: string) => parseFloat(configs.find(c => c.cle === cle)?.valeur || '0');
+  const soldeMinInstitution = getConf('SOLDE_MINIMUM_OUVERTURE');
+  const fraisOuverture      = getConf('FRAIS_OUVERTURE_COMPTE');
+  const minimumRequis       = soldeMinInstitution + fraisOuverture;
+
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -101,6 +110,13 @@ export default function CompteForm({ clientId, onClose, onSuccess }: Props) {
     const minimum = form.soldeMinimum ? parseFloat(form.soldeMinimum) : 0;
     if (minimum > initial) {
       setError('Le solde minimum ne peut pas dépasser le solde initial');
+      return;
+    }
+    if (minimumRequis > 0 && initial < minimumRequis) {
+      const detail = fraisOuverture > 0
+        ? ` (minimum ${soldeMinInstitution} + frais ${fraisOuverture} ${form.devise})`
+        : ` (minimum institutionnel : ${soldeMinInstitution} ${form.devise})`;
+      setError(`Solde d'ouverture insuffisant${detail}`);
       return;
     }
     setLoading(true);
@@ -230,9 +246,15 @@ export default function CompteForm({ clientId, onClose, onSuccess }: Props) {
                 </Tooltip>
               </div>
               <div className="relative">
-                <input type="number" min="0" step="0.01" value={form.soldeInitial} onChange={(e) => set('soldeInitial', e.target.value)} className="input pr-14" placeholder="0.00" />
+                <input type="number" min="0" step="0.01" value={form.soldeInitial} onChange={(e) => set('soldeInitial', e.target.value)} className="input" style={{ paddingRight: '3.5rem' }} placeholder="0.00" />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#f0f2f9', color: '#4a5578' }}>{form.devise}</span>
               </div>
+              {minimumRequis > 0 && (
+                <p className="text-xs mt-1" style={{ color: form.soldeInitial && parseFloat(form.soldeInitial) < minimumRequis ? '#b91c1c' : '#8b94b0' }}>
+                  Minimum requis : <strong>{minimumRequis.toLocaleString('fr-HT')} {form.devise}</strong>
+                  {fraisOuverture > 0 && ` (dont ${fraisOuverture.toLocaleString('fr-HT')} ${form.devise} de frais d'ouverture)`}
+                </p>
+              )}
             </div>
             <div>
               <div className="flex items-center gap-1.5 mb-1.5">
@@ -245,7 +267,7 @@ export default function CompteForm({ clientId, onClose, onSuccess }: Props) {
                 </Tooltip>
               </div>
               <div className="relative">
-                <input type="number" min="0" step="0.01" value={form.soldeMinimum} onChange={(e) => set('soldeMinimum', e.target.value)} className="input pr-14" placeholder="0.00" />
+                <input type="number" min="0" step="0.01" value={form.soldeMinimum} onChange={(e) => set('soldeMinimum', e.target.value)} className="input" style={{ paddingRight: '3.5rem' }} placeholder="0.00" />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#f0f2f9', color: '#4a5578' }}>{form.devise}</span>
               </div>
               {form.soldeMinimum && form.soldeInitial && parseFloat(form.soldeMinimum) > parseFloat(form.soldeInitial) && (

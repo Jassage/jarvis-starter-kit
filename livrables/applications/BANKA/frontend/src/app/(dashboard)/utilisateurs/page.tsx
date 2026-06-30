@@ -278,7 +278,7 @@ export default function UtilisateursPage() {
               <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2"/>
               <path d="M21 21l-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
             </svg>
-            <input type="text" placeholder="Rechercher par nom ou email..." value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-10" />
+            <input type="text" placeholder="Rechercher par nom ou email..." value={search} onChange={(e) => setSearch(e.target.value)} className="input" style={{ paddingLeft: '2.5rem' }} />
           </div>
           <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="input max-w-[200px]">
             <option value="">Tous les rôles</option>

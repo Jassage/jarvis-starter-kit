@@ -1,8 +1,10 @@
 import prisma from '../utils/prisma';
-import { generateNumeroCompte } from '../utils/reference';
+import { generateNumeroCompte, generateReferenceTransaction } from '../utils/reference';
 import { AppError } from '../types';
 import { TypeCompte, Devise, StatutCompte } from '@prisma/client';
 import { createAuditLog } from '../utils/audit';
+import { getConfig } from './configuration.service';
+import { creerEcritureAuto } from './compta.service';
 
 export async function listComptes(opts: {
   clientId?: string;
@@ -79,24 +81,77 @@ export async function createCompte(data: {
   const agence = await prisma.agence.findUnique({ where: { id: agenceId } });
   if (!agence) throw new AppError(404, 'Agence introuvable');
 
+  // Lire les règles d'ouverture depuis la configuration
+  const [soldeMinConfig, fraisConfig] = await Promise.all([
+    getConfig('SOLDE_MINIMUM_OUVERTURE'),
+    getConfig('FRAIS_OUVERTURE_COMPTE'),
+  ]);
+  const soldeMin = parseFloat(soldeMinConfig || '0');
+  const fraisOuverture = parseFloat(fraisConfig || '0');
+
+  // Le dépôt initial doit couvrir le minimum requis + les frais d'ouverture
+  const minimumRequis = soldeMin + fraisOuverture;
+  if (minimumRequis > 0 && soldeInitial < minimumRequis) {
+    const details = fraisOuverture > 0
+      ? `minimum requis ${soldeMin} ${devise} + frais d'ouverture ${fraisOuverture} ${devise} = ${minimumRequis} ${devise}`
+      : `minimum requis ${soldeMin} ${devise}`;
+    throw new AppError(400, `Solde d'ouverture insuffisant. ${details}`);
+  }
+
   const numeroCompte = await generateNumeroCompte(agence.code, type, devise);
 
-  const compte = await prisma.compte.create({
-    data: {
-      numeroCompte,
-      clientId,
-      agenceId,
-      type,
-      devise,
-      solde: soldeInitial,
-      ...rest,
-    },
-    include: {
-      client: { select: { id: true, numeroClient: true, nom: true, prenom: true, raisonSociale: true } },
-      agence: { select: { id: true, code: true, nom: true } },
-    },
+  const compte = await prisma.$transaction(async (tx) => {
+    const created = await tx.compte.create({
+      data: {
+        numeroCompte,
+        clientId,
+        agenceId,
+        type,
+        devise,
+        solde: soldeInitial,
+        ...rest,
+      },
+      include: {
+        client: { select: { id: true, numeroClient: true, nom: true, prenom: true, raisonSociale: true } },
+        agence: { select: { id: true, code: true, nom: true } },
+      },
+    });
+
+    // Prélever les frais d'ouverture si configurés
+    if (fraisOuverture > 0) {
+      const reference = await generateReferenceTransaction('FRAIS');
+      const libelle = `Frais d'ouverture de compte — ${created.numeroCompte}`;
+      const txFrais = await tx.transaction.create({
+        data: {
+          reference,
+          type: 'FRAIS',
+          montant: fraisOuverture,
+          devise: devise as any,
+          soldeAvant: soldeInitial,
+          soldeApres: soldeInitial - fraisOuverture,
+          motif: libelle,
+          statut: 'VALIDEE',
+          compteDebitId: created.id,
+          creeParId: userId || 'SYSTEM',
+          valideParId: userId || 'SYSTEM',
+        } as any,
+      });
+      await tx.compte.update({ where: { id: created.id }, data: { solde: { decrement: fraisOuverture } } });
+      await creerEcritureAuto(tx, {
+        debitNumero:  '2600',
+        creditNumero: '7020',
+        montant:      fraisOuverture,
+        libelle,
+        date:         new Date(),
+        userId:       userId || 'SYSTEM',
+        transactionId: txFrais.id,
+      });
+    }
+
+    return created;
   });
-  if (userId) await createAuditLog({ userId, table: 'comptes', action: 'CREATE', entiteId: compte.id, nouveau: { numeroCompte, type, devise, clientId } });
+
+  if (userId) await createAuditLog({ userId, table: 'comptes', action: 'CREATE', entiteId: compte.id, nouveau: { numeroCompte, type, devise, clientId, soldeInitial, fraisOuverture } });
   return compte;
 }
 

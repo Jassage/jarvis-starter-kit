@@ -76,3 +76,22 @@ export async function resultat(req: AuthRequest, res: Response, next: NextFuncti
     res.json(ok(result));
   } catch (e) { next(e); }
 }
+
+export async function listEchecs(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { resolu, page, limit } = req.query as Record<string, string>;
+    const result = await svc.listEchecsComptables({
+      resolu: resolu !== undefined ? resolu === 'true' : undefined,
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 30,
+    });
+    res.json(ok(result));
+  } catch (e) { next(e); }
+}
+
+export async function resoudreEchec(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const updated = await svc.resoudreEchecComptable(req.params.id, req.user!.userId);
+    res.json(ok(updated, 'Écriture marquée comme résolue'));
+  } catch (e) { next(e); }
+}

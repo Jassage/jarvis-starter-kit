@@ -238,8 +238,9 @@ model Utilisateur {
   avancesCrees         AvanceSalaire[]     @relation("AvanceCreePar")
   fichesPaieValidees   FichePaie[]         @relation("FicheValide")
   elementsVariablesCrees ElementVariable[] @relation("ElementVariableCreePar")
-  pointagesCrees         PointageEmploye[] @relation("PointageCreePar")
+  pointagesCrees         PointageEmploye[]    @relation("PointageCreePar")
   employe                Employe?
+  passwordResetTokens    PasswordResetToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -247,6 +248,20 @@ model Utilisateur {
   @@index([agenceId])
   @@index([role, actif])
   @@map("utilisateurs")
+}
+
+model PasswordResetToken {
+  id            String      @id @default(cuid())
+  token         String      @unique
+  utilisateurId String
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id], onDelete: Cascade)
+  expiresAt     DateTime
+  used          Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  @@index([utilisateurId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
 
 model Agence {
@@ -361,7 +376,6 @@ model SessionCaisse {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([agenceId, date, devise])
   @@index([agenceId, statut])
   @@map("sessions_caisse")
 }
@@ -781,6 +795,68 @@ model ElementVariable {
   @@index([periode])
   @@index([employeId, periode])
   @@map("elements_variables")
+}
+
+// Trace les écritures comptables qui ont échoué sans bloquer l'opération bancaire.
+// Permet la réconciliation manuelle et l'alerte aux comptables.
+model EcritureEchec {
+  id            String    @id @default(cuid())
+  debitNumero   String
+  creditNumero  String
+  montant       Decimal   @db.Decimal(15, 2)
+  libelle       String
+  erreur        String
+  transactionId String?
+  userId        String
+  resolu        Boolean   @default(false)
+  resoluAt      DateTime?
+  resoluParId   String?
+  createdAt     DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([resolu])
+  @@map("ecritures_echec")
+}
+
+model TauxChange {
+  id          String   @id @default(cuid())
+  devise      String   // "USD", "EUR", etc.
+  tauxAchat   Decimal  @db.Decimal(10, 4)
+  tauxVente   Decimal  @db.Decimal(10, 4)
+  actif       Boolean  @default(true)
+  creeParId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([devise, actif])
+  @@map("taux_change")
+}
+
+enum TypeAlerteAML {
+  SEUIL_DECLARE       // Transaction dépassant le seuil réglementaire
+  STRUCTURATION       // Plusieurs transactions sous le seuil en 24h (smurfing)
+  MANDATAIRE_BLACKLIST
+  VELOCITE_ELEVEE     // Nombre de transactions anormal sur courte période
+}
+
+model AlerteAML {
+  id            String        @id @default(cuid())
+  type          TypeAlerteAML
+  compteId      String?
+  clientId      String?
+  transactionId String?
+  montantTotal  Decimal?      @db.Decimal(15, 2)
+  details       String
+  statut        String        @default("NOUVELLE")
+  traitePar     String?
+  traiteAt      DateTime?
+  createdAt     DateTime      @default(now())
+
+  @@index([statut])
+  @@index([compteId])
+  @@index([clientId])
+  @@index([createdAt])
+  @@map("alertes_aml")
 }
 
 model AuditLog {

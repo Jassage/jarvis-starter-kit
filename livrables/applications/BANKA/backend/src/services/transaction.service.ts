@@ -7,6 +7,9 @@ import { createAuditLog } from '../utils/audit';
 import { creerEcritureAuto } from './compta.service';
 import { getConfig } from './configuration.service';
 import { withRetry } from '../utils/withRetry';
+import { preleverFraisVirement } from './frais.service';
+import { analyserTransactionAML } from './aml.service';
+import { broadcastSSE } from './sse.service';
 
 const SEUIL_HTG = parseFloat(process.env.SEUIL_VALIDATION_HTG || '50000');
 const SEUIL_USD = parseFloat(process.env.SEUIL_VALIDATION_USD || '500');
@@ -30,19 +33,22 @@ export async function effectuerDepot(data: {
   motif?: string;
   sessionId?: string;
   userId: string;
+  agenceId?: string | null;
 }) {
-  const { compteId, montant, motif, userId } = data;
+  const { compteId, montant, motif, userId, agenceId } = data;
   if (montant <= 0) throw new AppError(400, 'Le montant doit être positif');
 
   const comptePre = await prisma.compte.findUnique({ where: { id: compteId } });
   if (!comptePre) throw new AppError(404, 'Compte introuvable');
   if (comptePre.statut !== 'ACTIF') throw new AppError(400, 'Compte inactif ou suspendu');
+  // Un agent lié à une agence ne peut opérer que sur les comptes de cette agence
+  if (agenceId && comptePre.agenceId !== agenceId) throw new AppError(403, 'Ce compte n\'appartient pas à votre agence');
 
   const sessionId = await resolveSessionId(comptePre.agenceId, comptePre.devise, data.sessionId);
   const reference = await generateReferenceTransaction('DEPOT');
   const needsValidation = seuilDepasse(montant, comptePre.devise);
 
-  return withRetry(() => prisma.$transaction(async (tx) => {
+  const result = await withRetry(() => prisma.$transaction(async (tx) => {
     // B1: Lire le solde À L'INTÉRIEUR de la transaction pour snapshot cohérent
     const compteInTx = await tx.compte.findUnique({ where: { id: compteId }, select: { solde: true } });
     const soldeAvant = Number(compteInTx!.solde);
@@ -84,6 +90,10 @@ export async function effectuerDepot(data: {
     await createAuditLog({ userId, table: 'transactions', action: 'DEPOT', entiteId: transaction.id, nouveau: { montant, compteId, statut: transaction.statut } });
     return transaction;
   }));
+  const eventType = needsValidation ? 'TRANSACTION_EN_ATTENTE' : 'TRANSACTION_VALIDEE';
+  broadcastSSE({ type: eventType, agenceId: comptePre.agenceId, data: { id: result.id, type: 'DEPOT', montant, devise: String(comptePre.devise) } });
+  if (!needsValidation) analyserTransactionAML({ compteId, clientId: comptePre.clientId, transactionId: result.id, montant, devise: String(comptePre.devise) }).catch(() => {});
+  return result;
 }
 
 export async function effectuerRetrait(data: {
@@ -92,18 +102,42 @@ export async function effectuerRetrait(data: {
   motif?: string;
   sessionId?: string;
   userId: string;
+  agenceId?: string | null;
 }) {
-  const { compteId, montant, motif, userId } = data;
+  const { compteId, montant, motif, userId, agenceId } = data;
   if (montant <= 0) throw new AppError(400, 'Le montant doit être positif');
 
   const comptePre = await prisma.compte.findUnique({ where: { id: compteId } });
   if (!comptePre) throw new AppError(404, 'Compte introuvable');
   if (comptePre.statut !== 'ACTIF') throw new AppError(400, 'Compte inactif ou suspendu');
+  if (agenceId && comptePre.agenceId !== agenceId) throw new AppError(403, 'Ce compte n\'appartient pas à votre agence');
 
-  // B6: Vérification du plafond de retrait journalier depuis la configuration
+  // Blocage des retraits sur compte à terme avant la date d'échéance
+  if (comptePre.type === 'TERME' && comptePre.dateEcheance && comptePre.dateEcheance > new Date()) {
+    const echeance = comptePre.dateEcheance.toLocaleDateString('fr-HT', { year: 'numeric', month: 'long', day: 'numeric' });
+    throw new AppError(400, `Compte à terme : retrait impossible avant l'échéance du ${echeance}. Contactez votre conseiller pour un retrait anticipé.`);
+  }
+
+  // Vérification du plafond de retrait journalier cumulatif (somme de tous les retraits du jour)
   const plafond = parseFloat(await getConfig('PLAFOND_RETRAIT_JOURNALIER') || '0');
-  if (plafond > 0 && montant > plafond) {
-    throw new AppError(400, `Ce retrait (${montant} ${comptePre.devise}) dépasse le plafond journalier autorisé (${plafond} ${comptePre.devise})`);
+  if (plafond > 0) {
+    const debutJour = new Date();
+    debutJour.setHours(0, 0, 0, 0);
+    const finJour = new Date();
+    finJour.setHours(23, 59, 59, 999);
+    const totalRetraitsJour = await prisma.transaction.aggregate({
+      where: {
+        compteDebitId: compteId,
+        type: 'RETRAIT',
+        statut: { in: ['VALIDEE', 'EN_ATTENTE'] },
+        createdAt: { gte: debutJour, lte: finJour },
+      },
+      _sum: { montant: true },
+    });
+    const dejaRetire = Number(totalRetraitsJour._sum.montant || 0);
+    if (dejaRetire + montant > plafond) {
+      throw new AppError(400, `Plafond journalier atteint. Déjà retiré : ${dejaRetire} ${comptePre.devise}, plafond : ${plafond} ${comptePre.devise}`);
+    }
   }
 
   const sessionId = await resolveSessionId(comptePre.agenceId, comptePre.devise, data.sessionId);
@@ -111,29 +145,29 @@ export async function effectuerRetrait(data: {
   const needsValidation = seuilDepasse(montant, comptePre.devise);
   const soldeMinimum = Number(comptePre.soldeMinimum);
 
-  return withRetry(() => prisma.$transaction(async (tx) => {
+  const retraitResult = await withRetry(() => prisma.$transaction(async (tx) => {
+    // Lire le solde courant À L'INTÉRIEUR de la transaction pour snapshot cohérent
+    const compteInTx = await tx.compte.findUnique({ where: { id: compteId }, select: { solde: true } });
+    const soldeAvant = Number(compteInTx!.solde);
+    const soldeApres = soldeAvant - montant;
+
     if (!needsValidation) {
       // B1: Vérification du solde + décrémentation atomique en une seule requête SQL
       // WHERE solde >= soldeMinimum + montant garantit qu'aucune race condition n'est possible
-      const result = await tx.compte.updateMany({
+      const upd = await tx.compte.updateMany({
         where: { id: compteId, solde: { gte: soldeMinimum + montant } },
         data: { solde: { decrement: montant } },
       });
-      if (result.count === 0) {
-        const current = await tx.compte.findUnique({ where: { id: compteId }, select: { solde: true } });
-        const available = Number(current!.solde) - soldeMinimum;
+      if (upd.count === 0) {
+        const available = soldeAvant - soldeMinimum;
         throw new AppError(400, `Solde insuffisant. Solde disponible : ${available} ${comptePre.devise}`);
       }
     } else {
       // Transaction en attente : vérifier le solde sans décrémenter
-      const current = await tx.compte.findUnique({ where: { id: compteId }, select: { solde: true } });
-      if (Number(current!.solde) - montant < soldeMinimum) {
-        throw new AppError(400, `Solde insuffisant. Solde disponible : ${Number(current!.solde) - soldeMinimum} ${comptePre.devise}`);
+      if (soldeAvant - montant < soldeMinimum) {
+        throw new AppError(400, `Solde insuffisant. Solde disponible : ${soldeAvant - soldeMinimum} ${comptePre.devise}`);
       }
     }
-
-    const soldeAvant = Number(comptePre.solde);
-    const soldeApres = soldeAvant - montant;
 
     const transaction = await tx.transaction.create({
       data: {
@@ -166,6 +200,10 @@ export async function effectuerRetrait(data: {
     await createAuditLog({ userId, table: 'transactions', action: 'RETRAIT', entiteId: transaction.id, nouveau: { montant, compteId, statut: transaction.statut } });
     return transaction;
   }));
+  const retraitEventType = needsValidation ? 'TRANSACTION_EN_ATTENTE' : 'TRANSACTION_VALIDEE';
+  broadcastSSE({ type: retraitEventType, agenceId: comptePre.agenceId, data: { id: retraitResult.id, type: 'RETRAIT', montant, devise: String(comptePre.devise) } });
+  if (!needsValidation) analyserTransactionAML({ compteId, clientId: comptePre.clientId, transactionId: retraitResult.id, montant, devise: String(comptePre.devise) }).catch(() => {});
+  return retraitResult;
 }
 
 export async function effectuerVirement(data: {
@@ -175,8 +213,9 @@ export async function effectuerVirement(data: {
   motif?: string;
   sessionId?: string;
   userId: string;
+  agenceId?: string | null;
 }) {
-  const { compteSourceId, compteDestinationId, montant, motif, userId } = data;
+  const { compteSourceId, compteDestinationId, montant, motif, userId, agenceId } = data;
   if (montant <= 0) throw new AppError(400, 'Le montant doit être positif');
   if (compteSourceId === compteDestinationId) throw new AppError(400, 'Les comptes source et destination doivent être différents');
 
@@ -190,6 +229,8 @@ export async function effectuerVirement(data: {
   if (source.statut !== 'ACTIF') throw new AppError(400, 'Compte source inactif');
   if (destination.statut !== 'ACTIF') throw new AppError(400, 'Compte destination inactif');
   if (source.devise !== destination.devise) throw new AppError(400, 'Virement entre devises différentes non supporté');
+  // Un agent d'agence ne peut débiter que les comptes de son agence (le compte destination peut être externe)
+  if (agenceId && source.agenceId !== agenceId) throw new AppError(403, 'Le compte source n\'appartient pas à votre agence');
 
   const soldeSourceAvant = Number(source.solde);
   const soldeSourceMin = Number(source.soldeMinimum);
@@ -197,7 +238,7 @@ export async function effectuerVirement(data: {
   const needsValidation = seuilDepasse(montant, source.devise);
   const sessionId = await resolveSessionId(source.agenceId, source.devise, data.sessionId);
 
-  return withRetry(() => prisma.$transaction(async (tx) => {
+  const virementResult = await withRetry(() => prisma.$transaction(async (tx) => {
     // B1: Lire les soldes À L'INTÉRIEUR de la transaction pour snapshot cohérent
     const [sourceInTx, destInTx] = await Promise.all([
       tx.compte.findUnique({ where: { id: compteSourceId }, select: { solde: true, soldeMinimum: true } }),
@@ -218,6 +259,7 @@ export async function effectuerVirement(data: {
         throw new AppError(400, `Solde insuffisant sur le compte source. Disponible : ${available} ${source.devise}`);
       }
       await tx.compte.update({ where: { id: compteDestinationId }, data: { solde: { increment: montant } } });
+      await preleverFraisVirement({ compteSourceId, montant, devise: source.devise, userId, tx });
     } else {
       // Transaction en attente : vérifier le solde sans modifier
       if (soldeSourceAvant - montant < soldeSourceMin) {
@@ -262,21 +304,30 @@ export async function effectuerVirement(data: {
     await createAuditLog({ userId, table: 'transactions', action: 'VIREMENT', entiteId: txDebit.id, nouveau: { montant, compteSourceId, compteDestinationId, statut: txDebit.statut } });
     return txDebit;
   }));
+  const virEventType = needsValidation ? 'TRANSACTION_EN_ATTENTE' : 'TRANSACTION_VALIDEE';
+  broadcastSSE({ type: virEventType, agenceId: source.agenceId, data: { id: virementResult.id, type: 'VIREMENT', montant, devise: String(source.devise), compteSourceId, compteDestinationId } });
+  if (!needsValidation) {
+    analyserTransactionAML({ compteId: compteSourceId, clientId: source.clientId, transactionId: virementResult.id, montant, devise: String(source.devise), compteDestId: compteDestinationId }).catch(() => {});
+  }
+  return virementResult;
 }
 
 export async function validerTransaction(id: string, userId: string) {
-  const tx = await prisma.transaction.findUnique({
-    where: { id },
-    include: { compteDebit: true, compteCredit: true },
-  });
-  if (!tx) throw new AppError(404, 'Transaction introuvable');
-  if (tx.statut !== 'EN_ATTENTE') throw new AppError(400, 'Transaction déjà traitée');
-
   return withRetry(() => prisma.$transaction(async (p) => {
-    const updated = await p.transaction.update({
+    // Lire la transaction À L'INTÉRIEUR de la tx pour snapshot cohérent
+    const tx = await p.transaction.findUnique({
       where: { id },
+      include: { compteDebit: true, compteCredit: true },
+    });
+    if (!tx) throw new AppError(404, 'Transaction introuvable');
+
+    // Verrou atomique : EN_ATTENTE → VALIDEE en une seule instruction SQL.
+    // Si deux superviseurs s'exécutent en parallèle, un seul obtiendra count === 1.
+    const guard = await p.transaction.updateMany({
+      where: { id, statut: 'EN_ATTENTE' },
       data: { statut: 'VALIDEE', valideParId: userId },
     });
+    if (guard.count === 0) throw new AppError(409, 'Transaction déjà traitée');
 
     const montant = Number(tx.montant);
 
@@ -292,16 +343,13 @@ export async function validerTransaction(id: string, userId: string) {
         transactionId: id,
       });
     } else if (tx.type === 'RETRAIT' && tx.compteDebitId) {
-      // B1: Vérification atomique du solde au moment de la validation
       const compte = await p.compte.findUnique({ where: { id: tx.compteDebitId }, select: { soldeMinimum: true } });
       const soldeMinimum = Number(compte?.soldeMinimum || 0);
       const result = await p.compte.updateMany({
         where: { id: tx.compteDebitId, solde: { gte: soldeMinimum + montant } },
         data: { solde: { decrement: montant } },
       });
-      if (result.count === 0) {
-        throw new AppError(400, 'Solde insuffisant pour valider ce retrait');
-      }
+      if (result.count === 0) throw new AppError(400, 'Solde insuffisant pour valider ce retrait');
       await creerEcritureAuto(p, {
         debitNumero:  '2600',
         creditNumero: '5700',
@@ -312,43 +360,59 @@ export async function validerTransaction(id: string, userId: string) {
         transactionId: id,
       });
     } else if (tx.type === 'VIREMENT_DEBIT' && tx.compteDebitId && tx.compteCreditId) {
-      // B4: Seul le VIREMENT_DEBIT modifie les soldes et valide la transaction jumelle
-      // Atomic check + decrement sur le compte source
       const compteSource = await p.compte.findUnique({ where: { id: tx.compteDebitId }, select: { soldeMinimum: true } });
       const soldeMinimum = Number(compteSource?.soldeMinimum || 0);
       const result = await p.compte.updateMany({
         where: { id: tx.compteDebitId, solde: { gte: soldeMinimum + montant } },
         data: { solde: { decrement: montant } },
       });
-      if (result.count === 0) {
-        throw new AppError(400, 'Solde insuffisant pour valider ce virement');
-      }
+      if (result.count === 0) throw new AppError(400, 'Solde insuffisant pour valider ce virement');
       await p.compte.update({ where: { id: tx.compteCreditId }, data: { solde: { increment: montant } } });
-      // Auto-valider la transaction crédit jumelle (elle ne modifie pas les soldes elle-même)
       await p.transaction.updateMany({
         where: { reference: `${tx.reference}-CR`, statut: 'EN_ATTENTE' },
         data: { statut: 'VALIDEE', valideParId: userId },
       });
     } else if (tx.type === 'VIREMENT_CREDIT') {
-      // B4: Le CREDIT seul ne doit pas modifier les soldes — valider le VIREMENT_DEBIT correspondant
       throw new AppError(400, 'Veuillez valider la transaction de débit correspondante pour traiter ce virement');
     }
 
     await createAuditLog({ userId, table: 'transactions', action: 'VALIDATION', entiteId: id, nouveau: { statut: 'VALIDEE', valideParId: userId } });
-    return updated;
+    return tx;
   }));
 }
 
-export async function rejeterTransaction(id: string, userId: string, motif?: string) {
-  const tx = await prisma.transaction.findUnique({ where: { id } });
-  if (!tx) throw new AppError(404, 'Transaction introuvable');
-  if (tx.statut !== 'EN_ATTENTE') throw new AppError(400, 'Transaction déjà traitée');
+export async function validerTransactionWithSSE(id: string, userId: string) {
+  const result = await validerTransaction(id, userId);
+  // Récupérer l'agenceId depuis le compte débité ou crédité pour router la notification SSE
+  const agenceId = result.compteDebit?.agenceId ?? result.compteCredit?.agenceId ?? null;
+  broadcastSSE({ type: 'TRANSACTION_VALIDEE', agenceId, data: { id, type: result.type, montant: Number(result.montant) } });
+  return result;
+}
 
-  const result = await prisma.transaction.update({
-    where: { id },
-    data: { statut: 'REJETEE', valideParId: userId, motif: motif || tx.motif },
-  });
+export async function rejeterTransaction(id: string, userId: string, motif?: string) {
+  const result = await withRetry(() => prisma.$transaction(async (p) => {
+    const tx = await p.transaction.findUnique({ where: { id } });
+    if (!tx) throw new AppError(404, 'Transaction introuvable');
+
+    const guard = await p.transaction.updateMany({
+      where: { id, statut: 'EN_ATTENTE' },
+      data: { statut: 'REJETEE', valideParId: userId, motif: motif || tx.motif },
+    });
+    if (guard.count === 0) throw new AppError(400, 'Transaction déjà traitée');
+
+    // Rejeter aussi le crédit jumeau pour éviter de laisser un virement en suspens
+    if (tx.type === 'VIREMENT_DEBIT') {
+      await p.transaction.updateMany({
+        where: { reference: `${tx.reference}-CR`, statut: 'EN_ATTENTE' },
+        data: { statut: 'REJETEE', valideParId: userId, motif: motif || 'Rejet du débit correspondant' },
+      });
+    }
+
+    return tx;
+  }));
+
   await createAuditLog({ userId, table: 'transactions', action: 'REJET', entiteId: id, nouveau: { statut: 'REJETEE', motif } });
+  broadcastSSE({ type: 'TRANSACTION_REJETEE', data: { id, type: result.type, motif } });
   return result;
 }
 

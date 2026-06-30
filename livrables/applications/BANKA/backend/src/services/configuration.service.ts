@@ -17,6 +17,14 @@ export const DEFAULTS: Record<string, { valeur: string; description: string }> =
   SOLDE_MINIMUM_OUVERTURE:     { valeur: '500',    description: 'Solde minimum requis à l\'ouverture d\'un compte (HTG)' },
   PLAFOND_RETRAIT_JOURNALIER:  { valeur: '100000', description: 'Plafond de retrait journalier par compte (HTG)' },
   DEVISE_PRINCIPALE:           { valeur: 'HTG',    description: 'Devise principale de l\'institution' },
+  // Frais
+  FRAIS_OUVERTURE_COMPTE:      { valeur: '0',      description: 'Frais fixes prélevés à l\'ouverture d\'un compte en HTG (0 = désactivé)' },
+  FRAIS_TENUE_COMPTE_MENSUEL:  { valeur: '0',      description: 'Frais de tenue de compte mensuel en HTG (0 = désactivé)' },
+  FRAIS_DOSSIER_PRET_TAUX:     { valeur: '0',      description: 'Frais de dossier prêt en % du montant décaissé (0 = désactivé, ex : 2 pour 2%)' },
+  FRAIS_VIREMENT_TAUX:         { valeur: '0',      description: 'Frais de virement en % du montant (0 = désactivé, ex : 0.5 pour 0,5%)' },
+  // Seuils AML (BRH)
+  AML_SEUIL_HTG:               { valeur: '500000', description: 'Seuil de déclaration obligatoire BRH en HTG' },
+  AML_SEUIL_USD:               { valeur: '10000',  description: 'Seuil de déclaration obligatoire BRH en USD' },
 };
 
 export async function getAllConfigs() {

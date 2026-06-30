@@ -36,37 +36,37 @@ function nbJoursOuvres(debut: Date, fin: Date): number {
 // ─── Postes ───────────────────────────────────────────────────────────────────
 
 export async function listPostes() {
-  return (prisma as any).poste.findMany({
+  return prisma.poste.findMany({
     orderBy: { intitule: 'asc' },
     include: { _count: { select: { employes: true } } },
   });
 }
 
 export async function createPoste(data: { code: string; intitule: string; departement?: string; salaireMin?: number; salaireMax?: number }) {
-  const existing = await (prisma as any).poste.findUnique({ where: { code: data.code } });
+  const existing = await prisma.poste.findUnique({ where: { code: data.code } });
   if (existing) throw new AppError(400, `Le code ${data.code} existe déjà`);
   if (data.salaireMin !== undefined && data.salaireMax !== undefined && data.salaireMin > data.salaireMax) {
     throw new AppError(400, 'Le salaire minimum ne peut pas dépasser le salaire maximum');
   }
-  return (prisma as any).poste.create({ data });
+  return prisma.poste.create({ data });
 }
 
 export async function updatePoste(id: string, data: { intitule?: string; departement?: string; salaireMin?: number; salaireMax?: number; actif?: boolean }) {
-  const poste = await (prisma as any).poste.findUnique({ where: { id } });
+  const poste = await prisma.poste.findUnique({ where: { id } });
   if (!poste) throw new AppError(404, 'Poste introuvable');
   const min = data.salaireMin ?? poste.salaireMin;
   const max = data.salaireMax ?? poste.salaireMax;
   if (min !== null && max !== null && min !== undefined && max !== undefined && min > max) {
     throw new AppError(400, 'Le salaire minimum ne peut pas dépasser le salaire maximum');
   }
-  return (prisma as any).poste.update({ where: { id }, data, include: { _count: { select: { employes: true } } } });
+  return prisma.poste.update({ where: { id }, data, include: { _count: { select: { employes: true } } } });
 }
 
 export async function deletePoste(id: string) {
-  const poste = await (prisma as any).poste.findUnique({ where: { id }, include: { _count: { select: { employes: true } } } });
+  const poste = await prisma.poste.findUnique({ where: { id }, include: { _count: { select: { employes: true } } } });
   if (!poste) throw new AppError(404, 'Poste introuvable');
   if (poste._count.employes > 0) throw new AppError(400, `Ce poste est assigné à ${poste._count.employes} employé(s) — désactivez-le plutôt`);
-  return (prisma as any).poste.delete({ where: { id } });
+  return prisma.poste.delete({ where: { id } });
 }
 
 // ─── Employés ─────────────────────────────────────────────────────────────────
@@ -85,8 +85,8 @@ export async function listEmployes(opts: { search?: string; statut?: string; age
   ];
   const now = new Date();
   const [total, items] = await Promise.all([
-    (prisma as any).employe.count({ where }),
-    (prisma as any).employe.findMany({
+    prisma.employe.count({ where }),
+    prisma.employe.findMany({
       where, skip, take: limit, orderBy: { nom: 'asc' },
       include: {
         poste: { select: { id: true, intitule: true } },
@@ -107,17 +107,17 @@ export async function listEmployes(opts: { search?: string; statut?: string; age
 export async function createEmploye(data: { nom: string; prenom: string; posteId: string; dateEmbauche: string; salaireBrut: number; departement?: string; telephone?: string; email?: string; agenceId?: string }, userId: string) {
   if (!data.salaireBrut || data.salaireBrut <= 0) throw new AppError(400, 'Le salaire brut doit être positif');
   if (!data.dateEmbauche) throw new AppError(400, "Date d'embauche requise");
-  const poste = await (prisma as any).poste.findUnique({ where: { id: data.posteId } });
+  const poste = await prisma.poste.findUnique({ where: { id: data.posteId } });
   if (!poste) throw new AppError(404, 'Poste introuvable');
-  if (poste.salaireMin && data.salaireBrut < poste.salaireMin) throw new AppError(400, `Salaire inférieur au minimum du poste (${poste.salaireMin.toLocaleString()} HTG)`);
-  if (poste.salaireMax && data.salaireBrut > poste.salaireMax) throw new AppError(400, `Salaire supérieur au maximum du poste (${poste.salaireMax.toLocaleString()} HTG)`);
+  if (poste.salaireMin && data.salaireBrut < Number(poste.salaireMin)) throw new AppError(400, `Salaire inférieur au minimum du poste (${Number(poste.salaireMin).toLocaleString()} HTG)`);
+  if (poste.salaireMax && data.salaireBrut > Number(poste.salaireMax)) throw new AppError(400, `Salaire supérieur au maximum du poste (${Number(poste.salaireMax).toLocaleString()} HTG)`);
   if (data.agenceId) {
     const agence = await prisma.agence.findUnique({ where: { id: data.agenceId } });
     if (!agence) throw new AppError(404, 'Agence introuvable');
     if (!agence.actif) throw new AppError(400, 'Cette agence est inactive');
   }
   const matricule = genMatricule();
-  const employe = await (prisma as any).employe.create({
+  const employe = await prisma.employe.create({
     data: { ...data, matricule, dateEmbauche: new Date(data.dateEmbauche) },
     include: { poste: { select: { intitule: true } }, agence: { select: { nom: true, code: true } } },
   });
@@ -127,22 +127,22 @@ export async function createEmploye(data: { nom: string; prenom: string; posteId
 
 export async function updateEmploye(id: string, data: { statut?: string; salaireBrut?: number; posteId?: string; departement?: string; telephone?: string; email?: string; adresse?: string; compteId?: string; modeReglement?: string; biometricId?: number | null }, userId: string) {
   if (data.salaireBrut !== undefined && data.salaireBrut <= 0) throw new AppError(400, 'Le salaire brut doit être positif');
-  const employe = await (prisma as any).employe.findUnique({ where: { id } });
+  const employe = await prisma.employe.findUnique({ where: { id } });
   if (!employe) throw new AppError(404, 'Employé introuvable');
   if (data.posteId) {
-    const poste = await (prisma as any).poste.findUnique({ where: { id: data.posteId } });
+    const poste = await prisma.poste.findUnique({ where: { id: data.posteId } });
     if (!poste) throw new AppError(404, 'Poste introuvable');
     const salaire = data.salaireBrut ?? Number(employe.salaireBrut);
-    if (poste.salaireMin && salaire < poste.salaireMin) throw new AppError(400, `Salaire inférieur au minimum du poste (${poste.salaireMin.toLocaleString()} HTG)`);
-    if (poste.salaireMax && salaire > poste.salaireMax) throw new AppError(400, `Salaire supérieur au maximum du poste (${poste.salaireMax.toLocaleString()} HTG)`);
+    if (poste.salaireMin && salaire < Number(poste.salaireMin)) throw new AppError(400, `Salaire inférieur au minimum du poste (${Number(poste.salaireMin).toLocaleString()} HTG)`);
+    if (poste.salaireMax && salaire > Number(poste.salaireMax)) throw new AppError(400, `Salaire supérieur au maximum du poste (${Number(poste.salaireMax).toLocaleString()} HTG)`);
   }
-  const updated = await (prisma as any).employe.update({ where: { id }, data, include: { poste: { select: { intitule: true } } } });
+  const updated = await prisma.employe.update({ where: { id }, data: data as any, include: { poste: { select: { intitule: true } } } });
   await createAuditLog({ userId, table: 'employes', action: 'UPDATE', entiteId: id, ancien: { statut: employe.statut, salaireBrut: employe.salaireBrut }, nouveau: data });
   return updated;
 }
 
 export async function transfererEmploye(id: string, agenceId: string | null, userId: string) {
-  const employe = await (prisma as any).employe.findUnique({ where: { id }, include: { agence: { select: { nom: true } } } });
+  const employe = await prisma.employe.findUnique({ where: { id }, include: { agence: { select: { nom: true } } } });
   if (!employe) throw new AppError(404, 'Employé introuvable');
   if (agenceId) {
     const agence = await prisma.agence.findUnique({ where: { id: agenceId } });
@@ -150,7 +150,7 @@ export async function transfererEmploye(id: string, agenceId: string | null, use
     if (!agence.actif) throw new AppError(400, 'L\'agence de destination est inactive');
     if (employe.agenceId === agenceId) throw new AppError(400, 'L\'employé est déjà affecté à cette agence');
   }
-  const updated = await (prisma as any).employe.update({
+  const updated = await prisma.employe.update({
     where: { id },
     data: { agenceId },
     include: { poste: { select: { intitule: true } }, agence: { select: { nom: true, code: true } } },
@@ -168,7 +168,7 @@ export async function creerCompteSysteme(
   data: { email: string; motDePasse: string; role: string },
   userId: string
 ) {
-  const employe = await (prisma as any).employe.findUnique({ where: { id: employeId }, include: { utilisateur: true } });
+  const employe = await prisma.employe.findUnique({ where: { id: employeId }, include: { utilisateur: true } });
   if (!employe) throw new AppError(404, 'Employé introuvable');
   if (employe.utilisateurId) throw new AppError(400, 'Cet employé a déjà un compte système');
 
@@ -188,7 +188,7 @@ export async function creerCompteSysteme(
     },
   });
 
-  await (prisma as any).employe.update({
+  await prisma.employe.update({
     where: { id: employeId },
     data: { utilisateurId: utilisateur.id },
   });
@@ -202,37 +202,39 @@ export async function creerCompteSysteme(
 }
 
 export async function delierCompteSysteme(employeId: string, userId: string) {
-  const employe = await (prisma as any).employe.findUnique({ where: { id: employeId } });
+  const employe = await prisma.employe.findUnique({ where: { id: employeId } });
   if (!employe) throw new AppError(404, 'Employé introuvable');
   if (!employe.utilisateurId) throw new AppError(400, 'Aucun compte système lié');
-  await (prisma as any).employe.update({ where: { id: employeId }, data: { utilisateurId: null } });
+  await prisma.employe.update({ where: { id: employeId }, data: { utilisateurId: null } });
   await createAuditLog({ userId, table: 'employes', action: 'DELIER_COMPTE_SYSTEME', entiteId: employeId, nouveau: { ancien: employe.utilisateurId } });
 }
 
 // ─── Contrats ─────────────────────────────────────────────────────────────────
 
-export async function listContrats(opts: { employeId?: string; statut?: string; page?: number; limit?: number }) {
-  const { employeId, statut, page = 1, limit = 50 } = opts;
-  const skip = (page - 1) * limit;
-
-  // Auto-expiry: mark ACTIF contracts with past dateFin as EXPIRE
-  await (prisma as any).contrat.updateMany({
+// À appeler depuis un cron job ou l'endpoint /api/rh/contrats/expire — pas depuis une lecture
+export async function expirerContratsEchus() {
+  return prisma.contrat.updateMany({
     where: { statut: 'ACTIF', dateFin: { lt: new Date() } },
     data: { statut: 'EXPIRE' },
   });
+}
+
+export async function listContrats(opts: { employeId?: string; statut?: string; page?: number; limit?: number }) {
+  const { employeId, statut, page = 1, limit = 50 } = opts;
+  const skip = (page - 1) * limit;
 
   const where: any = {};
   if (employeId) where.employeId = employeId;
   if (statut) where.statut = statut;
   const [total, items] = await Promise.all([
-    (prisma as any).contrat.count({ where }),
-    (prisma as any).contrat.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' }, include: { employe: { select: { nom: true, prenom: true, matricule: true } } } }),
+    prisma.contrat.count({ where }),
+    prisma.contrat.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' }, include: { employe: { select: { nom: true, prenom: true, matricule: true } } } }),
   ]);
   return { items, total, page, limit, pages: Math.ceil(total / limit) };
 }
 
 export async function createContrat(data: { employeId: string; type: string; dateDebut: string; dateFin?: string; salaireBrut: number; notes?: string }, userId: string) {
-  const employe = await (prisma as any).employe.findUnique({ where: { id: data.employeId } });
+  const employe = await prisma.employe.findUnique({ where: { id: data.employeId } });
   if (!employe) throw new AppError(404, 'Employé introuvable');
   if (data.dateFin) {
     const fin = new Date(data.dateFin);
@@ -240,8 +242,8 @@ export async function createContrat(data: { employeId: string; type: string; dat
     if (fin <= debut) throw new AppError(400, 'La date de fin doit être postérieure à la date de début');
   }
   const reference = genRefContrat();
-  const contrat = await (prisma as any).contrat.create({
-    data: { ...data, reference, dateDebut: new Date(data.dateDebut), dateFin: data.dateFin ? new Date(data.dateFin) : undefined },
+  const contrat = await prisma.contrat.create({
+    data: { ...data, reference, dateDebut: new Date(data.dateDebut), dateFin: data.dateFin ? new Date(data.dateFin) : undefined } as any,
     include: { employe: { select: { nom: true, prenom: true, matricule: true } } },
   });
   await createAuditLog({ userId, table: 'contrats', action: 'CREATE', entiteId: contrat.id, nouveau: { reference, type: data.type } });
@@ -249,10 +251,10 @@ export async function createContrat(data: { employeId: string; type: string; dat
 }
 
 export async function resilierContrat(id: string, userId: string) {
-  const contrat = await (prisma as any).contrat.findUnique({ where: { id } });
+  const contrat = await prisma.contrat.findUnique({ where: { id } });
   if (!contrat) throw new AppError(404, 'Contrat introuvable');
   if (contrat.statut === 'RESILIE') throw new AppError(400, 'Contrat déjà résilié');
-  const updated = await (prisma as any).contrat.update({
+  const updated = await prisma.contrat.update({
     where: { id }, data: { statut: 'RESILIE' },
     include: { employe: { select: { nom: true, prenom: true, matricule: true } } },
   });
@@ -269,20 +271,20 @@ export async function listConges(opts: { employeId?: string; statut?: string; pa
   if (employeId) where.employeId = employeId;
   if (statut) where.statut = statut;
   const [total, items] = await Promise.all([
-    (prisma as any).conge.count({ where }),
-    (prisma as any).conge.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' }, include: { employe: { select: { nom: true, prenom: true, matricule: true } } } }),
+    prisma.conge.count({ where }),
+    prisma.conge.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' }, include: { employe: { select: { nom: true, prenom: true, matricule: true } } } }),
   ]);
   return { items, total, page, limit, pages: Math.ceil(total / limit) };
 }
 
 export async function createConge(data: { employeId: string; type: string; dateDebut: string; dateFin: string; motif?: string }, userId: string) {
-  const employe = await (prisma as any).employe.findUnique({ where: { id: data.employeId } });
+  const employe = await prisma.employe.findUnique({ where: { id: data.employeId } });
   if (!employe) throw new AppError(404, 'Employé introuvable');
   const debut = new Date(data.dateDebut);
   const fin = new Date(data.dateFin);
   if (fin < debut) throw new AppError(400, 'La date de fin doit être après la date de début');
 
-  const chevauchement = await (prisma as any).conge.findFirst({
+  const chevauchement = await prisma.conge.findFirst({
     where: {
       employeId: data.employeId,
       statut: { in: ['APPROUVE', 'EN_ATTENTE'] },
@@ -292,18 +294,18 @@ export async function createConge(data: { employeId: string; type: string; dateD
   });
   if (chevauchement) throw new AppError(400, `Cet employé a déjà un congé (${chevauchement.type}) sur cette période`);
   const nbJours = nbJoursOuvres(debut, fin);
-  const conge = await (prisma as any).conge.create({
-    data: { ...data, dateDebut: debut, dateFin: fin, nbJours },
+  const conge = await prisma.conge.create({
+    data: { ...data, dateDebut: debut, dateFin: fin, nbJours } as any,
     include: { employe: { select: { nom: true, prenom: true, matricule: true } } },
   });
   return conge;
 }
 
 export async function updateStatutConge(id: string, statut: string, userId: string) {
-  const conge = await (prisma as any).conge.findUnique({ where: { id } });
+  const conge = await prisma.conge.findUnique({ where: { id } });
   if (!conge) throw new AppError(404, 'Congé introuvable');
   if (!['APPROUVE', 'REFUSE', 'ANNULE'].includes(statut)) throw new AppError(400, 'Statut invalide');
-  const updated = await (prisma as any).conge.update({ where: { id }, data: { statut } });
+  const updated = await prisma.conge.update({ where: { id }, data: { statut: statut as any } });
   await createAuditLog({ userId, table: 'conges', action: 'STATUT', entiteId: id, nouveau: { statut } });
   return updated;
 }
@@ -317,49 +319,60 @@ export async function listFichesPaie(opts: { periode?: string; employeId?: strin
   if (periode) where.periode = periode;
   if (employeId) where.employeId = employeId;
   const [total, items] = await Promise.all([
-    (prisma as any).fichePaie.count({ where }),
-    (prisma as any).fichePaie.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' }, include: { employe: { select: { nom: true, prenom: true, matricule: true } } } }),
+    prisma.fichePaie.count({ where }),
+    prisma.fichePaie.findMany({ where, skip, take: limit, orderBy: { createdAt: 'desc' }, include: { employe: { select: { nom: true, prenom: true, matricule: true } } } }),
   ]);
   return { items, total, page, limit, pages: Math.ceil(total / limit) };
 }
 
 export async function genererFichesPaie(periode: string, userId: string) {
-  const employes = await (prisma as any).employe.findMany({
+  const employes = await prisma.employe.findMany({
     where: { statut: 'ACTIF' },
     // B8: Inclure les lignes du prêt actif pour récupérer la prochaine mensualité réelle
     include: { compte: { include: { client: { include: { prets: { where: { statut: 'EN_COURS' }, take: 1, include: { lignes: { where: { statut: { not: 'PAYE' } }, orderBy: { numeroEcheance: 'asc' }, take: 1 } } } } } } } },
   });
   const results = { crees: 0, ignores: 0 };
 
-  // Derive last day of the period (periode = "YYYY-MM")
   const [pYear, pMonth] = periode.split('-').map(Number);
-  const periodEnd = new Date(pYear, pMonth, 0); // day 0 of next month = last day of current month
+  const periodEnd = new Date(pYear, pMonth, 0);
 
-  for (const emp of employes) {
-    // Skip employees not yet hired during this period
-    if (new Date(emp.dateEmbauche) > periodEnd) { results.ignores++; continue; }
+  const employCandidats = employes.filter((emp) => new Date(emp.dateEmbauche) <= periodEnd);
+  results.ignores += employes.length - employCandidats.length;
 
-    const existing = await (prisma as any).fichePaie.findUnique({ where: { employeId_periode: { employeId: emp.id, periode } } });
-    if (existing) { results.ignores++; continue; }
+  if (employCandidats.length === 0) return results;
+
+  const ids = employCandidats.map((e) => e.id);
+
+  // 3 requêtes batch — élimination du N+1 (était 3 requêtes par employé)
+  const [fichesDejaCrees, avancesEnAttente, tousElements] = await Promise.all([
+    prisma.fichePaie.findMany({ where: { periode, employeId: { in: ids } }, select: { employeId: true } }),
+    prisma.avanceSalaire.findMany({ where: { periodeDeduction: periode, statut: 'EN_ATTENTE', employeId: { in: ids } } }),
+    prisma.elementVariable.findMany({ where: { periode, employeId: { in: ids } } }),
+  ]);
+
+  const ficheSet    = new Set(fichesDejaCrees.map((f) => f.employeId));
+  const avancesMap  = new Map(avancesEnAttente.map((a) => [a.employeId, a]));
+  const elementsMap = tousElements.reduce<Map<string, typeof tousElements>>((m, e) => {
+    if (!m.has(e.employeId)) m.set(e.employeId, []);
+    m.get(e.employeId)!.push(e);
+    return m;
+  }, new Map());
+
+  for (const emp of employCandidats) {
+    if (ficheSet.has(emp.id)) { results.ignores++; continue; }
 
     const brut = Number(emp.salaireBrut);
     const cotisations = Math.round(brut * 0.06 * 100) / 100;
 
-    // Avance à déduire sur cette période
-    const avance = await (prisma as any).avanceSalaire.findFirst({
-      where: { employeId: emp.id, periodeDeduction: periode, statut: 'EN_ATTENTE' },
-    });
+    const avance      = avancesMap.get(emp.id) ?? null;
     const avanceDeduite = avance ? Number(avance.montant) : 0;
 
-    // B8: Mensualité de la prochaine ligne de prêt impayée (et non pretActif.mensualite qui n'existe pas)
+    // B8: Mensualité de la prochaine ligne de prêt impayée
     const pretActif = emp.compte?.client?.prets?.[0];
     const prochaineLigne = pretActif?.lignes?.[0];
     const creditDeduit = prochaineLigne ? Math.round(Number(prochaineLigne.mensualite) * 100) / 100 : 0;
 
-    // Éléments variables du mois (primes, bonus, retenues)
-    const elements = await (prisma as any).elementVariable.findMany({
-      where: { employeId: emp.id, periode },
-    });
+    const elements = elementsMap.get(emp.id) ?? [];
     const totalPrimes   = elements.filter((e: any) => e.type !== 'RETENUE').reduce((s: number, e: any) => s + Number(e.montant), 0);
     const totalRetenues = elements.filter((e: any) => e.type === 'RETENUE').reduce((s: number, e: any) => s + Number(e.montant), 0);
 
@@ -367,7 +380,7 @@ export async function genererFichesPaie(periode: string, userId: string) {
     const net = Math.round((brutAvecPrimes - cotisations - avanceDeduite - creditDeduit - totalRetenues) * 100) / 100;
     const reference = genRefPaie(emp.matricule, periode);
 
-    await (prisma as any).fichePaie.create({
+    await prisma.fichePaie.create({
       data: {
         reference,
         employeId: emp.id,
@@ -389,7 +402,7 @@ export async function genererFichesPaie(periode: string, userId: string) {
 
     // Marquer l'avance comme déduite
     if (avance) {
-      await (prisma as any).avanceSalaire.update({ where: { id: avance.id }, data: { statut: 'DEDUITE' } });
+      await prisma.avanceSalaire.update({ where: { id: avance.id }, data: { statut: 'DEDUITE' } });
     }
 
     // B11: Écriture au BRUT (et non au net) — Débit 6400 / Crédit 4600 = charge totale de personnel
@@ -421,11 +434,11 @@ export async function genererFichesPaie(periode: string, userId: string) {
 }
 
 export async function validerFiche(ficheId: string, userId: string) {
-  const fiche = await (prisma as any).fichePaie.findUnique({ where: { id: ficheId } });
+  const fiche = await prisma.fichePaie.findUnique({ where: { id: ficheId } });
   if (!fiche) throw new AppError(404, 'Fiche introuvable');
   if (fiche.statut !== 'BROUILLON') throw new AppError(400, 'Seules les fiches en brouillon peuvent être validées');
 
-  const updated = await (prisma as any).fichePaie.update({
+  const updated = await prisma.fichePaie.update({
     where: { id: ficheId },
     data: { statut: 'VALIDE', valideParId: userId },
     include: { employe: { select: { nom: true, prenom: true, matricule: true } } },
@@ -435,11 +448,11 @@ export async function validerFiche(ficheId: string, userId: string) {
 }
 
 export async function invaliderFiche(ficheId: string, userId: string) {
-  const fiche = await (prisma as any).fichePaie.findUnique({ where: { id: ficheId } });
+  const fiche = await prisma.fichePaie.findUnique({ where: { id: ficheId } });
   if (!fiche) throw new AppError(404, 'Fiche introuvable');
   if (fiche.statut !== 'VALIDE') throw new AppError(400, 'Seules les fiches validées peuvent être invalidées');
 
-  const updated = await (prisma as any).fichePaie.update({
+  const updated = await prisma.fichePaie.update({
     where: { id: ficheId },
     data: { statut: 'BROUILLON', valideParId: null },
     include: { employe: { select: { nom: true, prenom: true, matricule: true } } },
@@ -449,7 +462,7 @@ export async function invaliderFiche(ficheId: string, userId: string) {
 }
 
 export async function payerSalaires(periode: string, userId: string) {
-  const fiches = await (prisma as any).fichePaie.findMany({
+  const fiches = await prisma.fichePaie.findMany({
     where: { periode, statut: 'VALIDE' },
     include: { employe: { include: { compte: true } } },
   });
@@ -540,11 +553,11 @@ export async function creerAvance(data: {
   notes?: string;
 }, userId: string) {
   if (!data.montant || data.montant <= 0) throw new AppError(400, 'Le montant de l\'avance doit être positif');
-  const emp = await (prisma as any).employe.findUnique({ where: { id: data.employeId } });
+  const emp = await prisma.employe.findUnique({ where: { id: data.employeId } });
   if (!emp) throw new AppError(404, 'Employé introuvable');
   if (emp.statut !== 'ACTIF') throw new AppError(400, 'Impossible d\'accorder une avance à un employé inactif');
 
-  const dejaAvance = await (prisma as any).avanceSalaire.findFirst({
+  const dejaAvance = await prisma.avanceSalaire.findFirst({
     where: { employeId: data.employeId, periodeDeduction: data.periodeDeduction, statut: 'EN_ATTENTE' },
   });
   if (dejaAvance) throw new AppError(400, 'Une avance est déjà prévue pour cet employé sur cette période');
@@ -592,7 +605,7 @@ export async function listAvances(opts: { employeId?: string; periode?: string; 
   if (opts.periode) where.periodeDeduction = opts.periode;
   if (opts.statut) where.statut = opts.statut;
 
-  return (prisma as any).avanceSalaire.findMany({
+  return prisma.avanceSalaire.findMany({
     where,
     include: { employe: { select: { nom: true, prenom: true, matricule: true } } },
     orderBy: { createdAt: 'desc' },
@@ -600,19 +613,20 @@ export async function listAvances(opts: { employeId?: string; periode?: string; 
 }
 
 export async function annulerAvance(avanceId: string, userId: string) {
-  const avance = await (prisma as any).avanceSalaire.findUnique({
+  const avance = await prisma.avanceSalaire.findUnique({
     where: { id: avanceId },
     include: { employe: true },
   });
   if (!avance) throw new AppError(404, 'Avance introuvable');
   if (avance.statut !== 'EN_ATTENTE') throw new AppError(400, 'Seules les avances en attente peuvent être annulées');
 
-  // Rembourser le compte si le paiement avait été fait
-  if (avance.employe.compteId) {
-    await prisma.compte.update({ where: { id: avance.employe.compteId }, data: { solde: { decrement: Number(avance.montant) } } });
-  }
+  await prisma.$transaction(async (tx) => {
+    if (avance.employe.compteId) {
+      await tx.compte.update({ where: { id: avance.employe.compteId }, data: { solde: { decrement: Number(avance.montant) } } });
+    }
+    await (tx as any).avanceSalaire.update({ where: { id: avanceId }, data: { statut: 'ANNULEE' } });
+  });
 
-  await (prisma as any).avanceSalaire.update({ where: { id: avanceId }, data: { statut: 'ANNULEE' } });
   await createAuditLog({ userId, table: 'avances_salaire', action: 'ANNULATION', entiteId: avanceId });
 }
 
@@ -622,7 +636,7 @@ export async function listElementsVariables(opts: { employeId?: string; periode?
   const where: any = {};
   if (opts.employeId) where.employeId = opts.employeId;
   if (opts.periode) where.periode = opts.periode;
-  return (prisma as any).elementVariable.findMany({
+  return prisma.elementVariable.findMany({
     where,
     include: { employe: { select: { nom: true, prenom: true, matricule: true } } },
     orderBy: { createdAt: 'desc' },
@@ -638,21 +652,21 @@ export async function createElementVariable(
   if (!TYPES_ELEMENT_VALIDES.includes(data.type)) throw new AppError(400, `Type invalide. Valeurs acceptées : ${TYPES_ELEMENT_VALIDES.join(', ')}`);
   if (!data.libelle?.trim()) throw new AppError(400, 'Le libellé est requis');
   if (!data.montant || data.montant <= 0) throw new AppError(400, 'Le montant doit être positif');
-  const emp = await (prisma as any).employe.findUnique({ where: { id: data.employeId } });
+  const emp = await prisma.employe.findUnique({ where: { id: data.employeId } });
   if (!emp) throw new AppError(404, 'Employé introuvable');
 
-  const ficheExistante = await (prisma as any).fichePaie.findUnique({
+  const ficheExistante = await prisma.fichePaie.findUnique({
     where: { employeId_periode: { employeId: data.employeId, periode: data.periode } },
   });
   if (ficheExistante && ficheExistante.statut !== 'BROUILLON') {
     throw new AppError(400, 'Impossible d\'ajouter un élément variable : la fiche de paie est déjà validée ou payée');
   }
 
-  const element = await (prisma as any).elementVariable.create({
+  const element = await prisma.elementVariable.create({
     data: {
       employeId: data.employeId,
       periode: data.periode,
-      type: data.type,
+      type: data.type as any,
       libelle: data.libelle,
       montant: data.montant,
       notes: data.notes,
@@ -666,16 +680,16 @@ export async function createElementVariable(
 }
 
 export async function deleteElementVariable(id: string, userId: string) {
-  const element = await (prisma as any).elementVariable.findUnique({ where: { id } });
+  const element = await prisma.elementVariable.findUnique({ where: { id } });
   if (!element) throw new AppError(404, 'Élément introuvable');
 
-  const ficheExistante = await (prisma as any).fichePaie.findUnique({
+  const ficheExistante = await prisma.fichePaie.findUnique({
     where: { employeId_periode: { employeId: element.employeId, periode: element.periode } },
   });
   if (ficheExistante && ficheExistante.statut !== 'BROUILLON') {
     throw new AppError(400, 'Impossible de supprimer : la fiche de paie est déjà validée ou payée');
   }
 
-  await (prisma as any).elementVariable.delete({ where: { id } });
+  await prisma.elementVariable.delete({ where: { id } });
   await createAuditLog({ userId, table: 'elements_variables', action: 'DELETE', entiteId: id });
 }

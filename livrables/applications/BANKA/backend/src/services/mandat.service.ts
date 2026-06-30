@@ -2,6 +2,16 @@ import prisma from '../utils/prisma';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
 
+const DROITS_VALIDES = ['CONSULTATION', 'DEPOT', 'RETRAIT', 'VIREMENT', 'SIGNATURE'] as const;
+type DroitMandat = (typeof DROITS_VALIDES)[number];
+
+function validateDroits(droits: string[]) {
+  if (droits.length === 0) throw new AppError(400, 'Au moins un droit doit être accordé');
+  const invalides = droits.filter((d) => !DROITS_VALIDES.includes(d as DroitMandat));
+  if (invalides.length > 0)
+    throw new AppError(400, `Droits invalides : ${invalides.join(', ')}. Valeurs acceptées : ${DROITS_VALIDES.join(', ')}`);
+}
+
 const MANDATAIRE_SELECT = {
   id: true,
   nom: true,
@@ -28,6 +38,8 @@ export async function createMandat(
   data: { mandataireId: string; droits: string[]; dateFin?: string; notes?: string },
   userId: string
 ) {
+  validateDroits(data.droits);
+
   const existing = await prisma.mandatCompte.findFirst({
     where: { compteId, mandataireId: data.mandataireId, actif: true },
   });
@@ -66,6 +78,8 @@ export async function updateMandat(
   data: { droits?: string[]; dateFin?: string | null; notes?: string },
   userId: string
 ) {
+  if (data.droits !== undefined) validateDroits(data.droits);
+
   const existing = await prisma.mandatCompte.findUniqueOrThrow({ where: { id: mandatId } });
 
   const mandat = await prisma.mandatCompte.update({

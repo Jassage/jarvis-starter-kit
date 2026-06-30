@@ -1,8 +1,10 @@
+import crypto from 'crypto';
 import prisma from '../utils/prisma';
 import { signToken, signRefreshToken, verifyRefreshToken, signTempToken, verifyTempToken } from '../utils/jwt';
 import { hashPassword, comparePassword } from '../utils/hash';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
+import { sendPasswordResetEmail } from '../utils/email';
 // otplib v12 uses package exports not supported by classic node moduleResolution
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { authenticator } = require('otplib') as {
@@ -19,6 +21,13 @@ function stripSensitive<T extends { motDePasse: string; twoFactorSecret?: string
 ): Omit<T, 'motDePasse' | 'twoFactorSecret'> {
   const { motDePasse: _, twoFactorSecret: __, ...safe } = user;
   return safe as Omit<T, 'motDePasse' | 'twoFactorSecret'>;
+}
+
+// Minimum bancaire : 12 chars, majuscule, minuscule, chiffre, caractère spécial
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{12,}$/;
+function validateMotDePasse(mdp: string) {
+  if (!PASSWORD_REGEX.test(mdp))
+    throw new AppError(400, 'Le mot de passe doit contenir au moins 12 caractères, une majuscule, une minuscule, un chiffre et un caractère spécial');
 }
 
 export async function login(email: string, motDePasse: string) {
@@ -146,8 +155,18 @@ export async function refresh(refreshToken: string) {
   const user = stored.utilisateur;
   if (!user.actif) throw new AppError(401, 'Compte désactivé');
 
+  // Rotation : on révoque l'ancien token et on émet un nouveau pour éviter la réutilisation
+  const newRefreshToken = signRefreshToken(user.id);
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30);
+
+  await prisma.$transaction([
+    prisma.refreshToken.update({ where: { id: stored.id }, data: { revoked: true } }),
+    prisma.refreshToken.create({ data: { token: newRefreshToken, utilisateurId: user.id, expiresAt } }),
+  ]);
+
   const token = signToken({ userId: user.id, email: user.email, role: user.role, agenceId: user.agenceId });
-  return { token };
+  return { token, refreshToken: newRefreshToken };
 }
 
 export async function logout(refreshToken: string) {
@@ -173,7 +192,7 @@ export async function changePassword(userId: string, ancienMdp: string, nouveauM
   const valid = await comparePassword(ancienMdp, user.motDePasse);
   if (!valid) throw new AppError(400, 'Ancien mot de passe incorrect');
 
-  if (nouveauMdp.length < 8) throw new AppError(400, 'Le mot de passe doit contenir au moins 8 caractères');
+  validateMotDePasse(nouveauMdp);
 
   const hash = await hashPassword(nouveauMdp);
 
@@ -183,6 +202,51 @@ export async function changePassword(userId: string, ancienMdp: string, nouveauM
   ]);
 
   await createAuditLog({ userId, table: 'utilisateurs', action: 'CHANGE_PASSWORD', entiteId: userId });
+}
+
+export async function demanderResetMotDePasse(email: string) {
+  const user = await prisma.utilisateur.findUnique({ where: { email } });
+  // Réponse identique que l'email existe ou non — évite l'énumération
+  if (!user || !user.actif) return;
+
+  // Invalider les tokens précédents non utilisés
+  await prisma.passwordResetToken.updateMany({
+    where: { utilisateurId: user.id, used: false },
+    data: { used: true },
+  });
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 heure
+
+  await prisma.passwordResetToken.create({
+    data: { token, utilisateurId: user.id, expiresAt },
+  });
+
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+  const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
+
+  await sendPasswordResetEmail({ to: user.email, nom: user.prenom, resetUrl });
+  await createAuditLog({ userId: user.id, table: 'utilisateurs', action: 'RESET_PASSWORD_REQUEST', entiteId: user.id });
+}
+
+export async function reinitialiserMotDePasse(token: string, nouveauMdp: string) {
+  validateMotDePasse(nouveauMdp);
+
+  const record = await prisma.passwordResetToken.findUnique({ where: { token } });
+  if (!record || record.used || record.expiresAt < new Date()) {
+    throw new AppError(400, 'Lien de réinitialisation invalide ou expiré');
+  }
+
+  const hash = await hashPassword(nouveauMdp);
+
+  await prisma.$transaction([
+    prisma.utilisateur.update({ where: { id: record.utilisateurId }, data: { motDePasse: hash } }),
+    prisma.passwordResetToken.update({ where: { id: record.id }, data: { used: true } }),
+    // Révoquer toutes les sessions actives — changement de mdp = déconnexion globale
+    prisma.refreshToken.updateMany({ where: { utilisateurId: record.utilisateurId }, data: { revoked: true } }),
+  ]);
+
+  await createAuditLog({ userId: record.utilisateurId, table: 'utilisateurs', action: 'RESET_PASSWORD_CONFIRM', entiteId: record.utilisateurId });
 }
 
 export async function listUtilisateurs(agenceId?: string) {
@@ -204,6 +268,7 @@ export async function createUtilisateur(data: {
   agenceId?: string;
   telephone?: string;
 }, createdBy?: string) {
+  validateMotDePasse(data.motDePasse);
   const hash = await hashPassword(data.motDePasse);
   const user = await prisma.utilisateur.create({
     data: { ...data, motDePasse: hash, role: data.role as any },
@@ -219,6 +284,12 @@ export async function updateUtilisateur(id: string, data: Partial<{ nom: string;
     data: data as any,
     include: { agence: { select: { id: true, code: true, nom: true } } },
   });
+
+  // Révocation immédiate de tous les tokens si le compte est désactivé
+  if (data.actif === false) {
+    await prisma.refreshToken.updateMany({ where: { utilisateurId: id, revoked: false }, data: { revoked: true } });
+  }
+
   if (updatedBy) await createAuditLog({ userId: updatedBy, table: 'utilisateurs', action: 'UPDATE', entiteId: id, nouveau: data });
   return stripSensitive(user);
 }

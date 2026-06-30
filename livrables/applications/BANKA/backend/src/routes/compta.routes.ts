@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
-import { requireAdmin, requireComptable } from '../middleware/rbac';
+import { requireAdmin, requireComptable, requireRole } from '../middleware/rbac';
 import * as ctrl from '../controllers/compta.controller';
 
 const router = Router();
@@ -21,5 +21,9 @@ router.post('/plan-comptable',       requireAuth, requireAdmin, ctrl.createCompt
 router.put('/plan-comptable/:id',    requireAuth, requireAdmin, ctrl.updateCompte);
 router.delete('/plan-comptable/:id', requireAuth, requireAdmin, ctrl.deleteCompte);
 router.delete('/journal/:id',        requireAuth, requireAdmin, ctrl.deleteEcriture);
+
+// Réconciliation des écritures en échec — visible aux comptables, résolution aux superviseurs+
+router.get('/echecs',        requireAuth, requireComptable, ctrl.listEchecs);
+router.patch('/echecs/:id',  requireAuth, requireRole('SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR'), ctrl.resoudreEchec);
 
 export default router;

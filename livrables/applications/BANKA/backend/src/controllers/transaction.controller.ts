@@ -4,21 +4,21 @@ import * as txService from '../services/transaction.service';
 
 export async function depot(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const tx = await txService.effectuerDepot({ ...req.body, userId: req.user!.userId });
+    const tx = await txService.effectuerDepot({ ...req.body, userId: req.user!.userId, agenceId: req.user!.agenceId });
     res.status(201).json(ok(tx, 'Dépôt enregistré'));
   } catch (e) { next(e); }
 }
 
 export async function retrait(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const tx = await txService.effectuerRetrait({ ...req.body, userId: req.user!.userId });
+    const tx = await txService.effectuerRetrait({ ...req.body, userId: req.user!.userId, agenceId: req.user!.agenceId });
     res.status(201).json(ok(tx, 'Retrait enregistré'));
   } catch (e) { next(e); }
 }
 
 export async function virement(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const tx = await txService.effectuerVirement({ ...req.body, userId: req.user!.userId });
+    const tx = await txService.effectuerVirement({ ...req.body, userId: req.user!.userId, agenceId: req.user!.agenceId });
     res.status(201).json(ok(tx, 'Virement enregistré'));
   } catch (e) { next(e); }
 }

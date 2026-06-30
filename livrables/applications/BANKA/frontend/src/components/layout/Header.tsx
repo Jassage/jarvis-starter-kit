@@ -1,9 +1,10 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/stores/authStore';
 import api from '@/lib/api';
+import { useSSE } from '@/lib/useSSE';
 
 const PAGES: Record<string, { title: string; subtitle: string }> = {
   '/dashboard':     { title: 'Tableau de bord',    subtitle: "Vue d'ensemble de votre activité bancaire" },
@@ -18,6 +19,9 @@ const PAGES: Record<string, { title: string; subtitle: string }> = {
   '/agences':       { title: 'Agences',             subtitle: 'Réseau des agences' },
   '/administration':      { title: 'Administration',         subtitle: 'Paramètres système' },
   '/epargne-programmee':  { title: 'Épargne programmée',     subtitle: 'Virements automatiques récurrents entre comptes' },
+  '/taux-change':         { title: 'Taux de change',         subtitle: 'Gestion des taux HTG/USD et virements cross-devise' },
+  '/aml':                 { title: 'Alertes AML',            subtitle: 'Détection de transactions suspectes et anti-blanchiment' },
+  '/rapport-brh':         { title: 'Rapport BRH',            subtitle: 'Ratios prudentiels réglementaires (Banque de la République d\'Haïti)' },
   '/compta/dashboard':    { title: 'Tableau de bord',        subtitle: "Vue d'ensemble comptable" },
   '/compta/plan-comptable':{ title: 'Plan comptable',        subtitle: 'Nomenclature des comptes' },
   '/compta/journal':      { title: 'Journal des écritures',  subtitle: 'Saisie et consultation des écritures' },
@@ -50,17 +54,30 @@ export default function Header() {
 
   const [alertes, setAlertes] = useState<Alertes | null>(null);
   const [showNotif, setShowNotif] = useState(false);
+  const [sseFlash, setSseFlash] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
 
-  const loadAlertes = () => {
+  const loadAlertes = useCallback(() => {
     api.get('/stats/alertes').then(({ data }) => setAlertes(data.data)).catch(() => {});
-  };
+  }, []);
+
+  useSSE((msg) => {
+    if (msg.type === 'TRANSACTION_EN_ATTENTE') {
+      setSseFlash(true);
+      setTimeout(() => setSseFlash(false), 3000);
+      setAlertes((prev) => prev ? { ...prev, txEnAttente: (prev.txEnAttente || 0) + 1, total: (prev.total || 0) + 1 } : prev);
+    }
+    if (msg.type === 'ALERTE_AML') {
+      setSseFlash(true);
+      setTimeout(() => setSseFlash(false), 3000);
+    }
+  }, !!utilisateur);
 
   useEffect(() => {
     loadAlertes();
     const interval = setInterval(loadAlertes, 60_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [loadAlertes]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -93,7 +110,7 @@ export default function Header() {
           <button
             onClick={() => setShowNotif((v) => !v)}
             className="relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors"
-            style={{ background: showNotif ? '#eef2ff' : '#f7f8fc' }}
+            style={{ background: showNotif || sseFlash ? '#eef2ff' : '#f7f8fc', transition: 'background 0.3s' }}
           >
             <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" style={{ color: '#4a5578' }}>
               <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>

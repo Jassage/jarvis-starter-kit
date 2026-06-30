@@ -164,7 +164,8 @@ export default function PretForm({ onClose, onSuccess }: Props) {
                     onChange={(e) => handleSearchClient(e.target.value)}
                     onFocus={() => setClientOpen(true)}
                     placeholder="Rechercher par nom, prénom, N° client..."
-                    className="input pl-10"
+                    className="input"
+                    style={{ paddingLeft: '2.5rem' }}
                   />
                 </div>
                 {clientOpen && clients.length > 0 && (
@@ -201,7 +202,7 @@ export default function PretForm({ onClose, onSuccess }: Props) {
                 </Tooltip>
               </div>
               <div className="relative">
-                <input required type="number" min="1" step="0.01" value={form.montant} onChange={(e) => set('montant', e.target.value)} className="input pr-16 font-semibold" placeholder="0.00" />
+                <input required type="number" min="1" step="0.01" value={form.montant} onChange={(e) => set('montant', e.target.value)} className="input font-semibold" style={{ paddingRight: '4rem' }} placeholder="0.00" />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#f0f2f9', color: '#4a5578' }}>{form.devise}</span>
               </div>
             </div>
@@ -222,7 +223,7 @@ export default function PretForm({ onClose, onSuccess }: Props) {
                 </Tooltip>
               </div>
               <div className="relative">
-                <input required type="number" min="0.1" max="30" step="0.01" value={form.tauxMensuel} onChange={(e) => set('tauxMensuel', e.target.value)} className="input pr-8 font-semibold" />
+                <input required type="number" min="0.1" max="30" step="0.01" value={form.tauxMensuel} onChange={(e) => set('tauxMensuel', e.target.value)} className="input font-semibold" style={{ paddingRight: '2rem' }} />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 font-bold text-sm" style={{ color: '#8b94b0' }}>%</span>
               </div>
             </div>

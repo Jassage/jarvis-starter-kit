@@ -104,6 +104,26 @@ export async function changeStatutClient(id: string, statut: StatutClient, userI
   return client;
 }
 
+export async function deleteClient(id: string, userId: string) {
+  const client = await prisma.client.findUnique({
+    where: { id },
+    include: {
+      comptes: { where: { statut: { in: ['ACTIF', 'SUSPENDU'] as any } }, select: { id: true, numeroCompte: true } },
+      prets:   { where: { statut: { notIn: ['REMBOURSE', 'REJETE', 'ANNULE'] as any } }, select: { id: true, reference: true } },
+    },
+  });
+  if (!client) throw new AppError(404, 'Client introuvable');
+  if (client.comptes.length > 0)
+    throw new AppError(400, `Impossible : ${client.comptes.length} compte(s) actif(s) encore ouvert(s)`);
+  if (client.prets.length > 0)
+    throw new AppError(400, `Impossible : ${client.prets.length} prêt(s) non soldé(s)`);
+
+  // Suppression logique uniquement — on ne supprime jamais les données bancaires
+  const updated = await prisma.client.update({ where: { id }, data: { statut: 'INACTIF' as any } });
+  await createAuditLog({ userId, table: 'clients', action: 'DELETE', entiteId: id, ancien: { statut: client.statut } });
+  return updated;
+}
+
 export async function searchClients(q: string) {
   return prisma.client.findMany({
     where: {

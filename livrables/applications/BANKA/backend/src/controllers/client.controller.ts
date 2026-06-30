@@ -42,6 +42,13 @@ export async function changeStatut(req: AuthRequest, res: Response, next: NextFu
   } catch (e) { next(e); }
 }
 
+export async function deleteOne(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    await clientService.deleteClient(req.params.id, req.user!.userId);
+    res.json(ok(null, 'Client désactivé'));
+  } catch (e) { next(e); }
+}
+
 export async function search(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { q } = req.query as { q: string };

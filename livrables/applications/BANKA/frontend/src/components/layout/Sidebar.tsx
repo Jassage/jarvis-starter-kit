@@ -24,6 +24,9 @@ const Icon = ({ name }: { name: string }) => {
     case 'layers':   return <svg {...p}><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor"/></svg>;
     case 'trending': return <svg {...p}><path d="M23 6l-9.5 9.5-5-5L1 18M17 6h6v6" stroke="currentColor"/></svg>;
     case 'balance':  return <svg {...p}><path d="M12 3v18M3 9l9-6 9 6M3 15l9-6 9 6M3 9h18M3 15h18" stroke="currentColor"/></svg>;
+    case 'alert':    return <svg {...p}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor"/><path d="M12 9v4M12 17h.01" stroke="currentColor"/></svg>;
+    case 'exchange': return <svg {...p}><path d="M8 3l-5 5 5 5M3 8h13a5 5 0 010 10h-1M16 21l5-5-5-5M21 16H8a5 5 0 010-10h1" stroke="currentColor"/></svg>;
+    case 'flag':     return <svg {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" stroke="currentColor"/><line x1="4" y1="22" x2="4" y2="15" stroke="currentColor"/></svg>;
     case 'id-card':  return <svg {...p}><rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor"/><circle cx="8" cy="12" r="2" stroke="currentColor"/><path d="M14 10h4M14 14h4M2 9h20" stroke="currentColor"/></svg>;
     case 'contract': return <svg {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M8 12h8M8 16h5" stroke="currentColor"/></svg>;
     case 'salary':   return <svg {...p}><rect x="2" y="6" width="20" height="12" rx="2" stroke="currentColor"/><path d="M12 10v4M10 12h4" stroke="currentColor"/></svg>;
@@ -45,7 +48,10 @@ const NAV_BANKING = [
   { href: '/caisse',              label: 'Caisse',              icon: 'cash',     roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'CAISSIER'] },
   { href: '/prets',               label: 'Crédits & Prêts',    icon: 'doc',      roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'AGENT_CREDIT'] },
   { href: '/epargne-programmee',  label: 'Épargne programmée', icon: 'piggy',    roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'CAISSIER'] },
+  { href: '/taux-change',          label: 'Taux de change',      icon: 'exchange', roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'CAISSIER'] },
   { href: '/rapports',            label: 'Rapports',            icon: 'chart',    roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'COMPTABLE', 'AUDITEUR'] },
+  { href: '/rapport-brh',         label: 'Rapport BRH',         icon: 'flag',     roles: ['SUPER_ADMIN', 'DIRECTEUR', 'AUDITEUR'] },
+  { href: '/aml',                 label: 'Alertes AML',         icon: 'alert',    roles: ['SUPER_ADMIN', 'DIRECTEUR', 'AUDITEUR', 'SUPERVISEUR'] },
   { href: '/audit',               label: 'Journal d\'audit',   icon: 'shield',   roles: ['SUPER_ADMIN', 'DIRECTEUR', 'AUDITEUR'] },
   { href: '/utilisateurs',        label: 'Opérateurs',          icon: 'people',   roles: ['SUPER_ADMIN', 'DIRECTEUR'] },
   { href: '/agences',             label: 'Agences',             icon: 'building', roles: ['SUPER_ADMIN', 'DIRECTEUR'] },
