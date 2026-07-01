@@ -7,6 +7,115 @@
 
 ---
 
+## 2026-07-01
+
+### LAKAY : session de polissage UI/UX + corrections bugs critiques
+
+**Contexte :** Session de debugging et d'amélioration de l'expérience utilisateur sur LAKAY (plateforme immobilière haïtienne). Pas de nouvelles fonctionnalités majeures, mais 10+ corrections et améliorations ciblées.
+
+**Corrections de bugs :**
+- **422 PATCH /listings/:id** : `reset(data)` de React Hook Form peuplait tous les champs DB (id, status, images, owner, URLs nulles). Zod rejetait les null. Fix double : schéma accepte `z.union([z.string().url(), z.literal(''), z.null()])` pour les URLs optionnelles + sanitize ALLOWED fields côté frontend avant PATCH
+- **401 POST /listings/:id/review** : `requireAdmin` s'appuyait sur `req.user` mais `requireAuth` n'était pas chaîné avant. Fix : ajout de `requireAuth` sur les 2 routes admin listings
+- **500 GET /admin/stats** : `prisma.subscription.count({ where: { status: 'ACTIVE' } })` — le modèle `Subscription` a `isActive: Boolean` pas `status`. Fix : `{ isActive: true }`
+- **Images property detail ne s'affichent pas** : Next.js `<Image>` échoue dans Edge (Tracking Prevention bloque le CDN Cloudinary via le layer d'optimisation). Fix : remplacement par `<img>` natif
+- **Messages silencieux** : bug 1 — admin est owner des annonces seed, backend lance 400 "vous ne pouvez pas vous écrire". Fix : `isOwner` check + UI alternative. Bug 2 — catch vide. Fix : `msgError` state affiché sous le formulaire
+- **Register crash** : nodemailer throw `Missing credentials for "PLAIN"` si SMTP pas configuré. Fix : guard early-return + try-catch non-bloquant dans `sendEmail`
+- **Messagerie vide** : `queryFn` des conversations et messages n'avaient pas le double-unwrap `r.data.data` (pattern du reste de l'app). `data?.conversations` lisait donc toujours undefined. Fix : `.then(r => r.data.data)` + `sendSuccess(res, { messages: result.messages })` côté backend
+
+**Améliorations UI :**
+- **PropertyCard** : redesign complet — prix en overlay gradient sur l'image, badges type/dispo/vedette, favoris animé, hover lift
+- **Hero** : passage full-width background image (abandon du split layout) avec fallbacks gradient + `<img>` natif pour éviter les blockers browser
+- **Homepage** : section types redesignée, section vedettes avec label "À la une", CTA avec dot pattern, FAQ accordion 6 questions (fix couleurs CTA : `navy-700` et `navy-800` manquaient dans tailwind.config)
+- **Départements dynamiques** : endpoint `GET /api/stats` enrichi avec `groupBy department` (Prisma). Nouveau composant `DepartmentsSection.tsx` : affiche les 10 départements haïtiens avec leur vrai count d'annonces actives. Grille 2→3→5 colonnes, départements sans annonces en gris atténué
+- **Badges non-lus** : hook `useNavCounts` (messages/30s, notifications/60s, favoris/120s) + composant `NavBadge` dans le Header. Badge rouge avec "99+" si overflow
+- **GPS picker** : composant `MapPicker.tsx` (Leaflet cliquable, centrée Haïti) intégré dans l'étape Localisation du formulaire de création d'annonce. Champs lat/lng sync bidirectionnel avec la carte
+- **Plans** : bouton "Choisir ce plan" ouvre une modal avec instructions MonCash (numéro à copier, lien email pré-rempli, note 24h). Plus de redirect aveugle vers `/dashboard`
+- **Leaflet StrictMode fix** : `PropertyMap` et `MapPicker` suppriment `_leaflet_id` dans le cleanup `useEffect` pour éviter "Map container is already initialized"
+
+**À faire encore :** intégration MonCash API réelle (en attente credentials Digicel Business), pagination cursor-based, Stripe abonnements.
+
+---
+
+## 2026-06-30 (nuit)
+
+### LAKAY : plateforme immobilière haïtienne — MVP complet livré
+
+**Contexte :** Nouveau projet SaaS, plateforme d'annonces immobilières dédiée à Haïti. Jaslin voulait un MVP production-ready en une session (rôle CTO/SA/PM/dev full stack). Ports choisis : 4003 (backend) / 3004 (frontend) pour éviter les conflits avec les projets existants.
+
+**Stack :**
+- Backend : Express 4 + TypeScript + Prisma + PostgreSQL + PostGIS + Redis + BullMQ + Socket.IO + Cloudinary + Swagger
+- Frontend : Next.js 14 App Router + TypeScript + Tailwind CSS + Shadcn UI + TanStack Query + Zustand + React Hook Form + Zod
+- Infra : Docker Compose (postgis:16-3.4-alpine, Redis 7), Nginx reverse proxy, GitHub Actions CI/CD
+
+**Particularités Haïti :**
+- Champ `landmark` (point de repère) obligatoire : les adresses numériques n'existent souvent pas en Haïti
+- Département enum : 10 départements (OUEST, NORD, NORD_EST, NORD_OUEST, ARTIBONITE, CENTRE, SUD, SUD_EST, NIPPES, GRANDE_ANSE)
+- Devise double HTG/USD sur toutes les annonces
+- Fonctionnalités spécifiques : eau courante, électricité, citerne, générateur, panneau solaire (critiques en Haïti)
+
+**Architecture — Modèles principaux (schema.prisma) :**
+- User (SUPER_ADMIN/ADMIN/AGENCY/AGENT/OWNER/INDIVIDUAL), RefreshToken, Subscription (FREE/BASIC/PROFESSIONAL/ENTERPRISE)
+- Listing (9 types de biens, 18 booléens commodités, lat/lng + landmark, statuts DRAFT→PENDING_REVIEW→ACTIVE→…)
+- Conversation, ConversationParticipant, Message (messagerie temps réel)
+- Payment (MonCash + Stripe scaffoldés), Notification, VisitRequest, Review, Report, AuditLog
+
+**Backend — modules livrés :**
+- Auth : register+subscription, login, refresh token rotatif, email verification, reset mot de passe (SHA-256, 1h), changePassword, RBAC middleware (hiérarchie numérique 20→100)
+- Listings : CRUD, limites par plan, soumission révision, upload Cloudinary, statuts lifecycle
+- Search : 30+ filtres Prisma, Haversine post-filter, autocomplete villes/quartiers, sponsored en tête
+- Messages : getOrCreateConversation, sendMessage (Socket.IO broadcast), unreadCount
+- Agencies, Favorites, Notifications, Reviews, Payments (MonCash + Stripe), Admin (dashboard, users, reports, config, audit)
+- **Nouveaux modules (cette session) :** AI (estimation prix, génération description, recherche NL, chat assistant), Visits (demandes visite, réponse propriétaire)
+- Workers BullMQ : email.worker (nodemailer), notification.worker (Socket.IO + DB)
+
+**Frontend — pages livrées :**
+- `page.tsx` (home) : hero navy/orange, recherche, grille types, featured listings, départements, CTA
+- `properties/page.tsx` : recherche + filtres sidebar, grid/map toggle, pagination
+- `properties/[id]/page.tsx` : galerie photos, amenities grid, carte contact, signalement
+- `(auth)/login` et `register` : split panel, role selector
+- `dashboard/page.tsx` : KPI cards, tableau annonces récentes, subscription card
+- `dashboard/listings/page.tsx` : gestion annonces avec filtres statuts, actions CRUD
+- `dashboard/listings/new/page.tsx` : formulaire 4 étapes (infos générales, localisation, caractéristiques, photos)
+- `dashboard/messages/page.tsx` : messagerie split panel avec Socket.IO temps réel, typing indicator
+- Layout main (header nav + footer), layout auth
+
+**Couleurs :** primary #FF6B35 (orange chaud), navy #003B7A (inspiré drapeau haïtien), haiti.red #CE1126
+
+**Comptes seed :** admin@lakay.ht / Admin@Lakay2024!, proprietaire@demo.ht / Owner@123, utilisateur@demo.ht / User@123, agence@demo.ht / Agency@123
+
+**CI/CD :** GitHub Actions (test → build images Docker → push ghcr.io → deploy SSH VPS). Nginx avec rate limiting auth (5r/m) et API (10r/s), WebSocket upgrade pour Socket.IO.
+
+**À faire encore :** admin panel frontend, map Leaflet, module profil/favoris frontend, notifications push, intégration MonCash credentials Digicel (même blocage que KONEKTE), SMS/WhatsApp.
+
+---
+
+## 2026-06-30 (soir)
+
+### GESCOM : Phase 0 (socle) + Phase 1 (Stock/Produits) + Phase 2 (Ventes/Clients) — ERP commercial livré au client
+
+**Contexte :** Nouveau client (entreprise commerciale : boutique détail + entrepôt grossiste, devise HTG, 5-20 utilisateurs). Contrat signé. Projet créé de zéro en une session. Stack : Next.js App Router + Express 4 + TypeScript + Prisma v5 + PostgreSQL. Ports 4002/3003. Patterns réutilisés de BANKA (auth, RBAC, audit, mouvements typés) et MEDIKA (stock par emplacement, commandes fournisseurs).
+
+**Phase 0 — Socle technique :**
+- Schéma Prisma complet (18 modèles, 10 enums) couvrant les 4 modules prévus : Stock multi-emplacement + transferts, Ventes/Facturation avec clients PARTICULIER/GROSSISTE, Achats/Fournisseurs avec réception ligne par ligne, Comptabilité en partie double SYSCOHADA réduite
+- Auth JWT (cookie httpOnly) + refresh token rotatif + RBAC 5 rôles (SUPER_ADMIN, GERANT, VENDEUR, MAGASINIER, COMPTABLE) + audit log
+- Login vérifié en navigateur. Compte démo : admin@gescom.ht / Admin@123. DB PostgreSQL locale `gescom` créée par `prisma migrate dev`
+
+**Phase 1 — Produits + Stock :**
+- Backend : CRUD Produits (création auto des lignes StockEmplacement par emplacement actif), Stock (listage par emplacement, mouvements, alertes seuil, ajustement atomique avec MouvementStock), dashboard/stats (valeur stock, produits sous alerte, répartition par emplacement, mouvements récents)
+- Frontend (redesign complet après feedback "trop moche") : dashboard premium (hero gradient vert, KPI cards avec badges gradient colorés, répartition avec barres, timeline mouvements avec timestamps relatifs), sidebar avec icônes lucide-react + drawer mobile + carte profil, header avec dropdown utilisateur + hamburger mobile, police Inter via next/font, responsive 100% desktop/mobile (grilles adaptatives, tables overflow-x-auto, sidebar fixe desktop/overlay mobile)
+
+**Phase 2 — Ventes + Clients :**
+- Backend service vente atomique : vérification stocks avant création, décrémentation StockEmplacement, MouvementStock(VENTE) par ligne, écriture comptable débit Caisse(571)/Clients(411) → crédit Ventes(701), mise à jour client.soldeDu pour ventes CREDIT, annulation avec restitution atomique du stock. Numérotation auto VNT-000001
+- CRUD Clients (PARTICULIER/GROSSISTE, solde dû, archivage avec guard si solde positif)
+- Dashboard enrichi : KPI "VENTES DU JOUR" (count + montant compilé au démarrage de chaque journée) remplace "EMPLACEMENTS" — données réelles vérifiées (344.6 K HTG stock, 3 K HTG ventes du jour, 1 vente validée)
+- Frontend : page Ventes (3 KPI cards : total/validées/crédit, tableau historique avec statuts colorés, temps relatif), page Clients (tableau + badge GROSSISTE/PARTICULIER + solde dû en rouge si positif), modal NouvelleVente style POS (sélection produits avec stock disponible affiché, panier multi-lignes avec quantité/prix éditables, tabs mobile Produits↔Panier, 4 modes paiement, calcul solde dû CREDIT en live, bouton validation gradient)
+
+**Vérifications :** 0 erreur TypeScript backend+frontend. Login, création produit, ajustement stock, vente espèces, dashboard temps réel — tout confirmé en navigateur.
+
+**Phases restantes :** Achats/Fournisseurs (Ph3), Transferts boutique↔entrepôt (Ph4), Comptabilité SYSCOHADA réduite (Ph5), Rapports (Ph6)
+
+---
+
 ## 2026-06-30 (après-midi)
 
 ### SYGS-IMFP : module Messagerie — pièces jointes + accusés de livraison/lecture + corrections

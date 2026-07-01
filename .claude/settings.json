@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs ls -1)",
+      "PowerShell(Get-Process node)",
+      "Bash(taskkill /PID 7608 /F)",
+      "PowerShell(Stop-Process -Id 3056 -Force)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(node repro-messaging-bug.js)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:5000/api/auth/me)",
+      "Bash(curl -s -m 5 http://localhost:5000/)",
+      "Bash(powershell -NoProfile -Command \"Get-Process -Id 6708 -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,StartTime\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP:%{http_code}\\\\n\" \"http://localhost:5000/uploads/attachments/photos/attachment-1782843932856-691955019.png\")"
+    ]
+  }
+}

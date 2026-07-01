@@ -1,0 +1,404 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Identité & accès ─────────────────────────────
+
+enum RoleUtilisateur {
+  SUPER_ADMIN
+  GERANT
+  VENDEUR
+  MAGASINIER
+  COMPTABLE
+}
+
+enum TypeEmplacement {
+  BOUTIQUE
+  ENTREPOT
+}
+
+model Utilisateur {
+  id            String          @id @default(cuid())
+  email         String          @unique
+  motDePasse    String
+  nom           String
+  prenom        String
+  role          RoleUtilisateur
+  actif         Boolean         @default(true)
+  telephone     String?
+  emplacementId String?
+  emplacement   Emplacement?    @relation(fields: [emplacementId], references: [id])
+
+  refreshTokens    RefreshToken[]
+  auditLogs        AuditLog[]
+  ventesCreees     Vente[]
+  mouvementsCrees  MouvementStock[]
+  commandesCreees  CommandeFournisseur[]
+  transfertsCrees  Transfert[]
+  ecritures        EcritureComptable[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([emplacementId])
+  @@index([role, actif])
+  @@map("utilisateurs")
+}
+
+model RefreshToken {
+  id            String      @id @default(cuid())
+  token         String      @unique
+  utilisateurId String
+  utilisateur   Utilisateur @relation(fields: [utilisateurId], references: [id])
+  expiresAt     DateTime
+  revoked       Boolean     @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([utilisateurId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  table          String
+  action         String
+  entiteId       String
+  ancienneValeur Json?
+  nouvelleValeur Json?
+  utilisateurId  String
+  utilisateur    Utilisateur @relation(fields: [utilisateurId], references: [id])
+  ip             String?
+
+  createdAt DateTime @default(now())
+
+  @@index([utilisateurId])
+  @@index([table, action])
+  @@index([createdAt])
+  @@index([table, createdAt])
+  @@map("audit_logs")
+}
+
+model Emplacement {
+  id      String          @id @default(cuid())
+  nom     String
+  type    TypeEmplacement
+  adresse String?
+  actif   Boolean         @default(true)
+
+  utilisateurs     Utilisateur[]
+  stocks           StockEmplacement[]
+  mouvements       MouvementStock[]
+  ventes           Vente[]
+  commandes        CommandeFournisseur[]
+  transfertsSource Transfert[]           @relation("TransfertSource")
+  transfertsDest   Transfert[]           @relation("TransfertDestination")
+
+  createdAt DateTime @default(now())
+
+  @@map("emplacements")
+}
+
+// ───────────────────────────── Stock / Produits ─────────────────────────────
+
+model Produit {
+  id              String   @id @default(cuid())
+  reference       String   @unique
+  nom             String
+  categorie       String?
+  unite           String   @default("unité")
+  prixAchatMoyen  Decimal  @default(0) @db.Decimal(15, 2)
+  prixVenteDetail Decimal  @db.Decimal(15, 2)
+  prixVenteGros   Decimal? @db.Decimal(15, 2)
+  seuilAlerte     Int      @default(0)
+  actif           Boolean  @default(true)
+
+  stocks          StockEmplacement[]
+  mouvements      MouvementStock[]
+  lignesVente     LigneVente[]
+  lignesCommande  LigneCommande[]
+  lignesTransfert LigneTransfert[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categorie])
+  @@map("produits")
+}
+
+model StockEmplacement {
+  id            String      @id @default(cuid())
+  produitId     String
+  produit       Produit     @relation(fields: [produitId], references: [id])
+  emplacementId String
+  emplacement   Emplacement @relation(fields: [emplacementId], references: [id])
+  quantite      Int         @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([produitId, emplacementId])
+  @@map("stocks_emplacement")
+}
+
+enum TypeMouvementStock {
+  ENTREE
+  SORTIE
+  VENTE
+  TRANSFERT_SORTIE
+  TRANSFERT_ENTREE
+  AJUSTEMENT
+}
+
+model MouvementStock {
+  id            String             @id @default(cuid())
+  produitId     String
+  produit       Produit            @relation(fields: [produitId], references: [id])
+  emplacementId String
+  emplacement   Emplacement        @relation(fields: [emplacementId], references: [id])
+  userId        String
+  utilisateur   Utilisateur        @relation(fields: [userId], references: [id])
+  type          TypeMouvementStock
+  quantite      Int
+  raison        String?
+  referenceType String?
+  referenceId   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([produitId, emplacementId])
+  @@index([type, createdAt])
+  @@map("mouvements_stock")
+}
+
+enum StatutTransfert {
+  EN_TRANSIT
+  RECU
+  ANNULE
+}
+
+model Transfert {
+  id                  String          @id @default(cuid())
+  numero              String          @unique
+  emplacementSourceId String
+  emplacementSource   Emplacement     @relation("TransfertSource", fields: [emplacementSourceId], references: [id])
+  emplacementDestId   String
+  emplacementDest     Emplacement     @relation("TransfertDestination", fields: [emplacementDestId], references: [id])
+  statut              StatutTransfert @default(EN_TRANSIT)
+  userId              String
+  utilisateur         Utilisateur     @relation(fields: [userId], references: [id])
+  notes               String?
+
+  lignes LigneTransfert[]
+
+  dateEnvoi     DateTime  @default(now())
+  dateReception DateTime?
+
+  @@map("transferts")
+}
+
+model LigneTransfert {
+  id          String    @id @default(cuid())
+  transfertId String
+  transfert   Transfert @relation(fields: [transfertId], references: [id])
+  produitId   String
+  produit     Produit   @relation(fields: [produitId], references: [id])
+  quantite    Int
+
+  @@map("lignes_transfert")
+}
+
+// ───────────────────────────── Ventes / Facturation ─────────────────────────────
+
+enum TypeClient {
+  PARTICULIER
+  GROSSISTE
+}
+
+model Client {
+  id        String     @id @default(cuid())
+  nom       String
+  telephone String?
+  adresse   String?
+  type      TypeClient @default(PARTICULIER)
+  soldeDu   Decimal    @default(0) @db.Decimal(15, 2)
+  actif     Boolean    @default(true)
+
+  ventes Vente[]
+
+  createdAt DateTime @default(now())
+
+  @@map("clients")
+}
+
+enum StatutVente {
+  BROUILLON
+  VALIDEE
+  ANNULEE
+}
+
+enum ModePaiement {
+  ESPECES
+  CHEQUE
+  VIREMENT
+  CREDIT
+}
+
+model Vente {
+  id            String       @id @default(cuid())
+  numero        String       @unique
+  clientId      String?
+  client        Client?      @relation(fields: [clientId], references: [id])
+  emplacementId String
+  emplacement   Emplacement  @relation(fields: [emplacementId], references: [id])
+  userId        String
+  utilisateur   Utilisateur  @relation(fields: [userId], references: [id])
+  statut        StatutVente  @default(BROUILLON)
+  modePaiement  ModePaiement @default(ESPECES)
+  montantTotal  Decimal      @default(0) @db.Decimal(15, 2)
+  montantPaye   Decimal      @default(0) @db.Decimal(15, 2)
+  dateVente     DateTime     @default(now())
+
+  lignes LigneVente[]
+
+  createdAt DateTime @default(now())
+
+  @@index([emplacementId, dateVente])
+  @@map("ventes")
+}
+
+model LigneVente {
+  id           String  @id @default(cuid())
+  venteId      String
+  vente        Vente   @relation(fields: [venteId], references: [id])
+  produitId    String
+  produit      Produit @relation(fields: [produitId], references: [id])
+  quantite     Int
+  prixUnitaire Decimal @db.Decimal(15, 2)
+  montantLigne Decimal @db.Decimal(15, 2)
+
+  @@map("lignes_vente")
+}
+
+// ───────────────────────────── Achats / Fournisseurs ─────────────────────────────
+
+model Fournisseur {
+  id        String  @id @default(cuid())
+  nom       String
+  telephone String?
+  adresse   String?
+  actif     Boolean @default(true)
+
+  commandes CommandeFournisseur[]
+
+  createdAt DateTime @default(now())
+
+  @@map("fournisseurs")
+}
+
+enum StatutCommande {
+  BROUILLON
+  ENVOYEE
+  RECUE_PARTIELLE
+  RECUE
+  ANNULEE
+}
+
+model CommandeFournisseur {
+  id            String         @id @default(cuid())
+  numero        String         @unique
+  fournisseurId String
+  fournisseur   Fournisseur    @relation(fields: [fournisseurId], references: [id])
+  emplacementId String
+  emplacement   Emplacement    @relation(fields: [emplacementId], references: [id])
+  userId        String
+  utilisateur   Utilisateur    @relation(fields: [userId], references: [id])
+  statut        StatutCommande @default(BROUILLON)
+  notes         String?
+
+  lignes LigneCommande[]
+
+  dateCommande        DateTime  @default(now())
+  dateLivraisonPrevue DateTime?
+
+  @@map("commandes_fournisseur")
+}
+
+model LigneCommande {
+  id                String              @id @default(cuid())
+  commandeId        String
+  commande          CommandeFournisseur @relation(fields: [commandeId], references: [id])
+  produitId         String
+  produit           Produit             @relation(fields: [produitId], references: [id])
+  quantiteCommandee Int
+  quantiteRecue     Int                 @default(0)
+  prixUnitaireAchat Decimal             @db.Decimal(15, 2)
+
+  @@map("lignes_commande")
+}
+
+// ───────────────────────────── Comptabilité de base ─────────────────────────────
+
+enum TypeCompteComptable {
+  ACTIF
+  PASSIF
+  PRODUIT
+  CHARGE
+}
+
+model CompteComptable {
+  id       String              @id @default(cuid())
+  numero   String              @unique
+  intitule String
+  type     TypeCompteComptable
+  actif    Boolean             @default(true)
+
+  ecrituresDebit  EcritureComptable[] @relation("EcritureDebit")
+  ecrituresCredit EcritureComptable[] @relation("EcritureCredit")
+
+  @@map("comptes_comptables")
+}
+
+model EcritureComptable {
+  id             String          @id @default(cuid())
+  compteDebitId  String
+  compteDebit    CompteComptable @relation("EcritureDebit", fields: [compteDebitId], references: [id])
+  compteCreditId String
+  compteCredit   CompteComptable @relation("EcritureCredit", fields: [compteCreditId], references: [id])
+  montant        Decimal         @db.Decimal(15, 2)
+  libelle        String
+  date           DateTime        @default(now())
+  userId         String
+  utilisateur    Utilisateur     @relation(fields: [userId], references: [id])
+  referenceType  String?
+  referenceId    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([compteDebitId, date])
+  @@index([compteCreditId, date])
+  @@map("ecritures_comptables")
+}
+
+model EcritureEchec {
+  id                 String    @id @default(cuid())
+  compteDebitNumero  String
+  compteCreditNumero String
+  montant            Decimal   @db.Decimal(15, 2)
+  libelle            String
+  erreur             String
+  referenceType      String?
+  referenceId        String?
+  resolu             Boolean   @default(false)
+  resoluAt           DateTime?
+  resoluParId        String?
+
+  createdAt DateTime @default(now())
+
+  @@map("ecritures_echec")
+}

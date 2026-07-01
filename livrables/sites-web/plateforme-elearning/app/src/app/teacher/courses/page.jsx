@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Icon from '@/components/Icon';
 import AppShell from '@/components/AppShell';
 import { useGo } from '@/lib/navigation';
@@ -12,6 +13,7 @@ const EMPTY_FORM = { title: '', description: '', category: '', level: 'Tous nive
 
 export default function TeacherCoursesPage() {
   const go = useGo();
+  const router = useRouter();
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -194,6 +196,9 @@ export default function TeacherCoursesPage() {
                 </div>
 
                 <div className="row gap-8" style={{ flexShrink: 0 }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => router.push(`/teacher/courses/${c.id}`)}>
+                    <Icon name="layers" size={15} />Contenu
+                  </button>
                   <button className="btn btn-outline btn-sm" onClick={() => openEdit(c)}>
                     <Icon name="settings" size={15} />Modifier
                   </button>

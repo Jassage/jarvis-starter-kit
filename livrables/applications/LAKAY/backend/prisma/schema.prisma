@@ -1,0 +1,627 @@
+// LAKAY — Plateforme immobilière haïtienne
+// Prisma Schema — PostgreSQL + PostGIS
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  AGENCY
+  AGENT
+  OWNER
+  INDIVIDUAL
+}
+
+enum PropertyType {
+  ROOM
+  STUDIO
+  APARTMENT
+  HOUSE
+  VILLA
+  LAND
+  COMMERCIAL
+  OFFICE
+  WAREHOUSE
+}
+
+enum ListingType {
+  RENT
+  SALE
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  RENTED
+  SOLD
+  EXPIRED
+  REJECTED
+  SUSPENDED
+}
+
+enum Currency {
+  HTG
+  USD
+}
+
+enum Department {
+  OUEST
+  NORD
+  NORD_EST
+  NORD_OUEST
+  ARTIBONITE
+  CENTRE
+  SUD
+  SUD_EST
+  NIPPES
+  GRANDE_ANSE
+}
+
+enum NotificationType {
+  NEW_MESSAGE
+  LISTING_APPROVED
+  LISTING_REJECTED
+  LISTING_EXPIRED
+  VISIT_REQUEST
+  VISIT_CONFIRMED
+  VISIT_CANCELLED
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  NEW_REVIEW
+  REPORT_RESOLVED
+  ACCOUNT_VERIFIED
+  SUBSCRIPTION_EXPIRING
+  PRICE_DROP
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  MONCASH
+  NATCASH
+  STRIPE
+  PAYPAL
+  CASH
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum VisitStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum ReportReason {
+  FRAUD
+  INAPPROPRIATE
+  DUPLICATE
+  WRONG_PRICE
+  ALREADY_RENTED_SOLD
+  SPAM
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+// ─────────────────────────────────────────
+// USERS & AUTH
+// ─────────────────────────────────────────
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  password        String
+  firstName       String
+  lastName        String
+  phone           String?
+  whatsapp        String?
+  avatar          String?
+  avatarPublicId  String?
+  role            UserRole  @default(INDIVIDUAL)
+  isActive        Boolean   @default(true)
+  isVerified      Boolean   @default(false)
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  bio             String?   @db.Text
+
+  // Subscription limits
+  maxActiveListings Int @default(3)
+
+  // Relations
+  agency          Agency?           @relation("AgencyOwner")
+  agencyMembership AgencyMember?
+  listings        Listing[]
+  favorites       Favorite[]
+  sentMessages    Message[]         @relation("MessageSender")
+  conversations   ConversationParticipant[]
+  notifications   Notification[]
+  reviews         Review[]
+  payments        Payment[]
+  subscription    Subscription?
+  visitRequests   VisitRequest[]
+  reports         Report[]          @relation("Reporter")
+  refreshTokens   RefreshToken[]
+  passwordResets  PasswordResetToken[]
+  auditLogs       AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("email_verification_tokens")
+}
+
+// ─────────────────────────────────────────
+// AGENCIES
+// ─────────────────────────────────────────
+
+model Agency {
+  id          String  @id @default(cuid())
+  name        String
+  description String? @db.Text
+  logo        String?
+  logoPublicId String?
+  address     String?
+  phone       String?
+  email       String? @unique
+  website     String?
+  licenseNumber String?
+  isVerified  Boolean @default(false)
+  isActive    Boolean @default(true)
+
+  // Social
+  facebook    String?
+  instagram   String?
+  whatsapp    String?
+
+  ownerId     String  @unique
+  owner       User    @relation("AgencyOwner", fields: [ownerId], references: [id])
+  members     AgencyMember[]
+  listings    Listing[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("agencies")
+}
+
+model AgencyMember {
+  id       String @id @default(cuid())
+  agencyId String
+  userId   String @unique
+  agency   Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     String @default("AGENT") // AGENT, MANAGER
+
+  createdAt DateTime @default(now())
+
+  @@map("agency_members")
+}
+
+// ─────────────────────────────────────────
+// LISTINGS
+// ─────────────────────────────────────────
+
+model Listing {
+  id          String        @id @default(cuid())
+  title       String
+  description String        @db.Text
+
+  propertyType PropertyType
+  listingType  ListingType
+
+  price       Decimal       @db.Decimal(12, 2)
+  currency    Currency      @default(HTG)
+  priceNegotiable Boolean   @default(false)
+  monthlyCharges  Decimal?  @db.Decimal(12, 2) // pour locations
+
+  // Location haïtienne
+  department  Department
+  commune     String
+  city        String
+  neighborhood String?
+  address     String?
+  landmark    String?      // Point de repère — crucial pour Haïti
+  latitude    Decimal?     @db.Decimal(10, 8)
+  longitude   Decimal?     @db.Decimal(11, 8)
+  googleMapsUrl String?
+
+  // Détails du bien
+  bedrooms    Int?
+  bathrooms   Int?
+  area        Decimal?     @db.Decimal(10, 2)  // m²
+  floor       Int?
+  totalFloors Int?
+  yearBuilt   Int?
+  parkingSpaces Int?
+
+  // Équipements essentiels (contexte haïtien)
+  hasWater         Boolean @default(false)
+  hasElectricity   Boolean @default(false) // EDH
+  hasGenerator     Boolean @default(false)
+  hasSolarPanel    Boolean @default(false)
+  hasCistern       Boolean @default(false)
+  hasInternet      Boolean @default(false)
+  hasParking       Boolean @default(false)
+  hasPool          Boolean @default(false)
+  hasAC            Boolean @default(false)
+  isFurnished      Boolean @default(false)
+  petsAllowed      Boolean @default(false)
+  hasSecurity      Boolean @default(false) // gardien / portail
+  hasSeaView       Boolean @default(false)
+  hasMountainView  Boolean @default(false)
+  isAvailableNow   Boolean @default(true)
+  hasBalcony       Boolean @default(false)
+  hasGarden        Boolean @default(false)
+
+  // Médias
+  images          ListingImage[]
+  videos          ListingVideo[]
+  virtualTourUrl  String?
+
+  // Statut & Modération
+  status          ListingStatus @default(DRAFT)
+  rejectionReason String?
+  reviewedAt      DateTime?
+  reviewedById    String?
+
+  // Mise en avant
+  isFeatured      Boolean   @default(false)
+  featuredUntil   DateTime?
+  isSponsored     Boolean   @default(false)
+  sponsoredUntil  DateTime?
+  sponsoredTier   Int?      @default(0) // 1=bronze, 2=silver, 3=gold
+
+  // Stats
+  viewCount       Int       @default(0)
+  contactCount    Int       @default(0)
+  favoriteCount   Int       @default(0)
+
+  expiresAt       DateTime?
+
+  // Relations
+  ownerId         String
+  owner           User      @relation(fields: [ownerId], references: [id])
+  agencyId        String?
+  agency          Agency?   @relation(fields: [agencyId], references: [id])
+
+  favorites       Favorite[]
+  conversations   Conversation[]
+  visitRequests   VisitRequest[]
+  reviews         Review[]
+  reports         Report[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("listings")
+}
+
+model ListingImage {
+  id         String   @id @default(cuid())
+  listingId  String
+  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url        String
+  publicId   String?
+  alt        String?
+  order      Int      @default(0)
+  isPrimary  Boolean  @default(false)
+  width      Int?
+  height     Int?
+  createdAt  DateTime @default(now())
+
+  @@map("listing_images")
+}
+
+model ListingVideo {
+  id         String   @id @default(cuid())
+  listingId  String
+  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url        String
+  publicId   String?
+  thumbnail  String?
+  duration   Int?     // secondes
+  createdAt  DateTime @default(now())
+
+  @@map("listing_videos")
+}
+
+// ─────────────────────────────────────────
+// INTERACTIONS
+// ─────────────────────────────────────────
+
+model Favorite {
+  id         String   @id @default(cuid())
+  userId     String
+  listingId  String
+  savedPrice Decimal? @db.Decimal(12, 2)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, listingId])
+  @@map("favorites")
+}
+
+model VisitRequest {
+  id           String      @id @default(cuid())
+  listingId    String
+  requesterId  String
+  listing      Listing     @relation(fields: [listingId], references: [id])
+  requester    User        @relation(fields: [requesterId], references: [id])
+
+  proposedDate DateTime
+  message      String?     @db.Text
+  status       VisitStatus @default(PENDING)
+  confirmedDate DateTime?
+  ownerNote    String?
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@map("visit_requests")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  listingId String
+  userId    String
+  rating    Int      // 1–5
+  comment   String?  @db.Text
+  isVerified Boolean @default(false) // vérifié par admin
+
+  listing   Listing  @relation(fields: [listingId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([listingId, userId])
+  @@map("reviews")
+}
+
+// ─────────────────────────────────────────
+// MESSAGERIE
+// ─────────────────────────────────────────
+
+model Conversation {
+  id          String    @id @default(cuid())
+  listingId   String?
+  listing     Listing?  @relation(fields: [listingId], references: [id])
+  subject     String?
+
+  participants ConversationParticipant[]
+  messages    Message[]
+
+  lastMessageAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  userId         String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime?
+
+  @@unique([conversationId, userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String       @db.Text
+  isRead         Boolean      @default(false)
+
+  // Pièces jointes
+  attachmentUrl  String?
+  attachmentType String?      // IMAGE, DOCUMENT
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("messages")
+}
+
+// ─────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────
+
+model Notification {
+  id      String           @id @default(cuid())
+  userId  String
+  type    NotificationType
+  title   String
+  message String
+  data    Json?
+  isRead  Boolean          @default(false)
+  link    String?
+
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+// ─────────────────────────────────────────
+// PAIEMENTS & ABONNEMENTS
+// ─────────────────────────────────────────
+
+model Subscription {
+  id        String           @id @default(cuid())
+  userId    String           @unique
+  plan      SubscriptionPlan @default(FREE)
+  isActive  Boolean          @default(true)
+
+  startDate DateTime         @default(now())
+  endDate   DateTime?
+
+  user      User             @relation(fields: [userId], references: [id])
+  payments  Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  userId         String
+  subscriptionId String?
+  listingId      String?       // pour annonces sponsorisées
+
+  amount         Decimal       @db.Decimal(12, 2)
+  currency       Currency      @default(HTG)
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+
+  providerRef    String?
+  providerData   Json?
+
+  description    String?
+  metadata       Json?
+
+  user           User          @relation(fields: [userId], references: [id])
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("payments")
+}
+
+// ─────────────────────────────────────────
+// MODÉRATION
+// ─────────────────────────────────────────
+
+model Report {
+  id          String       @id @default(cuid())
+  listingId   String
+  reporterId  String
+  listing     Listing      @relation(fields: [listingId], references: [id])
+  reporter    User         @relation("Reporter", fields: [reporterId], references: [id])
+
+  reason      ReportReason
+  description String?      @db.Text
+  status      ReportStatus @default(PENDING)
+  adminNote   String?
+  resolvedAt  DateTime?
+  resolvedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reports")
+}
+
+// ─────────────────────────────────────────
+// SYSTÈME
+// ─────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  changes   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model SystemConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  label     String?
+  updatedAt DateTime @updatedAt
+
+  @@map("system_configs")
+}
+
+model SearchHistory {
+  id        String   @id @default(cuid())
+  userId    String?
+  query     Json
+  resultCount Int
+  createdAt DateTime @default(now())
+
+  @@map("search_history")
+}

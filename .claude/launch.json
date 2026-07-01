@@ -46,6 +46,41 @@
       "runtimeArgs": ["--prefix", "livrables/applications/BANKA/frontend", "run", "dev"],
       "port": 3001,
       "autoPort": false
+    },
+    {
+      "name": "haitech-website",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "../haitech-website", "run", "dev"],
+      "port": 3005,
+      "autoPort": false
+    },
+    {
+      "name": "gescom-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/GESCOM/backend", "run", "dev"],
+      "port": 4002,
+      "autoPort": false
+    },
+    {
+      "name": "gescom-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/GESCOM/frontend", "run", "dev"],
+      "port": 3003,
+      "autoPort": false
+    },
+    {
+      "name": "lakay-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/LAKAY/backend", "run", "dev"],
+      "port": 4003,
+      "autoPort": false
+    },
+    {
+      "name": "lakay-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/LAKAY/frontend", "run", "dev"],
+      "port": 3004,
+      "autoPort": false
     }
   ]
 }

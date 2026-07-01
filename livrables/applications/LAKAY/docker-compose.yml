@@ -1,0 +1,108 @@
+version: '3.9'
+
+services:
+  # ─── Base de données PostgreSQL ───
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: lakay_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lakay
+      POSTGRES_USER: lakay
+      POSTGRES_PASSWORD: lakay_secure_password
+    ports:
+      - "5435:5432"
+    volumes:
+      - lakay_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lakay"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis ───
+  redis:
+    image: redis:7-alpine
+    container_name: lakay_redis
+    restart: unless-stopped
+    ports:
+      - "6381:6379"
+    volumes:
+      - lakay_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ─── Backend ───
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend.Dockerfile
+    container_name: lakay_backend
+    restart: unless-stopped
+    ports:
+      - "4003:4003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4003
+      DATABASE_URL: postgresql://lakay:lakay_secure_password@postgres:5432/lakay
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: http://localhost:3004
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+    volumes:
+      - lakay_uploads:/app/uploads
+
+  # ─── Frontend ───
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/frontend.Dockerfile
+    container_name: lakay_frontend
+    restart: unless-stopped
+    ports:
+      - "3004:3004"
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:4003/api
+      NEXT_PUBLIC_SOCKET_URL: http://backend:4003
+
+  # ─── Nginx (reverse proxy) ───
+  nginx:
+    image: nginx:alpine
+    container_name: lakay_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - lakay_nginx_certs:/etc/ssl/certs
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  lakay_postgres_data:
+  lakay_redis_data:
+  lakay_uploads:
+  lakay_nginx_certs:
+
+networks:
+  default:
+    name: lakay_network
