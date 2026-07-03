@@ -26,7 +26,7 @@ import favoritesRoutes from './modules/favorites/favorites.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import reviewsRoutes from './modules/reviews/reviews.routes';
 import reportsRoutes from './modules/reports/reports.routes';
-import paymentsRoutes from './modules/payments/payments.routes';
+import paymentsRoutes, { stripeWebhookHandler } from './modules/payments/payments.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import aiRoutes from './modules/ai/ai.routes';
 import visitsRoutes from './modules/visits/visits.routes';
@@ -48,6 +48,10 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// ─── Webhook Stripe : body brut, doit être monté AVANT express.json() ───
+// (la vérification de signature Stripe exige les octets exacts reçus)
+app.post('/api/payments/stripe/webhook', express.raw({ type: 'application/json' }), asyncHandler(stripeWebhookHandler));
 
 // ─── Middlewares de base ───
 app.use(compression());

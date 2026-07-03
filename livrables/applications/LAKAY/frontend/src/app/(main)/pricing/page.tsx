@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { CheckCircle2, Zap, X, Phone, Copy, Check, Upload, Loader2 } from 'lucide-react';
+import { CheckCircle2, Zap, X, Phone, Copy, Check, Upload, Loader2, CreditCard } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
@@ -31,6 +31,7 @@ const PLANS = [
     id: 'BASIC',
     name: 'Basic',
     price: 2500,
+    priceUSD: 20,
     currency: 'HTG',
     period: '/ 3 mois',
     description: 'Pour les propriétaires actifs',
@@ -48,7 +49,8 @@ const PLANS = [
   {
     id: 'PROFESSIONAL',
     name: 'Professionnel',
-    price: 6500,
+    price: 7500,
+    priceUSD: 60,
     currency: 'HTG',
     period: '/ 6 mois',
     description: 'Pour les agents et agences',
@@ -92,7 +94,7 @@ function formatPrice(price: number, currency: string) {
   return new Intl.NumberFormat('fr-HT').format(price) + ' ' + currency;
 }
 
-type Method = 'MONCASH' | 'NATCASH';
+type Method = 'MONCASH' | 'NATCASH' | 'STRIPE';
 
 function SubscriptionModal({ plan, onClose }: { plan: Plan; onClose: () => void }) {
   const [method, setMethod] = useState<Method>('MONCASH');
@@ -124,6 +126,11 @@ function SubscriptionModal({ plan, onClose }: { plan: Plan; onClose: () => void 
     onSuccess: () => setDone(true),
   });
 
+  const stripeMutation = useMutation({
+    mutationFn: () => paymentsApi.stripeCheckout(plan.id).then(r => r.data.data.url as string),
+    onSuccess: (url) => { window.location.href = url; },
+  });
+
   const handleCopy = () => {
     navigator.clipboard.writeText(payNumber.replace(/\s/g, ''));
     setCopied(true);
@@ -131,6 +138,7 @@ function SubscriptionModal({ plan, onClose }: { plan: Plan; onClose: () => void 
   };
 
   const errorMsg = (submitMutation.error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  const stripeErrorMsg = (stripeMutation.error as { response?: { data?: { message?: string } } })?.response?.data?.message;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -169,8 +177,8 @@ function SubscriptionModal({ plan, onClose }: { plan: Plan; onClose: () => void 
         ) : (
           <div className="p-6 space-y-5">
             {/* Choix méthode */}
-            <div className="grid grid-cols-2 gap-2">
-              {(['MONCASH', 'NATCASH'] as Method[]).map(m => (
+            <div className="grid grid-cols-3 gap-2">
+              {(['MONCASH', 'NATCASH', 'STRIPE'] as Method[]).map(m => (
                 <button
                   key={m}
                   onClick={() => setMethod(m)}
@@ -178,77 +186,103 @@ function SubscriptionModal({ plan, onClose }: { plan: Plan; onClose: () => void 
                     method === m ? 'border-primary-500 bg-primary-50 text-primary-600' : 'border-gray-200 text-gray-600 hover:border-gray-300'
                   }`}
                 >
-                  {m === 'MONCASH' ? 'MonCash' : 'NatCash'}
+                  {m === 'MONCASH' ? 'MonCash' : m === 'NATCASH' ? 'NatCash' : 'Carte'}
                 </button>
               ))}
             </div>
 
-            {/* Étape 1 : envoyer */}
-            <div>
-              <p className="text-sm text-gray-700 font-medium mb-1.5">
-                1. Transférez <strong className="text-gray-900">{formatPrice(plan.price, plan.currency)}</strong> au numéro {method === 'MONCASH' ? 'MonCash' : 'NatCash'} :
-              </p>
-              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200">
-                <Phone className="w-4 h-4 text-primary-500" />
-                <span className="text-sm font-mono font-semibold text-gray-900">{payNumber}</span>
-                {numbers?.name && <span className="text-xs text-gray-400">({numbers.name})</span>}
-                <button onClick={handleCopy} className="ml-auto text-gray-400 hover:text-primary-500 transition-colors">
-                  {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+            {method === 'STRIPE' ? (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 bg-gray-50 rounded-xl p-4 border border-gray-200">
+                  <CreditCard className="w-5 h-5 text-primary-500 mt-0.5 shrink-0" />
+                  <p className="text-sm text-gray-600">
+                    Paiement immédiat par carte bancaire (Visa, Mastercard) via Stripe, en dollars américains.
+                    Votre abonnement <strong>{plan.name}</strong> s'active automatiquement dès le paiement confirmé.
+                  </p>
+                </div>
+
+                {stripeErrorMsg && <p className="text-red-600 text-sm">{stripeErrorMsg}</p>}
+
+                <button
+                  onClick={() => stripeMutation.mutate()}
+                  disabled={stripeMutation.isPending}
+                  className="w-full py-2.5 bg-primary-500 text-white rounded-xl text-sm font-semibold hover:bg-primary-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  {stripeMutation.isPending
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Redirection...</>
+                    : <>Payer {plan.priceUSD ? `$${plan.priceUSD}` : ''} par carte</>}
                 </button>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* Étape 1 : envoyer */}
+                <div>
+                  <p className="text-sm text-gray-700 font-medium mb-1.5">
+                    1. Transférez <strong className="text-gray-900">{formatPrice(plan.price, plan.currency)}</strong> au numéro {method === 'MONCASH' ? 'MonCash' : 'NatCash'} :
+                  </p>
+                  <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200">
+                    <Phone className="w-4 h-4 text-primary-500" />
+                    <span className="text-sm font-mono font-semibold text-gray-900">{payNumber}</span>
+                    {numbers?.name && <span className="text-xs text-gray-400">({numbers.name})</span>}
+                    <button onClick={handleCopy} className="ml-auto text-gray-400 hover:text-primary-500 transition-colors">
+                      {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
 
-            {/* Étape 2 : preuve */}
-            <div className="space-y-3">
-              <p className="text-sm text-gray-700 font-medium">2. Envoyez la preuve du transfert</p>
+                {/* Étape 2 : preuve */}
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-700 font-medium">2. Envoyez la preuve du transfert</p>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Référence / ID de transaction *</label>
-                <input
-                  value={transactionRef}
-                  onChange={e => setTransactionRef(e.target.value)}
-                  placeholder="Ex : le code reçu par SMS"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Référence / ID de transaction *</label>
+                    <input
+                      value={transactionRef}
+                      onChange={e => setTransactionRef(e.target.value)}
+                      placeholder="Ex : le code reçu par SMS"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Votre numéro d'envoi (optionnel)</label>
-                <input
-                  value={senderNumber}
-                  onChange={e => setSenderNumber(e.target.value)}
-                  placeholder="+509 ..."
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Votre numéro d'envoi (optionnel)</label>
+                    <input
+                      value={senderNumber}
+                      onChange={e => setSenderNumber(e.target.value)}
+                      placeholder="+509 ..."
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                    />
+                  </div>
 
-              <div>
-                <label className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-colors">
-                  <Upload className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">{screenshot ? screenshot.name : 'Capture d\'écran (optionnel)'}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => setScreenshot(e.target.files?.[0] ?? null)}
-                  />
-                </label>
-              </div>
-            </div>
+                  <div>
+                    <label className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-colors">
+                      <Upload className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm text-gray-600">{screenshot ? screenshot.name : 'Capture d\'écran (optionnel)'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => setScreenshot(e.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                  </div>
+                </div>
 
-            {errorMsg && <p className="text-red-600 text-sm">{errorMsg}</p>}
+                {errorMsg && <p className="text-red-600 text-sm">{errorMsg}</p>}
 
-            <button
-              onClick={() => submitMutation.mutate()}
-              disabled={!transactionRef.trim() || submitMutation.isPending}
-              className="w-full py-2.5 bg-primary-500 text-white rounded-xl text-sm font-semibold hover:bg-primary-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-            >
-              {submitMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Envoi...</> : 'Envoyer ma preuve de paiement'}
-            </button>
+                <button
+                  onClick={() => submitMutation.mutate()}
+                  disabled={!transactionRef.trim() || submitMutation.isPending}
+                  className="w-full py-2.5 bg-primary-500 text-white rounded-xl text-sm font-semibold hover:bg-primary-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  {submitMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Envoi...</> : 'Envoyer ma preuve de paiement'}
+                </button>
 
-            <p className="text-xs text-gray-400 text-center">
-              Activation sous 24h après vérification. Le paiement automatique arrive bientôt.
-            </p>
+                <p className="text-xs text-gray-400 text-center">
+                  Activation sous 24h après vérification. Le paiement automatique arrive bientôt.
+                </p>
+              </>
+            )}
           </div>
         )}
       </div>

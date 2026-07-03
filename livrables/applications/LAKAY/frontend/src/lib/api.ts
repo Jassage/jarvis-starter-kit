@@ -165,6 +165,7 @@ export const paymentsApi = {
   getMethods: () => api.get('/payments/methods'),
   initiateMoncash: (planId: string, currency?: string) => api.post('/payments/moncash/initiate', { planId, currency }),
   initiateNatcash: (planId: string, currency?: string) => api.post('/payments/natcash/initiate', { planId, currency }),
+  stripeCheckout: (planId: string) => api.post('/payments/stripe/checkout', { planId }),
   submitProof: (formData: FormData) =>
     api.post('/payments/submit-proof', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };

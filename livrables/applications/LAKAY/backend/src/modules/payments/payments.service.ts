@@ -1,19 +1,21 @@
 import crypto from 'crypto';
+import Stripe from 'stripe';
 import { PaymentMethod, SubscriptionPlan } from '@prisma/client';
 import prisma from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler.middleware';
 import { sendEmail, subscriptionActivatedTemplate } from '../../utils/email';
 import { uploadToCloudinary } from '../../config/cloudinary';
 import { getIO } from '../../config/socket';
+import { env } from '../../config/env';
 
 // Source de vérité unique des tarifs (partagée entre /plans, initiate MonCash et NatCash)
-export const PLAN_PRICES: Record<string, { htg: number; usd: number; name: string }> = {
-  BASIC: { htg: 2500, usd: 20, name: 'Basic' },
-  PROFESSIONAL: { htg: 7500, usd: 60, name: 'Professionnel' },
-  ENTERPRISE: { htg: 20000, usd: 160, name: 'Entreprise' },
+// `days` = durée réellement accordée à l'activation, doit correspondre à ce qui est
+// annoncé sur la page pricing frontend (Basic "/ 3 mois", Professionnel "/ 6 mois").
+export const PLAN_PRICES: Record<string, { htg: number; usd: number; name: string; days: number }> = {
+  BASIC: { htg: 2500, usd: 20, name: 'Basic', days: 90 },
+  PROFESSIONAL: { htg: 7500, usd: 60, name: 'Professionnel', days: 180 },
+  ENTERPRISE: { htg: 20000, usd: 160, name: 'Entreprise', days: 365 },
 };
-
-const SUBSCRIPTION_DAYS = 30;
 
 // Plans qui confèrent le badge "vérifié / pro". Le badge est DÉRIVÉ du plan
 // (pas de champ dupliqué en base) — à consommer côté front via subscription.plan.
@@ -64,9 +66,57 @@ export async function initiatePlanPayment(
   return { payment, amount, currency: cur };
 }
 
+// ─────────────────────────────────────────
+// STRIPE (carte bancaire — utile pour la diaspora, paiement immédiat)
+// ─────────────────────────────────────────
+
+let stripeClient: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!env.STRIPE_SECRET_KEY) throw new AppError('Paiement par carte non configuré', 503); // fail-closed
+  if (!stripeClient) stripeClient = new Stripe(env.STRIPE_SECRET_KEY);
+  return stripeClient;
+}
+
+/**
+ * Crée un Payment PENDING (method STRIPE) puis une Checkout Session Stripe
+ * en USD, avec paymentId en metadata pour le retrouver au webhook.
+ */
+export async function initiateStripeCheckout(userId: string, planId: string) {
+  const price = PLAN_PRICES[planId];
+  if (!price) throw new AppError('Plan invalide', 400);
+
+  const { payment } = await initiatePlanPayment(userId, planId, 'USD', 'STRIPE');
+  const stripe = getStripe();
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    payment_method_types: ['card'],
+    line_items: [{
+      price_data: {
+        currency: 'usd',
+        unit_amount: Math.round(price.usd * 100),
+        product_data: { name: `Abonnement LAKAY ${price.name}` },
+      },
+      quantity: 1,
+    }],
+    metadata: { paymentId: payment.id },
+    success_url: `${env.FRONTEND_URL}/dashboard?stripe=success`,
+    cancel_url: `${env.FRONTEND_URL}/pricing?stripe=cancelled`,
+  });
+
+  if (!session.url) throw new AppError('Impossible de créer la session de paiement', 502);
+  return { url: session.url };
+}
+
+/** Vérifie la signature Stripe et décode l'événement (lève si secret absent ou signature invalide). */
+export function constructStripeEvent(rawBody: Buffer, signature: string): Stripe.Event {
+  if (!env.STRIPE_WEBHOOK_SECRET) throw new AppError('Webhook Stripe non configuré', 503);
+  return getStripe().webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET);
+}
+
 /**
  * Point d'entrée UNIQUE d'activation d'abonnement, appelé par les webhooks
- * MonCash ET NatCash. Idempotent et atomique.
+ * MonCash, NatCash ET Stripe. Idempotent et atomique.
  *
  * Effets, selon le plan payé :
  *  - Paiement → COMPLETED (compare-and-swap sur PENDING)
@@ -98,7 +148,7 @@ export async function activateSubscription(paymentId: string, transactionId?: st
 
     const plan = planId as SubscriptionPlan;
     const endDate = new Date();
-    endDate.setDate(endDate.getDate() + SUBSCRIPTION_DAYS);
+    endDate.setDate(endDate.getDate() + PLAN_PRICES[planId].days);
 
     const subscription = await tx.subscription.upsert({
       where: { userId: payment.userId },
@@ -122,7 +172,7 @@ export async function activateSubscription(paymentId: string, transactionId?: st
         userId: payment.userId,
         type: 'PAYMENT_SUCCESS',
         title: 'Abonnement activé',
-        message: `Votre abonnement ${PLAN_PRICES[planId].name} est actif pour ${SUBSCRIPTION_DAYS} jours.`,
+        message: `Votre abonnement ${PLAN_PRICES[planId].name} est actif pour ${PLAN_PRICES[planId].days} jours.`,
         data: { plan: planId, paymentId: payment.id },
         link: '/dashboard',
       },

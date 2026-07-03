@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import type Stripe from 'stripe';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { requireAuth } from '../../middlewares/auth.middleware';
 import { sendSuccess } from '../../utils/response';
@@ -14,7 +15,39 @@ import {
   verifyWebhookSecret,
   getPaymentNumbers,
   submitPaymentProof,
+  initiateStripeCheckout,
+  constructStripeEvent,
 } from './payments.service';
+
+/**
+ * Webhook Stripe — monté à part dans app.ts, AVANT express.json(), avec un
+ * body parser raw (la vérification de signature Stripe exige les octets
+ * exacts envoyés, un body déjà parsé en JSON la casse).
+ */
+export async function stripeWebhookHandler(req: Request, res: Response) {
+  const signature = req.headers['stripe-signature'];
+  if (!signature || typeof signature !== 'string') {
+    res.status(400).json({ success: false, message: 'Signature manquante' });
+    return;
+  }
+
+  let event: Stripe.Event;
+  try {
+    event = constructStripeEvent(req.body as Buffer, signature);
+  } catch {
+    res.status(400).json({ success: false, message: 'Signature invalide' });
+    return;
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const paymentId = session.metadata?.paymentId;
+    if (paymentId) {
+      await activateSubscription(paymentId, (session.payment_intent as string) || undefined);
+    }
+  }
+  res.json({ received: true });
+}
 
 const router = Router();
 
@@ -62,7 +95,7 @@ router.get('/plans', asyncHandler(async (_req, res) => {
       name: PLAN_PRICES.BASIC.name,
       priceHTG: PLAN_PRICES.BASIC.htg,
       priceUSD: PLAN_PRICES.BASIC.usd,
-      duration: 30,
+      duration: PLAN_PRICES.BASIC.days,
       features: ['20 annonces actives', '90 jours par annonce', 'Photos illimitées', 'Messagerie'],
     },
     {
@@ -70,7 +103,7 @@ router.get('/plans', asyncHandler(async (_req, res) => {
       name: PLAN_PRICES.PROFESSIONAL.name,
       priceHTG: PLAN_PRICES.PROFESSIONAL.htg,
       priceUSD: PLAN_PRICES.PROFESSIONAL.usd,
-      duration: 30,
+      duration: PLAN_PRICES.PROFESSIONAL.days,
       features: ['Annonces illimitées', '180 jours par annonce', '3 annonces sponsorisées/mois', 'Badge vérifié', 'Dashboard analytique', 'Support prioritaire'],
     },
     {
@@ -78,7 +111,7 @@ router.get('/plans', asyncHandler(async (_req, res) => {
       name: PLAN_PRICES.ENTERPRISE.name,
       priceHTG: PLAN_PRICES.ENTERPRISE.htg,
       priceUSD: PLAN_PRICES.ENTERPRISE.usd,
-      duration: 30,
+      duration: PLAN_PRICES.ENTERPRISE.days,
       features: ['Tout du Pro', 'API accès', 'Agent dédié', 'Logo agence vérifié', 'Intégration custom'],
     },
   ];
@@ -119,6 +152,13 @@ router.post('/natcash/initiate', asyncHandler(async (req, res) => {
     redirectUrl: `https://natcash.natcom.com.ht/checkout/${payment.id}`,
     orderId: payment.id,
   }, 'Paiement initié');
+}));
+
+// Créer une session de paiement par carte (Stripe Checkout)
+router.post('/stripe/checkout', asyncHandler(async (req, res) => {
+  const { planId } = req.body;
+  const { url } = await initiateStripeCheckout(req.user!.id, planId);
+  sendSuccess(res, { url }, 'Session de paiement créée');
 }));
 
 // ─── Paiement manuel (preuve de transfert) ───
