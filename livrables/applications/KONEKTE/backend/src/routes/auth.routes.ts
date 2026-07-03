@@ -1,6 +1,8 @@
 import { Router, Response } from "express";
 import { requireAuth } from "../middlewares/auth.middleware";
+import { authLimiter } from "../middlewares/rateLimit.middleware";
 import { AuthRequest } from "../types";
+import { registerSchema, loginSchema } from "../validators/auth.validator";
 import {
   registerService,
   loginService,
@@ -14,9 +16,10 @@ import {
 
 const router = Router();
 
-router.post("/register", async (req, res: Response): Promise<void> => {
+router.post("/register", authLimiter, async (req, res: Response): Promise<void> => {
   try {
-    const result = await registerService(req.body);
+    const data = registerSchema.parse(req.body);
+    const result = await registerService(data);
     res.status(201).json({ success: true, data: result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Erreur serveur";
@@ -24,9 +27,10 @@ router.post("/register", async (req, res: Response): Promise<void> => {
   }
 });
 
-router.post("/login", async (req, res: Response): Promise<void> => {
+router.post("/login", authLimiter, async (req, res: Response): Promise<void> => {
   try {
-    const result = await loginService(req.body);
+    const data = loginSchema.parse(req.body);
+    const result = await loginService(data);
     res.json({ success: true, data: result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Erreur serveur";

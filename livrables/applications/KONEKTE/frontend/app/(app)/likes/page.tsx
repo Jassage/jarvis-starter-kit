@@ -10,7 +10,7 @@ interface LikeItem {
   swipeId: string;
   action: "LIKE" | "SUPER_LIKE";
   createdAt: string;
-  user: { id: string; firstName: string; age: number | null; city: string | null; mainPhoto: string | null };
+  user: { id: string; firstName: string | null; age: number | null; city: string | null; mainPhoto: string | null };
 }
 
 function timeAgo(iso: string) {
@@ -93,7 +93,7 @@ export default function LikesPage() {
                   </div>
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-5xl font-black" style={{ color: "#D4537E", opacity: 0.3 }}>
-                    {like.user.firstName[0]}
+                    {like.user.firstName?.[0] ?? "♥"}
                   </div>
                 )}
 

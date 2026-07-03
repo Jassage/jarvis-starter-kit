@@ -1,5 +1,14 @@
 import { prisma } from "../lib/prisma";
 import { SwipeAction } from "@prisma/client";
+import { v2 as cloudinary } from "cloudinary";
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const SUPER_LIKE_DAILY_LIMIT = 3;
 
 export const swipeService = async (
   senderId: string,
@@ -17,6 +26,17 @@ export const swipeService = async (
     where: { senderId_receiverId: { senderId, receiverId } },
   });
   if (existing) throw new Error("Déjà swipé sur ce profil");
+
+  if (action === "SUPER_LIKE") {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const usedToday = await prisma.swipe.count({
+      where: { senderId, action: "SUPER_LIKE", createdAt: { gte: startOfDay } },
+    });
+    if (usedToday >= SUPER_LIKE_DAILY_LIMIT) {
+      throw new Error("Quota de Super Likes atteint pour aujourd'hui");
+    }
+  }
 
   await prisma.swipe.create({ data: { senderId, receiverId, action } });
 
@@ -105,6 +125,9 @@ export const unmatchService = async (userId: string, matchId: string) => {
 };
 
 export const getLikesReceivedService = async (userId: string) => {
+  const viewer = await prisma.user.findUnique({ where: { id: userId }, select: { subscriptionPlan: true } });
+  const isPremium = viewer?.subscriptionPlan !== "FREE";
+
   // IDs des utilisateurs avec qui on a déjà un match actif
   const existingMatches = await prisma.match.findMany({
     where: { OR: [{ userAId: userId }, { userBId: userId }], isActive: true },
@@ -124,7 +147,7 @@ export const getLikesReceivedService = async (userId: string) => {
       sender: {
         include: {
           profile: { select: { firstName: true, city: true, birthDate: true } },
-          photos: { where: { isMain: true }, select: { url: true } },
+          photos: { where: { isMain: true }, select: { url: true, cloudinaryId: true } },
         },
       },
     },
@@ -132,24 +155,48 @@ export const getLikesReceivedService = async (userId: string) => {
     take: 20,
   });
 
-  return likes.map((l) => ({
-    swipeId: l.id,
-    action: l.action,
-    createdAt: l.createdAt,
-    user: {
-      id: l.sender.id,
-      firstName: l.sender.profile?.firstName ?? "?",
-      age: l.sender.profile?.birthDate
-        ? Math.floor((Date.now() - l.sender.profile.birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-        : null,
-      city: l.sender.profile?.city ?? null,
-      mainPhoto: l.sender.photos[0]?.url ?? null,
-    },
-  }));
+  return likes.map((l) => {
+    const photo = l.sender.photos[0];
+
+    if (isPremium) {
+      return {
+        swipeId: l.id,
+        action: l.action,
+        createdAt: l.createdAt,
+        user: {
+          id: l.sender.id,
+          firstName: l.sender.profile?.firstName ?? "?",
+          age: l.sender.profile?.birthDate
+            ? Math.floor((Date.now() - l.sender.profile.birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+            : null,
+          city: l.sender.profile?.city ?? null,
+          mainPhoto: photo?.url ?? null,
+        },
+      };
+    }
+
+    // Compte FREE : le flou doit être appliqué côté serveur (transformation Cloudinary),
+    // sinon la vraie photo/le prénom sont visibles dans la réponse réseau malgré le flou CSS.
+    const blurredPhoto = photo?.cloudinaryId
+      ? cloudinary.url(photo.cloudinaryId, { secure: true, transformation: [{ effect: "blur:1800" }] })
+      : null;
+
+    return {
+      swipeId: l.id,
+      action: l.action,
+      createdAt: l.createdAt,
+      user: {
+        id: l.sender.id,
+        firstName: null,
+        age: null,
+        city: null,
+        mainPhoto: blurredPhoto,
+      },
+    };
+  });
 };
 
 export const getSuperLikeRemainingService = async (userId: string) => {
-  const DAILY_LIMIT = 3;
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
@@ -161,7 +208,7 @@ export const getSuperLikeRemainingService = async (userId: string) => {
     },
   });
 
-  return { used: count, remaining: Math.max(0, DAILY_LIMIT - count), limit: DAILY_LIMIT };
+  return { used: count, remaining: Math.max(0, SUPER_LIKE_DAILY_LIMIT - count), limit: SUPER_LIKE_DAILY_LIMIT };
 };
 
 export const getMatchesService = async (userId: string) => {

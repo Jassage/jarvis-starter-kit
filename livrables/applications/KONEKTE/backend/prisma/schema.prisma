@@ -132,6 +132,8 @@ model Profile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([birthDate])
+  @@index([gender])
   @@map("profiles")
 }
 
@@ -158,6 +160,8 @@ model Swipe {
   createdAt  DateTime    @default(now())
 
   @@unique([senderId, receiverId])
+  @@index([receiverId, action])
+  @@index([senderId, action, createdAt])
   @@map("swipes")
 }
 
@@ -202,6 +206,8 @@ model Message {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
+  @@index([conversationId, createdAt])
+  @@index([receiverId, status])
   @@map("messages")
 }
 
@@ -231,6 +237,16 @@ model Block {
   @@map("blocks")
 }
 
+// Ledger des webhooks déjà traités (id externe du provider), pour rendre
+// le traitement idempotent en cas de replay/retry (Stripe, MonCash...).
+model WebhookEvent {
+  id        String   @id
+  provider  String
+  createdAt DateTime @default(now())
+
+  @@map("webhook_events")
+}
+
 model Notification {
   id        String   @id @default(cuid())
   userId    String
@@ -242,5 +258,6 @@ model Notification {
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
+  @@index([userId, isRead, createdAt])
   @@map("notifications")
 }

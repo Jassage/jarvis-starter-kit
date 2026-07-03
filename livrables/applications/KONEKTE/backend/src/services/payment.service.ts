@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import axios from "axios";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 
 // ─── Plans ───────────────────────────────────────────────────────────────────
@@ -46,6 +47,17 @@ export async function createStripeSession(userId: string, planId: string) {
 export async function handleStripeWebhook(rawBody: Buffer, signature: string) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
   const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+
+  // Idempotence : Stripe peut renvoyer le même event (retry, replay) ; la
+  // contrainte unique sur l'id garantit qu'un seul appel active le Premium.
+  try {
+    await prisma.webhookEvent.create({ data: { id: event.id, provider: "stripe" } });
+  } catch (err: unknown) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return; // déjà traité
+    }
+    throw err; // erreur transitoire : Stripe réessaiera cet event
+  }
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as { metadata?: Record<string, string> };
