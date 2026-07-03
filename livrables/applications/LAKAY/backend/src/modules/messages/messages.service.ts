@@ -133,24 +133,23 @@ export async function sendMessage(
 }
 
 export async function getUnreadCount(userId: string): Promise<number> {
-  const conversations = await prisma.conversation.findMany({
-    where: { participants: { some: { userId } } },
-    include: {
-      participants: { where: { userId }, select: { lastReadAt: true } },
+  // 1 requête pour récupérer les conversations de l'utilisateur + son lastReadAt
+  const participants = await prisma.conversationParticipant.findMany({
+    where: { userId },
+    select: { conversationId: true, lastReadAt: true },
+  });
+  if (participants.length === 0) return 0;
+
+  // 1 seul count avec un OR par conversation (seuil lastReadAt propre à chacune)
+  const orConditions = participants.map((p) => ({
+    conversationId: p.conversationId,
+    ...(p.lastReadAt ? { createdAt: { gt: p.lastReadAt } } : {}),
+  }));
+
+  return prisma.message.count({
+    where: {
+      senderId: { not: userId },
+      OR: orConditions,
     },
   });
-
-  let total = 0;
-  for (const conv of conversations) {
-    const lastRead = conv.participants[0]?.lastReadAt;
-    const count = await prisma.message.count({
-      where: {
-        conversationId: conv.id,
-        senderId: { not: userId },
-        createdAt: lastRead ? { gt: lastRead } : undefined,
-      },
-    });
-    total += count;
-  }
-  return total;
 }

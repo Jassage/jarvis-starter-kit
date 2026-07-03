@@ -1,11 +1,57 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { requireAuth } from '../../middlewares/auth.middleware';
 import { sendSuccess } from '../../utils/response';
 import prisma from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler.middleware';
+import { env } from '../../config/env';
+import { uploadAvatar } from '../../middlewares/upload.middleware';
+import {
+  PLAN_PRICES,
+  initiatePlanPayment,
+  activateSubscription,
+  failPayment,
+  verifyWebhookSecret,
+  getPaymentNumbers,
+  submitPaymentProof,
+} from './payments.service';
 
 const router = Router();
+
+// ─────────────────────────────────────────
+// Webhooks PSP — PUBLICS (appelés par MonCash / NatCash, pas par un utilisateur
+// connecté). Doivent rester AVANT `router.use(requireAuth)` et être authentifiés
+// par secret partagé. Toute la logique métier vit dans activateSubscription().
+// ─────────────────────────────────────────
+
+/** Handler générique factorisé entre MonCash et NatCash. */
+async function handlePspCallback(req: Request, res: Response, secretHeader: string, secret?: string) {
+  if (!secret) throw new AppError('Webhook non configuré', 503); // fail-closed
+  const provided = String(req.headers[secretHeader] || '');
+  if (!verifyWebhookSecret(provided, secret)) {
+    throw new AppError('Signature webhook invalide', 401);
+  }
+
+  const { orderId, transactionId, success } = req.body;
+  if (!orderId) throw new AppError('orderId manquant', 400);
+
+  if (success) {
+    await activateSubscription(orderId, transactionId); // idempotent
+  } else {
+    await failPayment(orderId);
+  }
+  res.json({ success: true });
+}
+
+router.post('/moncash/callback', asyncHandler((req, res) =>
+  handlePspCallback(req, res, 'x-moncash-signature', env.MONCASH_WEBHOOK_SECRET),
+));
+
+router.post('/natcash/callback', asyncHandler((req, res) =>
+  handlePspCallback(req, res, 'x-natcash-signature', env.NATCASH_WEBHOOK_SECRET),
+));
+
+// ─── Routes authentifiées ───
 router.use(requireAuth);
 
 // Plans et tarifs
@@ -13,25 +59,25 @@ router.get('/plans', asyncHandler(async (_req, res) => {
   const plans = [
     {
       id: 'BASIC',
-      name: 'Basic',
-      priceHTG: 2500,
-      priceUSD: 20,
+      name: PLAN_PRICES.BASIC.name,
+      priceHTG: PLAN_PRICES.BASIC.htg,
+      priceUSD: PLAN_PRICES.BASIC.usd,
       duration: 30,
       features: ['20 annonces actives', '90 jours par annonce', 'Photos illimitées', 'Messagerie'],
     },
     {
       id: 'PROFESSIONAL',
-      name: 'Professionnel',
-      priceHTG: 7500,
-      priceUSD: 60,
+      name: PLAN_PRICES.PROFESSIONAL.name,
+      priceHTG: PLAN_PRICES.PROFESSIONAL.htg,
+      priceUSD: PLAN_PRICES.PROFESSIONAL.usd,
       duration: 30,
-      features: ['Annonces illimitées', '180 jours par annonce', '3 annonces sponsorisées/mois', 'Dashboard analytique', 'Support prioritaire'],
+      features: ['Annonces illimitées', '180 jours par annonce', '3 annonces sponsorisées/mois', 'Badge vérifié', 'Dashboard analytique', 'Support prioritaire'],
     },
     {
       id: 'ENTERPRISE',
-      name: 'Entreprise',
-      priceHTG: 20000,
-      priceUSD: 160,
+      name: PLAN_PRICES.ENTERPRISE.name,
+      priceHTG: PLAN_PRICES.ENTERPRISE.htg,
+      priceUSD: PLAN_PRICES.ENTERPRISE.usd,
       duration: 30,
       features: ['Tout du Pro', 'API accès', 'Agent dédié', 'Logo agence vérifié', 'Intégration custom'],
     },
@@ -52,32 +98,9 @@ router.get('/history', asyncHandler(async (req, res) => {
 // Initier un paiement MonCash
 router.post('/moncash/initiate', asyncHandler(async (req, res) => {
   const { planId, currency } = req.body;
+  const { payment } = await initiatePlanPayment(req.user!.id, planId, currency, 'MONCASH');
 
-  const planPrices: Record<string, { htg: number; usd: number }> = {
-    BASIC: { htg: 2500, usd: 20 },
-    PROFESSIONAL: { htg: 7500, usd: 60 },
-    ENTERPRISE: { htg: 20000, usd: 160 },
-  };
-
-  if (!planPrices[planId]) throw new AppError('Plan invalide', 400);
-
-  const amount = currency === 'USD' ? planPrices[planId].usd : planPrices[planId].htg;
-
-  // Créer le paiement en attente
-  const payment = await prisma.payment.create({
-    data: {
-      userId: req.user!.id,
-      amount,
-      currency: currency || 'HTG',
-      method: 'MONCASH',
-      status: 'PENDING',
-      description: `Abonnement LAKAY ${planId}`,
-      metadata: { planId },
-    },
-  });
-
-  // TODO: intégrer l'API MonCash réelle avec les credentials Digicel Business
-  // Simulation : retourner un lien de paiement fictif
+  // TODO: intégrer l'API MonCash réelle (credentials Digicel Business)
   sendSuccess(res, {
     paymentId: payment.id,
     redirectUrl: `https://moncashbutton.digicelhaiti.com/checkout/${payment.id}`,
@@ -85,38 +108,41 @@ router.post('/moncash/initiate', asyncHandler(async (req, res) => {
   }, 'Paiement initié');
 }));
 
-// Webhook MonCash
-router.post('/moncash/callback', asyncHandler(async (req, res) => {
-  const { orderId, transactionId, success } = req.body;
+// Initier un paiement NatCash
+router.post('/natcash/initiate', asyncHandler(async (req, res) => {
+  const { planId, currency } = req.body;
+  const { payment } = await initiatePlanPayment(req.user!.id, planId, currency, 'NATCASH');
 
-  const payment = await prisma.payment.findFirst({
-    where: { id: orderId, status: 'PENDING' },
+  // TODO: intégrer l'API NatCash réelle (credentials Natcom)
+  sendSuccess(res, {
+    paymentId: payment.id,
+    redirectUrl: `https://natcash.natcom.com.ht/checkout/${payment.id}`,
+    orderId: payment.id,
+  }, 'Paiement initié');
+}));
+
+// ─── Paiement manuel (preuve de transfert) ───
+
+// Numéros MonCash / NatCash où envoyer l'argent
+router.get('/methods', asyncHandler(async (_req, res) => {
+  const numbers = await getPaymentNumbers();
+  sendSuccess(res, { numbers });
+}));
+
+// Soumettre une preuve de transfert (référence + capture optionnelle)
+router.post('/submit-proof', uploadAvatar.single('screenshot'), asyncHandler(async (req, res) => {
+  const { planId, method, currency, transactionRef, senderName, senderNumber, note } = req.body;
+  const payment = await submitPaymentProof(req.user!.id, {
+    planId,
+    method,
+    currency,
+    transactionRef,
+    senderName,
+    senderNumber,
+    note,
+    screenshot: req.file?.buffer,
   });
-
-  if (!payment) { res.status(404).json({ success: false }); return; }
-
-  if (success) {
-    const planId = (payment.metadata as Record<string, string>)?.planId;
-    await prisma.$transaction(async (tx) => {
-      await tx.payment.update({
-        where: { id: payment.id },
-        data: { status: 'COMPLETED', providerRef: transactionId },
-      });
-      if (planId) {
-        const endDate = new Date();
-        endDate.setDate(endDate.getDate() + 30);
-        await tx.subscription.upsert({
-          where: { userId: payment.userId },
-          create: { userId: payment.userId, plan: planId as 'BASIC' | 'PROFESSIONAL' | 'ENTERPRISE', endDate, isActive: true },
-          update: { plan: planId as 'BASIC' | 'PROFESSIONAL' | 'ENTERPRISE', endDate, isActive: true, startDate: new Date() },
-        });
-      }
-    });
-  } else {
-    await prisma.payment.update({ where: { id: payment.id }, data: { status: 'FAILED' } });
-  }
-
-  res.json({ success: true });
+  sendSuccess(res, { payment }, 'Preuve reçue. Votre plan sera activé après vérification (sous 24h).', 201);
 }));
 
 export default router;

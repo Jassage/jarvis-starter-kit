@@ -25,8 +25,8 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
   const { data, isLoading } = useQuery({
-    queryKey: ['notifications', filter],
-    queryFn: () => notificationsApi.getNotifications({ unreadOnly: filter === 'unread' }),
+    queryKey: ['notifications'],
+    queryFn: () => notificationsApi.getNotifications({ limit: 50 }).then(r => r.data),
   });
 
   const markReadMutation = useMutation({
@@ -43,8 +43,9 @@ export default function NotificationsPage() {
     },
   });
 
-  const notifications = data?.data?.notifications || [];
-  const unreadCount = notifications.filter((n: { isRead: boolean }) => !n.isRead).length;
+  const allNotifications: Array<{ id: string; type: string; title: string; message: string; link?: string; isRead: boolean; createdAt: string }> = data?.data?.notifications || [];
+  const unreadCount = allNotifications.filter((n) => !n.isRead).length;
+  const notifications = filter === 'unread' ? allNotifications.filter((n) => !n.isRead) : allNotifications;
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">

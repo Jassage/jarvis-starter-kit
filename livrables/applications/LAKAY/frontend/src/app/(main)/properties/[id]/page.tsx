@@ -7,10 +7,10 @@ import dynamic from 'next/dynamic';
 import {
   MapPin, Bed, Bath, Maximize2, Zap, Droplets, Wifi, Car, Shield,
   Phone, MessageSquare, Heart, Share2, Flag, ChevronLeft, ChevronRight,
-  Star, Waves, Sun, Leaf, Wind, Thermometer, CheckCircle2, Copy, Check
+  Star, Waves, Sun, Leaf, Wind, Thermometer, CheckCircle2, Copy, Check, X, Loader2
 } from 'lucide-react';
 import { useState, useCallback } from 'react';
-import { listingsApi, messagesApi, favoritesApi } from '../../../../lib/api';
+import { listingsApi, messagesApi, favoritesApi, reportsApi } from '../../../../lib/api';
 import { useAuthStore } from '../../../../store/authStore';
 import {
   formatPrice, PROPERTY_TYPE_LABELS, LISTING_TYPE_LABELS,
@@ -18,6 +18,85 @@ import {
 } from '../../../../lib/utils';
 import { PropertyCard } from '../../../../components/properties/PropertyCard';
 import type { PropertyCardData } from '../../../../components/properties/PropertyCard';
+
+const REPORT_REASONS: { value: string; label: string }[] = [
+  { value: 'FRAUD', label: 'Annonce frauduleuse / arnaque' },
+  { value: 'INAPPROPRIATE', label: 'Contenu inapproprié' },
+  { value: 'DUPLICATE', label: 'Annonce en double' },
+  { value: 'WRONG_PRICE', label: 'Prix erroné / trompeur' },
+  { value: 'ALREADY_RENTED_SOLD', label: 'Bien déjà loué / vendu' },
+  { value: 'SPAM', label: 'Spam' },
+  { value: 'OTHER', label: 'Autre' },
+];
+
+function ReportModal({ listingId, onClose }: { listingId: string; onClose: () => void }) {
+  const [reason, setReason] = useState('FRAUD');
+  const [description, setDescription] = useState('');
+  const [done, setDone] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: () => reportsApi.create(listingId, reason, description || undefined),
+    onSuccess: () => setDone(true),
+  });
+
+  const errorMsg = (mutation.error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <Flag className="w-4 h-4 text-red-500" /> Signaler cette annonce
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        </div>
+
+        {done ? (
+          <div className="p-8 text-center space-y-3">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+              <Check className="w-6 h-6 text-green-600" />
+            </div>
+            <p className="text-sm text-gray-600">Merci, votre signalement a bien été transmis à notre équipe de modération.</p>
+            <button onClick={onClose} className="w-full py-2.5 bg-primary-500 text-white rounded-xl text-sm font-semibold hover:bg-primary-600 transition-colors">Fermer</button>
+          </div>
+        ) : (
+          <div className="p-5 space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Motif</label>
+              <select
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+              >
+                {REPORT_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Détails (optionnel)</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                maxLength={1000}
+                placeholder="Précisez le problème…"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+              />
+            </div>
+            {errorMsg && <p className="text-red-600 text-sm">{errorMsg}</p>}
+            <button
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending}
+              className="w-full py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            >
+              {mutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Envoi…</> : 'Envoyer le signalement'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // Carte Leaflet chargée côté client uniquement (SSR incompatible)
 const PropertyMap = dynamic(() => import('../../../../components/map/PropertyMap'), {
@@ -66,6 +145,9 @@ export default function PropertyDetailPage() {
   const [sendingMsg, setSendingMsg] = useState(false);
   const [msgError, setMsgError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [contact, setContact] = useState<{ phone?: string | null; whatsapp?: string | null; agencyPhone?: string | null } | null>(null);
+  const [loadingContact, setLoadingContact] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['listing', id],
@@ -125,6 +207,16 @@ export default function PropertyDetailPage() {
     setTimeout(() => setCopied(false), 2000);
   }, [data]);
 
+  const revealContact = async () => {
+    if (!isAuthenticated) { router.push('/login'); return; }
+    setLoadingContact(true);
+    try {
+      const r = await listingsApi.getContact(id);
+      setContact(r.data.data);
+    } catch { /* silencieux */ }
+    finally { setLoadingContact(false); }
+  };
+
   const handleContact = async () => {
     if (!isAuthenticated) { router.push('/login'); return; }
     if (!contactMsg.trim()) return;
@@ -166,8 +258,8 @@ export default function PropertyDetailPage() {
   const activeAmenities = AMENITY_MAP.filter((a) => listing[a.key as keyof typeof listing]);
   const isFavorite = listing.isFavorite ?? false;
   const isOwner = isAuthenticated && currentUser?.id === (listing.owner?.id ?? listing.ownerId);
-  const whatsappUrl = listing.owner?.whatsapp
-    ? buildWhatsAppUrl(listing.owner.whatsapp, listing.title, typeof window !== 'undefined' ? window.location.href : '')
+  const whatsappUrl = contact?.whatsapp
+    ? buildWhatsAppUrl(contact.whatsapp, listing.title, typeof window !== 'undefined' ? window.location.href : '')
     : null;
 
   return (
@@ -357,30 +449,45 @@ export default function PropertyDetailPage() {
                   <p className="text-sm text-gray-500 mt-0.5">
                     {listing.agency ? 'Agence immobilière enregistrée' : 'Propriétaire particulier'}
                   </p>
-                  <div className="flex flex-wrap gap-3 mt-3">
-                    {listing.owner?.phone && (
-                      <a
-                        href={`tel:${listing.owner.phone}`}
-                        className="flex items-center gap-1.5 text-sm font-medium bg-green-50 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 transition-colors"
-                      >
-                        <Phone className="w-3.5 h-3.5" />
-                        {listing.owner.phone}
-                      </a>
-                    )}
-                    {whatsappUrl && (
-                      <a
-                        href={whatsappUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 text-sm font-medium bg-[#25D366]/10 text-[#128C7E] px-3 py-1.5 rounded-lg hover:bg-[#25D366]/20 transition-colors"
-                      >
-                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                        </svg>
-                        WhatsApp
-                      </a>
-                    )}
-                  </div>
+                  {!isOwner && (
+                    <div className="flex flex-wrap gap-3 mt-3">
+                      {contact ? (
+                        <>
+                          {contact.phone && (
+                            <a
+                              href={`tel:${contact.phone}`}
+                              className="flex items-center gap-1.5 text-sm font-medium bg-green-50 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 transition-colors"
+                            >
+                              <Phone className="w-3.5 h-3.5" />
+                              {contact.phone}
+                            </a>
+                          )}
+                          {whatsappUrl && (
+                            <a
+                              href={whatsappUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 text-sm font-medium bg-[#25D366]/10 text-[#128C7E] px-3 py-1.5 rounded-lg hover:bg-[#25D366]/20 transition-colors"
+                            >
+                              <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                              </svg>
+                              WhatsApp
+                            </a>
+                          )}
+                        </>
+                      ) : (
+                        <button
+                          onClick={revealContact}
+                          disabled={loadingContact}
+                          className="flex items-center gap-1.5 text-sm font-medium bg-primary-50 text-primary-600 px-3 py-1.5 rounded-lg hover:bg-primary-100 transition-colors disabled:opacity-60"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          {loadingContact ? 'Chargement…' : isAuthenticated ? 'Voir les coordonnées' : 'Se connecter pour voir'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -487,10 +594,22 @@ export default function PropertyDetailPage() {
                 </div>
               </div>
 
+              {/* Révéler le contact (connexion requise) */}
+              {!isOwner && !contact && (
+                <button
+                  onClick={revealContact}
+                  disabled={loadingContact}
+                  className="flex items-center justify-center gap-2 w-full bg-primary-500 hover:bg-primary-600 text-white font-semibold py-3 rounded-xl transition-colors mb-3 disabled:opacity-60"
+                >
+                  <Phone className="w-4 h-4" />
+                  {loadingContact ? 'Chargement…' : isAuthenticated ? 'Voir les coordonnées' : 'Se connecter pour contacter'}
+                </button>
+              )}
+
               {/* Bouton téléphone */}
-              {listing.owner?.phone && (
+              {contact?.phone && (
                 <a
-                  href={`tel:${listing.owner.phone}`}
+                  href={`tel:${contact.phone}`}
                   className="flex items-center justify-center gap-2 w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-colors mb-2"
                 >
                   <Phone className="w-4 h-4" />
@@ -565,10 +684,15 @@ export default function PropertyDetailPage() {
               </div>
 
               {/* Signaler */}
-              <button className="w-full mt-3 flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors">
-                <Flag className="w-3.5 h-3.5" />
-                Signaler cette annonce
-              </button>
+              {!isOwner && (
+                <button
+                  onClick={() => { if (!isAuthenticated) { router.push('/login'); return; } setShowReport(true); }}
+                  className="w-full mt-3 flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  Signaler cette annonce
+                </button>
+              )}
             </div>
 
             {/* Infos rapides */}
@@ -612,6 +736,8 @@ export default function PropertyDetailPage() {
           </section>
         )}
       </main>
+
+      {showReport && <ReportModal listingId={listing.id} onClose={() => setShowReport(false)} />}
     </div>
   );
 }

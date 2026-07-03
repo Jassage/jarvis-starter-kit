@@ -8,7 +8,8 @@ import { fr } from 'date-fns/locale';
 
 const REASON_LABELS: Record<string, string> = {
   SPAM: 'Spam', FRAUD: 'Arnaque', INAPPROPRIATE: 'Contenu inapproprié',
-  WRONG_INFO: 'Infos incorrectes', DUPLICATE: 'Doublon', OTHER: 'Autre',
+  WRONG_PRICE: 'Prix trompeur', ALREADY_RENTED_SOLD: 'Déjà loué/vendu',
+  DUPLICATE: 'Doublon', OTHER: 'Autre',
 };
 
 export default function AdminReportsPage() {
@@ -18,7 +19,7 @@ export default function AdminReportsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-reports', page, status],
-    queryFn: () => adminApi.getReports({ page, limit: 20, status: status || undefined }),
+    queryFn: () => adminApi.getReports({ page, limit: 20, status: status || undefined }).then(r => r.data),
   });
 
   const resolveMutation = useMutation({
@@ -30,7 +31,7 @@ export default function AdminReportsPage() {
   });
 
   const reports = data?.data?.reports || [];
-  const pagination = data?.data?.pagination;
+  const pagination = data?.meta?.pagination;
 
   const handleResolve = (id: string, status: 'RESOLVED' | 'DISMISSED') => {
     const note = prompt(`Note admin (optionnel) :`);
@@ -135,12 +136,12 @@ export default function AdminReportsPage() {
         )}
       </div>
 
-      {pagination && pagination.totalPages > 1 && (
+      {pagination && pagination.pages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">Page {pagination.page} / {pagination.totalPages}</p>
+          <p className="text-sm text-gray-500">Page {pagination.page} / {pagination.pages}</p>
           <div className="flex gap-2">
             <button onClick={() => setPage(p => p - 1)} disabled={page === 1} className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 hover:bg-gray-50">Précédent</button>
-            <button onClick={() => setPage(p => p + 1)} disabled={page >= pagination.totalPages} className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 hover:bg-gray-50">Suivant</button>
+            <button onClick={() => setPage(p => p + 1)} disabled={page >= pagination.pages} className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 hover:bg-gray-50">Suivant</button>
           </div>
         </div>
       )}

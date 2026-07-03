@@ -6,8 +6,10 @@ import { initSocket } from './config/socket';
 import prisma from './config/database';
 import redis from './config/redis';
 import logger from './utils/logger';
+import { scheduleMaintenanceJobs } from './queues';
 import './workers/notification.worker';
 import './workers/email.worker';
+import './workers/maintenance.worker';
 
 const httpServer = createServer(app);
 initSocket(httpServer);
@@ -20,6 +22,10 @@ async function start() {
 
     // Vérifier connexion Redis
     await redis.connect();
+
+    // Planifier les jobs de maintenance (expiration abonnements + annonces)
+    await scheduleMaintenanceJobs();
+    logger.info('🧹 Job de maintenance planifié (balayage horaire)');
 
     httpServer.listen(env.PORT, () => {
       logger.info(`🚀 LAKAY API démarrée sur le port ${env.PORT}`);

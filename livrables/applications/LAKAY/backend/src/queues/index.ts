@@ -29,3 +29,20 @@ export const emailQueue = new Queue('email', {
   connection: redisConnection(),
   defaultJobOptions: { ...JOB_DEFAULTS, backoff: { type: 'exponential', delay: 5000 } },
 });
+
+export const maintenanceQueue = new Queue('maintenance', {
+  connection: redisConnection(),
+  defaultJobOptions: JOB_DEFAULTS,
+});
+
+/**
+ * Planifie le balayage d'expiration (abonnements + annonces) toutes les heures.
+ * Idempotent : `jobId` fixe → BullMQ ne crée qu'un seul planning répétable.
+ */
+export async function scheduleMaintenanceJobs() {
+  await maintenanceQueue.add(
+    'expiry-sweep',
+    {},
+    { repeat: { pattern: '0 * * * *' }, jobId: 'expiry-sweep' },
+  );
+}

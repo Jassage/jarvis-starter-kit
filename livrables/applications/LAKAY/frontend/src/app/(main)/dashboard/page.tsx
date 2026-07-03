@@ -1,8 +1,10 @@
 'use client';
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Plus, Home, Eye, Heart, MessageSquare, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
+import { useSocket } from '../../../hooks/useSocket';
 import { listingsApi } from '../../../lib/api';
 import { formatPrice, timeAgo, LISTING_TYPE_LABELS, PROPERTY_TYPE_LABELS } from '../../../lib/utils';
 
@@ -18,7 +20,17 @@ const STATUS_CONFIG = {
 };
 
 export default function DashboardPage() {
-  const { user } = useAuthStore();
+  const { user, refreshUser } = useAuthStore();
+  const { on, socket } = useSocket();
+
+  // Rafraîchit le plan à l'ouverture du dashboard (au cas où l'abo a été activé pendant la session)
+  useEffect(() => { refreshUser(); }, [refreshUser]);
+
+  // Rafraîchit en temps réel quand l'admin valide le paiement (événement Socket)
+  useEffect(() => {
+    if (!socket) return;
+    return on('subscription_updated', () => { refreshUser(); });
+  }, [socket, on, refreshUser]);
 
   // Charge les 5 dernières pour l'affichage + les 100 premiers pour les stats agrégées
   const { data: listingsData, isLoading } = useQuery({
@@ -182,11 +194,16 @@ export default function DashboardPage() {
             {/* Abonnement */}
             <div className="bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl p-5 text-white">
               <p className="font-semibold mb-1">Plan {user?.subscription?.plan || 'FREE'}</p>
-              <p className="text-primary-100 text-xs mb-4">
+              <p className="text-primary-100 text-xs mb-1">
                 {user?.subscription?.plan === 'FREE' ? '3 annonces actives maximum' : 'Annonces illimitées'}
               </p>
-              <Link href="/pricing" className="text-xs font-semibold bg-white text-primary-600 px-4 py-2 rounded-lg inline-block hover:bg-primary-50 transition-colors">
-                Mettre à niveau
+              {user?.subscription?.plan && user.subscription.plan !== 'FREE' && user.subscription.endDate && (
+                <p className="text-primary-100 text-xs mb-4">
+                  Expire le {new Date(user.subscription.endDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              )}
+              <Link href="/pricing" className={`text-xs font-semibold bg-white text-primary-600 px-4 py-2 rounded-lg inline-block hover:bg-primary-50 transition-colors ${(!user?.subscription?.plan || user.subscription.plan === 'FREE' || !user.subscription.endDate) ? 'mt-3' : ''}`}>
+                {user?.subscription?.plan && user.subscription.plan !== 'FREE' ? 'Changer de plan' : 'Mettre à niveau'}
               </Link>
             </div>
           </div>

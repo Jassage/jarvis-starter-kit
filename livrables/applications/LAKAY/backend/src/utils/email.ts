@@ -69,6 +69,27 @@ export function passwordResetTemplate(firstName: string, token: string): string 
   `;
 }
 
+export function subscriptionActivatedTemplate(firstName: string, planName: string): string {
+  const link = `${env.FRONTEND_URL}/dashboard`;
+  return `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+      <div style="background:#FF6B35;padding:20px;border-radius:8px 8px 0 0;text-align:center">
+        <h1 style="color:white;margin:0">🎉 Abonnement ${planName} activé</h1>
+      </div>
+      <div style="background:#f9f9f9;padding:30px;border-radius:0 0 8px 8px">
+        <h2>Bonjour ${firstName},</h2>
+        <p>Votre paiement a bien été reçu et votre abonnement <strong>${planName}</strong> est maintenant actif pour 30 jours.</p>
+        <div style="text-align:center;margin:30px 0">
+          <a href="${link}" style="background:#FF6B35;color:white;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block">
+            Accéder à mon tableau de bord
+          </a>
+        </div>
+        <p style="color:#666;font-size:12px">Merci de votre confiance. L'équipe LAKAY.</p>
+      </div>
+    </div>
+  `;
+}
+
 export function listingApprovedTemplate(firstName: string, listingTitle: string, listingId: string): string {
   const link = `${env.FRONTEND_URL}/properties/${listingId}`;
   return `

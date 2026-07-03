@@ -166,14 +166,14 @@ export default function AdminListingsPage() {
         )}
       </div>
 
-      {pagination && pagination.totalPages > 1 && (
+      {pagination && pagination.pages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">Page {pagination.page} / {pagination.totalPages}</p>
+          <p className="text-sm text-gray-500">Page {pagination.page} / {pagination.pages}</p>
           <div className="flex gap-2">
             <button onClick={() => setPage(p => p - 1)} disabled={page === 1} className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 hover:bg-gray-50">
               Précédent
             </button>
-            <button onClick={() => setPage(p => p + 1)} disabled={page >= pagination.totalPages} className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 hover:bg-gray-50">
+            <button onClick={() => setPage(p => p + 1)} disabled={page >= pagination.pages} className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-40 hover:bg-gray-50">
               Suivant
             </button>
           </div>
