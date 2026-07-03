@@ -7,7 +7,7 @@ export const NAV = {
     { key: 'explore', icon: 'grid', label: 'Explorer' },
     { key: 'quiz', icon: 'quiz', label: 'Évaluations' },
     { key: 'certs', icon: 'award', label: 'Certificats' },
-    { key: 'messages', icon: 'message', label: 'Messages', badge: 3 },
+    { key: 'messages', icon: 'message', label: 'Messages' },
   ],
   teacher: [
     { key: 'teacher', icon: 'grid', label: 'Tableau de bord' },
@@ -15,6 +15,7 @@ export const NAV = {
     { key: 'tstudents', icon: 'users', label: 'Étudiants' },
     { key: 'trevenue', icon: 'trending', label: 'Revenus' },
     { key: 'treviews', icon: 'star', label: 'Avis' },
+    { key: 'tmessages', icon: 'message', label: 'Messages' },
   ],
   admin: [
     { key: 'admin', icon: 'pieChart', label: "Vue d'ensemble" },

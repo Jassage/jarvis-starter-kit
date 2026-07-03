@@ -79,7 +79,7 @@ export default function SettingsPage({ role }) {
 
   return (
     <AppShell role={role} active="settings" go={go} search={false}
-      title="Paramètres" subtitle={`Gère ton compte ${user.role.toLowerCase()} et tes préférences EduSpher.`}>
+      title="Paramètres" subtitle={`Gère ton compte ${userMock.role.toLowerCase()} et tes préférences EduSpher.`}>
       <div className="edu-content-narrow" style={{ maxWidth: 760 }}>
         <div className="edu-tabbar" style={{ marginBottom: 22 }}>
           {tabs.map(t => (

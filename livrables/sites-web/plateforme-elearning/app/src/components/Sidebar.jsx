@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import Icon from './Icon';
@@ -9,7 +10,23 @@ import { NAV, ROLE_USER, ROLE_LABEL, ROLE_AVATAR, getInitials } from '@/lib/nav-
 export default function Sidebar({ role, active, go, mobileOpen, onClose }) {
   const router = useRouter();
   const { data: session } = useSession();
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [streak, setStreak] = useState({ current: 0, days: [false, false, false, false, false, false, false] });
   const items = NAV[role] || NAV.student;
+
+  useEffect(() => {
+    const loadUnread = () => {
+      fetch('/api/messages/unread-count').then(r => r.json()).then(d => setUnreadMessages(d.count ?? 0)).catch(() => {});
+    };
+    loadUnread();
+    const interval = setInterval(loadUnread, 25000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (role !== 'student') return;
+    fetch('/api/user/streak').then(r => r.json()).then(setStreak).catch(() => {});
+  }, [role]);
 
   const sessionRole = session?.user?.role || '';
   const avatarColors = ROLE_AVATAR[sessionRole] || ROLE_AVATAR.STUDENT;
@@ -20,9 +37,6 @@ export default function Sidebar({ role, active, go, mobileOpen, onClose }) {
     avColor: avatarColors.avColor,
     avInk: avatarColors.avInk,
   };
-  const map = { teacher: 'teacher', tcourses: 'teacher', tstudents: 'teacher', trevenue: 'teacher', treviews: 'teacher',
-    admin: 'admin', ausers: 'admin', acourses: 'admin', arevenue: 'admin',
-    student: 'student', course: 'course', quiz: 'quiz', explore: 'student', certs: 'certificate', messages: 'student' };
   return (
     <>
       <div className={'edu-sidebar-overlay' + (mobileOpen ? ' is-open' : '')} onClick={onClose} />
@@ -40,13 +54,14 @@ export default function Sidebar({ role, active, go, mobileOpen, onClose }) {
           <div className="edu-nav-label">Menu</div>
           {items.map(it => {
             const isActive = active === it.key;
+            const badge = (it.key === 'messages' || it.key === 'tmessages') ? unreadMessages : it.badge;
             return (
               <button key={it.key}
                 className={'edu-nav-item' + (isActive ? ' is-active' : '')}
-                onClick={() => { go(map[it.key] || role); onClose && onClose(); }}>
+                onClick={() => { go(it.key); onClose && onClose(); }}>
                 <Icon name={it.icon} size={20} stroke={isActive ? 2.3 : 2} />
                 <span>{it.label}</span>
-                {it.badge && <span className="edu-nav-badge">{it.badge}</span>}
+                {badge > 0 && <span className="edu-nav-badge">{badge}</span>}
               </button>
             );
           })}
@@ -60,15 +75,18 @@ export default function Sidebar({ role, active, go, mobileOpen, onClose }) {
           </button>
         </nav>
 
-        {role === 'student' && (
+        {role === 'student' && streak.current > 0 && (
           <div style={{ padding: '12px' }}>
             <div className="edu-streak">
               <div className="row gap-8" style={{ color: 'var(--amber)' }}>
-                <Icon name="fire" size={18} fill /><span style={{ fontWeight: 750, fontSize: 14, color: 'var(--ink)' }}>Série de 7 jours</span>
+                <Icon name="fire" size={18} fill />
+                <span style={{ fontWeight: 750, fontSize: 14, color: 'var(--ink)' }}>
+                  Série de {streak.current} jour{streak.current > 1 ? 's' : ''}
+                </span>
               </div>
               <div className="row gap-4" style={{ marginTop: 10 }}>
                 {['L','M','M','J','V','S','D'].map((d, i) => (
-                  <div key={i} className="edu-streak-dot" data-on={i < 5 ? '1' : '0'}>{d}</div>
+                  <div key={i} className="edu-streak-dot" data-on={streak.days[i] ? '1' : '0'}>{d}</div>
                 ))}
               </div>
             </div>

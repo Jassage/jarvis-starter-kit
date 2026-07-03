@@ -3,17 +3,38 @@
 import { useState, useRef, useEffect } from 'react';
 import Icon from './Icon';
 import { ROLE_USER } from '@/lib/nav-config';
-import { notifications } from '@/lib/data';
+import { timeAgo } from '@/lib/time';
 
 export default function Topbar({ role, go, title, subtitle, search = true, onMenu }) {
   const [notifOpen, setNotifOpen] = useState(false);
-  const [roleOpen, setRoleOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const user = ROLE_USER[role] || ROLE_USER.student;
   const ref = useRef(null);
   useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) { setNotifOpen(false); setRoleOpen(false); } };
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) { setNotifOpen(false); }};
     document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h);
   }, []);
+
+  const loadNotifications = () => {
+    fetch('/api/notifications').then(r => r.json()).then(data => {
+      setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
+      setUnreadCount(data.unreadCount ?? 0);
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const markAllRead = () => {
+    fetch('/api/notifications', { method: 'PATCH' }).then(() => {
+      setUnreadCount(0);
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    }).catch(() => {});
+  };
   return (
     <header className="edu-topbar" ref={ref}>
       <div className="row gap-12" style={{ minWidth: 0 }}>
@@ -34,48 +55,33 @@ export default function Topbar({ role, go, title, subtitle, search = true, onMen
           </div>
         )}
 
-        {/* Role switcher */}
-        <div style={{ position: 'relative' }}>
-          <button className="chip" onClick={() => { setRoleOpen(o => !o); setNotifOpen(false); }} style={{ height: 42 }}>
-            <Icon name={role === 'student' ? 'user' : role === 'teacher' ? 'briefcase' : 'shield'} size={17} />
-            <span className="edu-desktop-only">{user.role}</span>
-            <Icon name="chevD" size={15} />
-          </button>
-          {roleOpen && (
-            <div className="edu-menu anim-pop" style={{ right: 0, width: 220 }}>
-              <div className="edu-menu-head">Changer de vue (démo)</div>
-              {[['student','user','Espace étudiant'],['teacher','briefcase','Espace formateur'],['admin','shield','Espace admin']].map(([r, ic, lbl]) => (
-                <button key={r} className={'edu-menu-item' + (role === r ? ' is-active' : '')} onClick={() => { go(r); setRoleOpen(false); }}>
-                  <Icon name={ic} size={18} /><span>{lbl}</span>
-                  {role === r && <Icon name="check" size={16} style={{ marginLeft: 'auto', color: 'var(--brand)' }} />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
         {/* Notifications */}
         <div style={{ position: 'relative' }}>
-          <button className="btn btn-outline btn-icon" onClick={() => { setNotifOpen(o => !o); setRoleOpen(false); }} style={{ position: 'relative' }} aria-label="Notifications">
+          <button className="btn btn-outline btn-icon" onClick={() => setNotifOpen(o => !o)} style={{ position: 'relative' }} aria-label="Notifications">
             <Icon name="bell" size={19} />
-            <span className="edu-notif-dot" />
+            {unreadCount > 0 && <span className="edu-notif-dot" />}
           </button>
           {notifOpen && (
             <div className="edu-menu anim-pop" style={{ right: 0, width: 340 }}>
               <div className="edu-menu-head between" style={{ display: 'flex' }}>
-                <span>Notifications</span><span className="badge badge-brand">4 nouvelles</span>
+                <span>Notifications</span>
+                {unreadCount > 0 && <span className="badge badge-brand">{unreadCount} nouvelle{unreadCount > 1 ? 's' : ''}</span>}
               </div>
-              {notifications.map((n, i) => (
-                <div key={i} className="edu-notif-item">
+              {notifications.length === 0 ? (
+                <div className="small muted" style={{ padding: '20px 16px', textAlign: 'center' }}>Aucune notification</div>
+              ) : notifications.map((n) => (
+                <div key={n.id} className="edu-notif-item" style={{ opacity: n.read ? 0.6 : 1 }}>
                   <div className={'edu-notif-ic edu-ic-' + n.color}><Icon name={n.icon} size={17} /></div>
                   <div className="col" style={{ gap: 2 }}>
                     <span style={{ fontWeight: 700, fontSize: 13.5 }}>{n.title}</span>
                     <span className="tiny muted">{n.body}</span>
                   </div>
-                  <span className="tiny muted" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>{n.time}</span>
+                  <span className="tiny muted" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>{timeAgo(n.createdAt)}</span>
                 </div>
               ))}
-              <button className="edu-menu-foot">Tout marquer comme lu</button>
+              {unreadCount > 0 && (
+                <button className="edu-menu-foot" onClick={markAllRead}>Tout marquer comme lu</button>
+              )}
             </div>
           )}
         </div>

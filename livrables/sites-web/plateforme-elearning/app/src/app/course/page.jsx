@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Icon from '@/components/Icon';
 import AppShell from '@/components/AppShell';
@@ -9,7 +9,16 @@ import Stars from '@/components/Stars';
 import { useGo } from '@/lib/navigation';
 
 export default function CoursePage() {
+  return (
+    <Suspense fallback={null}>
+      <CoursePageContent />
+    </Suspense>
+  );
+}
+
+function CoursePageContent() {
   const go = useGo();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
 
@@ -22,6 +31,12 @@ export default function CoursePage() {
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
   const [enrollMsg, setEnrollMsg] = useState('');
+  const [contacting, setContacting] = useState(false);
+  const [reviewData, setReviewData] = useState(null);
+  const [ratingInput, setRatingInput] = useState(0);
+  const [commentInput, setCommentInput] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewMsg, setReviewMsg] = useState('');
 
   const courseId = searchParams.get('id');
 
@@ -137,6 +152,60 @@ export default function CoursePage() {
     }
     init();
   }, [courseId, loadCourse, loadProgress]);
+
+  useEffect(() => {
+    if (!course?.id || !course?.enrollment) return;
+    fetch(`/api/courses/${course.id}/reviews`).then(r => r.json()).then(data => {
+      setReviewData(data);
+      if (data.myReview) {
+        setRatingInput(data.myReview.rating);
+        setCommentInput(data.myReview.comment || '');
+      }
+    }).catch(() => {});
+  }, [course?.id, course?.enrollment]);
+
+  const submitReview = useCallback(async () => {
+    if (!course?.id || ratingInput === 0) return;
+    setSubmittingReview(true);
+    setReviewMsg('');
+    try {
+      const r = await fetch(`/api/courses/${course.id}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: ratingInput, comment: commentInput }),
+      });
+      if (r.ok) {
+        const review = await r.json();
+        setReviewData(prev => ({ ...prev, myReview: review }));
+        setReviewMsg('Merci pour ton avis !');
+      } else {
+        const data = await r.json();
+        setReviewMsg(data.error || "Erreur lors de l'envoi.");
+      }
+    } catch {
+      setReviewMsg('Erreur réseau.');
+    } finally {
+      setSubmittingReview(false);
+    }
+  }, [course, ratingInput, commentInput]);
+
+  const contactTeacher = useCallback(async () => {
+    if (!course?.authorId) return;
+    setContacting(true);
+    try {
+      const r = await fetch('/api/messages/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otherUserId: course.authorId, courseId: course.id }),
+      });
+      const data = await r.json();
+      if (r.ok && data.id) router.push(`/student/messages?c=${data.id}`);
+    } catch {
+      // silencieux
+    } finally {
+      setContacting(false);
+    }
+  }, [course, router]);
 
   const toggleDone = useCallback(async (lessonId) => {
     const newVal = !lessonProgress[lessonId];
@@ -409,6 +478,9 @@ export default function CoursePage() {
                 <span style={{ fontWeight: 700 }}>{course.author?.name || 'Formateur'}</span>
                 <span className="small muted">Formateur EduSpher</span>
               </div>
+              <button className="btn btn-outline btn-sm" disabled={contacting} onClick={contactTeacher}>
+                <Icon name="message" size={15} />Contacter le formateur
+              </button>
             </div>
 
             {/* Tabs */}
@@ -436,6 +508,32 @@ export default function CoursePage() {
                     <div className="col gap-4">
                       <span className="tiny muted">Catégorie</span>
                       <span style={{ fontWeight: 700 }}>{course.category}</span>
+                    </div>
+                  </div>
+
+                  {/* Avis */}
+                  <div className="panel card-pad" style={{ background: 'var(--bg-2)', border: 'none' }}>
+                    <h3 className="h4" style={{ marginBottom: 10 }}>
+                      {reviewData?.myReview ? 'Modifier mon avis' : 'Laisser un avis'}
+                    </h3>
+                    <div className="row gap-4" style={{ marginBottom: 12 }}>
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <button key={n} onClick={() => setRatingInput(n)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
+                          aria-label={`${n} étoiles`}>
+                          <Icon name="star" size={22} fill={n <= ratingInput}
+                            style={{ color: n <= ratingInput ? 'var(--amber)' : 'var(--border)' }} />
+                        </button>
+                      ))}
+                    </div>
+                    <textarea className="input" placeholder="Un commentaire sur ce cours (optionnel)…"
+                      value={commentInput} onChange={(e) => setCommentInput(e.target.value)}
+                      style={{ height: 80, paddingTop: 10, resize: 'none', marginBottom: 10 }} />
+                    <div className="row gap-12" style={{ alignItems: 'center' }}>
+                      <button className="btn btn-primary btn-sm" disabled={ratingInput === 0 || submittingReview} onClick={submitReview}>
+                        {submittingReview ? 'Envoi…' : reviewData?.myReview ? 'Mettre à jour' : "Envoyer mon avis"}
+                      </button>
+                      {reviewMsg && <span className="small muted">{reviewMsg}</span>}
                     </div>
                   </div>
                 </div>

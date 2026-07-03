@@ -1,10 +1,24 @@
 'use client';
 
+import { useEffect, useState, Suspense } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Icon from '@/components/Icon';
 import Logo from '@/components/Logo';
 import AppShell from '@/components/AppShell';
-import { EDU } from '@/lib/data';
 import { useGo } from '@/lib/navigation';
+
+function fmtDate(d) {
+  return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+export default function CertificatePage() {
+  return (
+    <Suspense fallback={null}>
+      <CertificatePageContent />
+    </Suspense>
+  );
+}
 
 const CornerBracket = ({ style }) => (
   <svg width="32" height="32" viewBox="0 0 32 32" fill="none"
@@ -35,18 +49,56 @@ const Seal = () => (
   </div>
 );
 
-export default function CertificatePage() {
+function CertificatePageContent() {
   const go = useGo();
-  const allCerts = EDU.certificates || [];
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { data: session } = useSession();
+  const [certificates, setCertificates] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/certificates').then(r => r.json()).then(data => {
+      setCertificates(Array.isArray(data) ? data : []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <AppShell role="student" active="certs" go={go} search={false} title="Certificats" subtitle="">
+        <div style={{ textAlign: 'center', color: 'var(--ink-4)', paddingTop: 40 }}>Chargement…</div>
+      </AppShell>
+    );
+  }
+
+  if (certificates.length === 0) {
+    return (
+      <AppShell role="student" active="certs" go={go} search={false} title="Certificats" subtitle="">
+        <div className="col" style={{ alignItems: 'center', textAlign: 'center', paddingTop: 60, gap: 14 }}>
+          <div className="edu-notif-ic edu-ic-amber" style={{ width: 56, height: 56, borderRadius: 'var(--r-xl)' }}>
+            <Icon name="award" size={26} />
+          </div>
+          <h2 className="h3">Aucun certificat pour l'instant</h2>
+          <p className="muted" style={{ maxWidth: 380 }}>Termine un cours à 100% pour débloquer ton premier certificat.</p>
+          <button className="btn btn-primary btn-sm" onClick={() => go('student')}>Retour au dashboard</button>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const featuredId = searchParams.get('id');
+  const featured = certificates.find(c => c.id === featuredId) || certificates[0];
+  const allCerts = certificates.filter(c => c.id !== featured.id);
+
   const cert = {
-    student: 'Julien Mercier',
-    course: 'Design UI/UX : systèmes et prototypage',
-    instructor: 'Marc Dubois',
-    instructorRole: 'Design Lead · Figma',
-    score: '92',
-    date: '12 juin 2026',
-    certId: 'CERT-2026-88210',
-    hours: '12',
+    student: session?.user?.name || '',
+    course: featured.course.title,
+    instructor: featured.course.author?.name || 'Formateur',
+    score: String(featured.score),
+    date: fmtDate(featured.issuedAt),
+    certId: featured.certId,
+    hours: String(featured.hours),
   };
 
   return (
@@ -150,7 +202,7 @@ export default function CertificatePage() {
             <div style={{ textAlign: 'center', flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, fontStyle: 'italic' }}>{cert.instructor}</div>
               <div style={{ height: 1, background: 'var(--border)', maxWidth: 140, marginInline: 'auto', marginBottom: 8 }} />
-              <div style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>{cert.instructorRole}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>Formateur EduSpher</div>
             </div>
             <div style={{ padding: '0 28px' }}>
               <Seal />
@@ -175,20 +227,21 @@ export default function CertificatePage() {
           <div className="cert-no-print" style={{ marginTop: 28 }}>
             <h3 className="h3" style={{ marginBottom: 14 }}>Tous mes certificats</h3>
             <div className="edu-grid edu-grid-2" style={{ gap: 12 }}>
-              {allCerts.map((c, i) => (
-                <div key={i} className="card anim-up" style={{ overflow: 'hidden', cursor: 'pointer', animationDelay: `${i * 0.05}s` }}>
-                  <div style={{ height: 4, background: `var(--${c.color})` }} />
+              {allCerts.map((c) => (
+                <div key={c.id} className="card anim-up" style={{ overflow: 'hidden', cursor: 'pointer' }}
+                  onClick={() => router.push(`/certificate?id=${c.id}`)}>
+                  <div style={{ height: 4, background: `var(--${c.course.color || 'brand'})` }} />
                   <div className="card-pad" style={{ paddingTop: 14 }}>
                     <div className="row gap-10" style={{ alignItems: 'flex-start' }}>
-                      <div className={'edu-notif-ic edu-ic-' + c.color} style={{ flexShrink: 0 }}>
+                      <div className={'edu-notif-ic edu-ic-' + (c.course.color || 'brand')} style={{ flexShrink: 0 }}>
                         <Icon name="award" size={18} />
                       </div>
                       <div className="col grow" style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</div>
-                        <div className="tiny muted" style={{ marginTop: 3 }}>{c.instructor} · {c.date}</div>
+                        <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.course.title}</div>
+                        <div className="tiny muted" style={{ marginTop: 3 }}>{c.course.author?.name} · {fmtDate(c.issuedAt)}</div>
                         <div className="row between" style={{ marginTop: 10 }}>
                           <span className="badge badge-green badge-dot">Obtenu</span>
-                          <span className="tnum" style={{ fontWeight: 800, fontSize: 14, color: `var(--${c.color})` }}>{c.score}%</span>
+                          <span className="tnum" style={{ fontWeight: 800, fontSize: 14, color: `var(--${c.course.color || 'brand'})` }}>{c.score}%</span>
                         </div>
                       </div>
                     </div>
