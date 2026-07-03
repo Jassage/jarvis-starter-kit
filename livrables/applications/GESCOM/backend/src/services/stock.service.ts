@@ -59,12 +59,24 @@ export async function ajusterStock(
   if (!stock) throw new AppError(404, 'Stock introuvable pour ce produit et cet emplacement');
 
   const delta = data.type === 'ENTREE' ? Math.abs(data.quantite) : data.quantite;
-  const nouvelleQuantite = stock.quantite + delta;
-  if (nouvelleQuantite < 0) throw new AppError(400, 'La quantité résultante ne peut pas être négative');
 
-  const [updated] = await prisma.$transaction([
-    prisma.stockEmplacement.update({ where: { id: stock.id }, data: { quantite: nouvelleQuantite } }),
-    prisma.mouvementStock.create({
+  const updated = await prisma.$transaction(async (tx) => {
+    let stockMaj;
+    if (delta >= 0) {
+      stockMaj = await tx.stockEmplacement.update({ where: { id: stock.id }, data: { quantite: { increment: delta } } });
+    } else {
+      // Compare-and-swap : empêche un ajustement négatif concurrent de faire passer le stock sous zéro
+      const maj = await tx.stockEmplacement.updateMany({
+        where: { id: stock.id, quantite: { gte: -delta } },
+        data: { quantite: { decrement: -delta } },
+      });
+      if (maj.count === 0) {
+        throw new AppError(400, 'La quantité résultante ne peut pas être négative (stock modifié entre-temps, réessayez)');
+      }
+      stockMaj = await tx.stockEmplacement.findUniqueOrThrow({ where: { id: stock.id } });
+    }
+
+    await tx.mouvementStock.create({
       data: {
         produitId: data.produitId,
         emplacementId: data.emplacementId,
@@ -73,9 +85,11 @@ export async function ajusterStock(
         quantite: delta,
         raison: data.raison,
       },
-    }),
-  ]);
+    });
 
-  await createAuditLog({ userId, table: 'stocks_emplacement', action: data.type, entiteId: stock.id, nouveau: { quantite: nouvelleQuantite } });
+    return stockMaj;
+  });
+
+  await createAuditLog({ userId, table: 'stocks_emplacement', action: data.type, entiteId: stock.id, nouveau: { quantite: updated.quantite } });
   return updated;
 }

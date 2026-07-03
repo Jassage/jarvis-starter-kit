@@ -69,10 +69,16 @@ export async function createVente(
 
     // Décrément stock + mouvements VENTE
     for (const ligne of data.lignes) {
-      await tx.stockEmplacement.update({
-        where: { produitId_emplacementId: { produitId: ligne.produitId, emplacementId: data.emplacementId } },
+      // Compare-and-swap : le décrément n'est appliqué que si le stock est encore suffisant au moment
+      // de la transaction, ce qui empêche une survente en cas de ventes concurrentes sur le même produit.
+      const decremente = await tx.stockEmplacement.updateMany({
+        where: { produitId: ligne.produitId, emplacementId: data.emplacementId, quantite: { gte: ligne.quantite } },
         data: { quantite: { decrement: ligne.quantite } },
       });
+      if (decremente.count === 0) {
+        const produit = await tx.produit.findUnique({ where: { id: ligne.produitId } });
+        throw new AppError(400, `Stock insuffisant pour "${produit?.nom ?? ligne.produitId}" (vente concurrente probable, réessayez)`);
+      }
       await tx.mouvementStock.create({
         data: {
           produitId: ligne.produitId,

@@ -20,14 +20,62 @@ export interface MouvementRecent {
   utilisateur: { nom: string; prenom: string };
 }
 
+export interface AlerteStock {
+  produitId: string;
+  reference: string;
+  nom: string;
+  emplacement: { id: string; nom: string; type: string };
+  quantite: number;
+  seuilAlerte: number;
+}
+
+export interface VenteJour {
+  date: string;
+  montant: number;
+  count: number;
+}
+
+export interface TopProduit {
+  produitId: string;
+  nom: string;
+  reference: string;
+  unite: string;
+  quantiteVendue: number;
+  montantVendu: number;
+}
+
+export interface ClientRisque {
+  id: string;
+  nom: string;
+  type: 'PARTICULIER' | 'GROSSISTE';
+  soldeDu: number;
+}
+
+export interface CommandeAttente {
+  id: string;
+  numero: string;
+  statut: string;
+  fournisseur: { nom: string };
+  dateLivraisonPrevue: string | null;
+  enRetard: boolean;
+}
+
 export interface DashboardStats {
   totalProduits: number;
   valeurStockTotal: number;
   produitsSousAlerte: number;
+  alertesStock: AlerteStock[];
   repartitionParEmplacement: RepartitionEmplacement[];
   mouvementsRecents: MouvementRecent[];
   ventesDuJour: { count: number; montant: number };
+  tendanceVentes: { montantHier: number; variationPct: number };
+  ventes7Jours: VenteJour[];
+  topProduits: TopProduit[];
+  clientsRisque: ClientRisque[];
+  encoursCreditTotal: number;
   commandesEnAttente: number;
+  commandesEnRetard: number;
+  commandesListe: CommandeAttente[];
 }
 
 interface DashboardState {
