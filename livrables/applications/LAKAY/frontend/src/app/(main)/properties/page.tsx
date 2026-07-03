@@ -2,12 +2,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 import { LayoutGrid, Map as MapIcon, Loader2 } from 'lucide-react';
 import { SearchBar } from '../../../components/search/SearchBar';
 import { FilterPanel, Filters } from '../../../components/search/FilterPanel';
 import { PropertyCard } from '../../../components/properties/PropertyCard';
 import { searchApi } from '../../../lib/api';
 import { cn } from '../../../lib/utils';
+
+// Carte Leaflet chargée côté client uniquement (SSR incompatible)
+const PropertiesMap = dynamic(() => import('../../../components/map/PropertiesMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[560px] bg-gray-100 rounded-xl flex items-center justify-center text-gray-400 text-sm">
+      Chargement de la carte…
+    </div>
+  ),
+});
 
 const DEFAULT_FILTERS: Filters = {
   propertyTypes: [],
@@ -192,11 +203,15 @@ export default function PropertiesPage() {
                   </div>
                 )}
 
-                <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {listings.map((listing: Parameters<typeof PropertyCard>[0]['listing']) => (
-                    <PropertyCard key={listing.id} listing={listing} />
-                  ))}
-                </div>
+                {viewMode === 'grid' ? (
+                  <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {listings.map((listing: Parameters<typeof PropertyCard>[0]['listing']) => (
+                      <PropertyCard key={listing.id} listing={listing} />
+                    ))}
+                  </div>
+                ) : (
+                  <PropertiesMap listings={listings} />
+                )}
 
                 {/* Charger plus (scroll infini par curseur) */}
                 {hasNextPage && (
