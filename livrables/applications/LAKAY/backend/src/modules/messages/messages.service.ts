@@ -1,7 +1,13 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../../config/database';
 import { AppError } from '../../middlewares/errorHandler.middleware';
 import { getIO } from '../../config/socket';
-import { paginate, parsePagination } from '../../utils/response';
+import { encodeCursor, decodeCursor, buildCursorWhere } from '../../utils/cursorPagination';
+
+interface MessagesCursor {
+  createdAt: string;
+  id: string;
+}
 
 export async function getOrCreateConversation(userId: string, otherUserId: string, listingId?: string) {
   if (userId === otherUserId) throw new AppError('Vous ne pouvez pas vous envoyer un message', 400);
@@ -57,6 +63,12 @@ export async function getConversations(userId: string) {
   });
 }
 
+/**
+ * Historique d'une conversation, paginé par curseur (createdAt+id, tri antéchronologique).
+ * Sans `cursor` : les `limit` messages les plus récents. Avec `cursor` (= nextCursor de
+ * l'appel précédent) : les `limit` messages précédant le plus ancien déjà chargé — le
+ * pattern "charger les messages plus anciens" au scroll vers le haut d'un chat.
+ */
 export async function getMessages(conversationId: string, userId: string, query: Record<string, string>) {
   // Vérifier appartenance
   const participant = await prisma.conversationParticipant.findUnique({
@@ -64,18 +76,33 @@ export async function getMessages(conversationId: string, userId: string, query:
   });
   if (!participant) throw new AppError('Accès refusé à cette conversation', 403);
 
-  const { page, limit, skip } = parsePagination(query);
+  const limit = Math.min(Math.max(parseInt(query.limit || '30', 10) || 30, 1), 100);
+  const cursor = decodeCursor<MessagesCursor>(query.cursor);
 
-  const [messages, total] = await Promise.all([
-    prisma.message.findMany({
-      where: { conversationId },
-      include: { sender: { select: { id: true, firstName: true, lastName: true, avatar: true } } },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-    }),
-    prisma.message.count({ where: { conversationId } }),
-  ]);
+  let where: Prisma.MessageWhereInput = { conversationId };
+  if (cursor) {
+    const cursorWhere = buildCursorWhere([
+      { field: 'createdAt', direction: 'desc', value: new Date(cursor.createdAt) },
+      { field: 'id', direction: 'desc', value: cursor.id },
+    ]);
+    where = { AND: [where, cursorWhere] };
+  }
+
+  const rows = await prisma.message.findMany({
+    where,
+    include: { sender: { select: { id: true, firstName: true, lastName: true, avatar: true } } },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+
+  let nextCursor: string | null = null;
+  if (hasMore) {
+    const oldest = page[page.length - 1];
+    nextCursor = encodeCursor({ createdAt: oldest.createdAt.toISOString(), id: oldest.id });
+  }
 
   // Marquer comme lu
   await prisma.conversationParticipant.update({
@@ -83,7 +110,7 @@ export async function getMessages(conversationId: string, userId: string, query:
     data: { lastReadAt: new Date() },
   });
 
-  return { messages: messages.reverse(), pagination: paginate(page, limit, total) };
+  return { messages: page.reverse(), pagination: { limit, hasMore, nextCursor } };
 }
 
 export async function sendMessage(

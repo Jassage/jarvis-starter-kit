@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
 import { messagesApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useSocket } from '@/hooks/useSocket';
@@ -14,6 +15,11 @@ interface Message {
   senderId: string;
   createdAt: string;
   sender: { firstName: string; lastName: string };
+}
+
+interface MessagesPage {
+  data: { messages: Message[] };
+  meta?: { pagination?: { hasMore?: boolean; nextCursor?: string | null } };
 }
 
 interface Conversation {
@@ -42,9 +48,15 @@ export default function MessagesPage() {
     refetchInterval: 30000,
   });
 
-  const { data: msgData, isLoading: msgLoading } = useQuery({
+  const {
+    data: msgData, isLoading: msgLoading, fetchNextPage, hasNextPage, isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['messages', selectedConvId],
-    queryFn: () => messagesApi.getMessages(selectedConvId!).then((r) => r.data.data as { messages: Message[] }),
+    queryFn: ({ pageParam }) =>
+      messagesApi.getMessages(selectedConvId!, pageParam ? { cursor: pageParam } : undefined)
+        .then((r) => r.data as MessagesPage),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.meta?.pagination?.nextCursor ?? undefined,
     enabled: !!selectedConvId,
   });
 
@@ -67,10 +79,17 @@ export default function MessagesPage() {
   useEffect(() => {
     const cleanup = on('new_message', (msg: unknown) => {
       const typedMsg = msg as Message & { conversationId: string };
-      queryClient.setQueryData(['messages', typedMsg.conversationId], (old: { messages: Message[] } | undefined) => {
-        if (!old) return old;
-        return { ...old, messages: [...(old.messages || []), typedMsg] };
-      });
+      // pages[0] = le lot le plus récent (le seul chargé sans curseur) : c'est là
+      // que vient s'ajouter un message qui vient d'arriver en temps réel.
+      queryClient.setQueryData(
+        ['messages', typedMsg.conversationId],
+        (old: InfiniteData<MessagesPage, string | undefined> | undefined) => {
+          if (!old || old.pages.length === 0) return old;
+          const pages = [...old.pages];
+          pages[0] = { ...pages[0], data: { messages: [...pages[0].data.messages, typedMsg] } };
+          return { ...old, pages };
+        },
+      );
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     });
     return cleanup;
@@ -92,12 +111,18 @@ export default function MessagesPage() {
     return cleanup;
   }, [on, selectedConvId]);
 
+  const conversations: Conversation[] = convsData?.conversations || [];
+  // pages[0] = lot le plus récent ; les suivants sont progressivement plus anciens
+  // (chargés via "Charger les messages précédents") → on les remet en ordre chronologique.
+  const messages: Message[] = msgData ? [...msgData.pages].reverse().flatMap((p) => p.data.messages) : [];
+  const lastMessageId = messages[messages.length - 1]?.id;
+
+  // Scroll vers le bas uniquement sur nouveau message ou changement de conversation —
+  // PAS quand "Charger les messages précédents" préfixe des messages plus anciens
+  // (le dernier message ne change pas dans ce cas, l'effet ne se redéclenche donc pas).
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [msgData]);
-
-  const conversations: Conversation[] = convsData?.conversations || [];
-  const messages: Message[] = msgData?.messages || [];
+  }, [selectedConvId, lastMessageId]);
 
   const selectedConv = conversations.find(c => c.id === selectedConvId);
 
@@ -256,6 +281,17 @@ export default function MessagesPage() {
                   </div>
                 ) : (
                   <>
+                    {hasNextPage && (
+                      <div className="flex justify-center mb-3">
+                        <button
+                          onClick={() => fetchNextPage()}
+                          disabled={isFetchingNextPage}
+                          className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-primary px-3 py-1.5 rounded-full border border-gray-200 hover:border-primary/30 disabled:opacity-50 transition-colors"
+                        >
+                          {isFetchingNextPage ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Chargement...</> : 'Charger les messages précédents'}
+                        </button>
+                      </div>
+                    )}
                     {messages.map((msg, i) => {
                       const isOwn = msg.senderId === user?.id;
                       const prevMsg = messages[i - 1];
