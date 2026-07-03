@@ -5,19 +5,26 @@ import Icon from '@/components/Icon';
 import Logo from '@/components/Logo';
 import CourseThumb from '@/components/CourseThumb';
 import Stars from '@/components/Stars';
-import { courses } from '@/lib/data';
 import { useGo } from '@/lib/navigation';
 
 export default function Landing() {
   const go = useGo();
   const [scrolled, setScrolled] = useState(false);
+  const [courses, setCourses] = useState([]);
   const scrollRef = useRef(null);
   useEffect(() => {
     const el = scrollRef.current;
     const onScroll = () => setScrolled(el.scrollTop > 12);
     el.addEventListener('scroll', onScroll); return () => el.removeEventListener('scroll', onScroll);
   }, []);
-  const C = courses;
+  useEffect(() => {
+    fetch('/api/courses').then(r => r.json()).then(data => {
+      if (!Array.isArray(data)) return;
+      setCourses([...data].sort((a, b) => (b._count?.enrollments ?? 0) - (a._count?.enrollments ?? 0)));
+    }).catch(() => {});
+  }, []);
+  const featured = courses[0];
+  const C = courses.slice(0, 6);
   const scrollToId = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   const features = [
@@ -99,27 +106,28 @@ export default function Landing() {
 
             {/* hero visual */}
             <div className="lp-hero-visual anim-up" style={{ animationDelay: '.08s' }}>
-              <div className="lp-hero-card">
-                <CourseThumb course={C[0]} h={188} big />
-                <div style={{ padding: 20 }}>
-                  <div className="row between">
-                    <span className="badge badge-brand badge-dot">En cours</span>
-                    <Stars rating={4.9} />
-                  </div>
-                  <h3 className="h3" style={{ marginTop: 12 }}>{C[0].title}</h3>
-                  <div className="row gap-8" style={{ marginTop: 14 }}>
-                    <div className="avatar avatar-sm" style={{ background: 'var(--violet-soft)', color: 'var(--violet)' }}>SL</div>
-                    <span className="small muted">{C[0].author} · {C[0].authorRole}</span>
-                  </div>
-                  <div style={{ marginTop: 18 }}>
-                    <div className="row between" style={{ marginBottom: 7 }}>
-                      <span className="small" style={{ fontWeight: 650 }}>Progression</span>
-                      <span className="small tnum" style={{ fontWeight: 700, color: 'var(--brand)' }}>68%</span>
+              {featured && (
+                <div className="lp-hero-card">
+                  <CourseThumb course={{ color: featured.color, cat: featured.category, price: featured.price }} h={188} big />
+                  <div style={{ padding: 20 }}>
+                    <div className="row between">
+                      <span className="badge badge-brand badge-dot">Populaire</span>
+                      {featured.rating > 0 && <Stars rating={featured.rating} />}
                     </div>
-                    <div className="track"><div className="track-fill" style={{ width: '68%' }} /></div>
+                    <h3 className="h3" style={{ marginTop: 12 }}>{featured.title}</h3>
+                    <div className="row gap-8" style={{ marginTop: 14 }}>
+                      <div className="avatar avatar-sm" style={{ background: 'var(--violet-soft)', color: 'var(--violet)' }}>
+                        {(featured.author?.name || '?').split(' ').map(w => w[0]).join('').slice(0, 2)}
+                      </div>
+                      <span className="small muted">{featured.author?.name} · {featured._count?.enrollments ?? 0} inscrits</span>
+                    </div>
+                    <div className="row between" style={{ marginTop: 18 }}>
+                      <span className="small" style={{ fontWeight: 650 }}>Durée totale</span>
+                      <span className="small tnum" style={{ fontWeight: 700, color: 'var(--brand)' }}>{featured.hours}h · {featured.lessonCount} leçons</span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
               <div className="lp-float" style={{ top: -22, left: -26 }}>
                 <div className="edu-stat-ic edu-ic-green"><Icon name="award" size={19} /></div>
                 <div className="col" style={{ lineHeight: 1.25 }}>
@@ -179,26 +187,29 @@ export default function Landing() {
               <span className="eyebrow">Catalogue</span>
               <h2 className="lp-h2" style={{ fontSize: 'clamp(26px,3.2vw,36px)', fontWeight: 800, letterSpacing: '-0.025em', marginTop: 10 }}>Les cours les plus populaires</h2>
             </div>
-            <button className="btn btn-outline" onClick={() => go('auth')}>Explorer les 312 cours<Icon name="arrowR" size={16} /></button>
+            <button className="btn btn-outline" onClick={() => go('auth')}>Explorer les {courses.length} cours<Icon name="arrowR" size={16} /></button>
           </div>
+          {C.length === 0 ? (
+            <div className="small muted" style={{ textAlign: 'center', padding: '40px 0' }}>Chargement du catalogue…</div>
+          ) : (
           <div className="lp-courses">
             {C.map((c, i) => (
-              <div key={c.id} className="edu-course-card anim-up" style={{ animationDelay: `${i * 0.03}s` }} onClick={() => go('course')}>
-                <div style={{ padding: 10 }}><CourseThumb course={c} h={156} /></div>
+              <div key={c.id} className="edu-course-card anim-up" style={{ animationDelay: `${i * 0.03}s` }} onClick={() => go('auth')}>
+                <div style={{ padding: 10 }}><CourseThumb course={{ color: c.color, cat: c.category, price: c.price }} h={156} /></div>
                 <div style={{ padding: '6px 16px 18px' }}>
                   <div className="edu-course-meta">
-                    <span className={'badge badge-' + c.color}>{c.level}</span>
+                    <span className={'badge badge-' + (c.color || 'brand')}>{c.level}</span>
                   </div>
                   <h3 className="h4" style={{ marginTop: 11, fontSize: 16.5, lineHeight: 1.3 }}>{c.title}</h3>
                   <div className="row gap-8" style={{ marginTop: 12 }}>
-                    <div className="avatar avatar-sm" style={{ fontSize: 11 }}>{c.author.split(' ').map(w => w[0]).join('')}</div>
-                    <span className="tiny muted">{c.author}</span>
+                    <div className="avatar avatar-sm" style={{ fontSize: 11 }}>{(c.author?.name || '?').split(' ').map(w => w[0]).join('')}</div>
+                    <span className="tiny muted">{c.author?.name}</span>
                   </div>
                   <hr className="hairline" style={{ margin: '14px 0' }} />
                   <div className="row between">
-                    <div className="edu-course-meta"><Icon name="clock" size={14} />{c.hours}h · {c.lessons} leçons</div>
+                    <div className="edu-course-meta"><Icon name="clock" size={14} />{c.hours}h · {c.lessonCount} leçons</div>
                     <div className="row gap-12">
-                      <Stars rating={c.rating} />
+                      {c.rating > 0 && <Stars rating={c.rating} />}
                       <span style={{ fontWeight: 800, fontSize: 16 }}>{c.price === 0 ? 'Gratuit' : c.price + '€'}</span>
                     </div>
                   </div>
@@ -206,6 +217,7 @@ export default function Landing() {
               </div>
             ))}
           </div>
+          )}
         </div>
       </section>
 

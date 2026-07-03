@@ -17,15 +17,24 @@ export default function StudentDashboard() {
   const { data: session } = useSession();
   const [enrollments, setEnrollments] = useState([]);
   const [allCourses, setAllCourses] = useState([]);
+  const [certCount, setCertCount] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [weekly, setWeekly] = useState({ lessonsCompleted: 0, hours: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       fetch('/api/user/enrollments').then(r => r.json()),
       fetch('/api/courses').then(r => r.json()),
-    ]).then(([enrollData, coursesData]) => {
+      fetch('/api/certificates').then(r => r.json()),
+      fetch('/api/user/streak').then(r => r.json()),
+      fetch('/api/user/weekly-progress').then(r => r.json()),
+    ]).then(([enrollData, coursesData, certs, streakData, weeklyData]) => {
       setEnrollments(Array.isArray(enrollData) ? enrollData : []);
       setAllCourses(Array.isArray(coursesData) ? coursesData : []);
+      setCertCount(Array.isArray(certs) ? certs.length : 0);
+      setStreak(streakData?.current ?? 0);
+      setWeekly(weeklyData?.lessonsCompleted != null ? weeklyData : { lessonsCompleted: 0, hours: 0 });
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -35,7 +44,7 @@ export default function StudentDashboard() {
   const enrolledIds = new Set(enrollments.map(e => e.courseId));
   const recs = allCourses.filter(c => !enrolledIds.has(c.id)).slice(0, 3);
 
-  const weeklyDone = Math.min(enrolled.length * 2, 7);
+  const weeklyDone = Math.min(weekly.lessonsCompleted, 7);
   const weeklyGoal = 7;
 
   if (loading) {
@@ -56,9 +65,9 @@ export default function StudentDashboard() {
         {/* Stats */}
         <div className="edu-grid edu-grid-4" style={{ marginBottom: 22 }}>
           <StatCard icon="book" color="brand" label="Cours en cours" value={String(enrollments.length)} />
-          <StatCard icon="clock" color="violet" label="Heures cette semaine" value="—" />
-          <StatCard icon="award" color="amber" label="Certificats obtenus" value="—" />
-          <StatCard icon="fire" color="rose" label="Série d'apprentissage" value="—" />
+          <StatCard icon="clock" color="violet" label="Heures cette semaine" value={`${weekly.hours}h`} />
+          <StatCard icon="award" color="amber" label="Certificats obtenus" value={String(certCount)} />
+          <StatCard icon="fire" color="rose" label="Série d'apprentissage" value={`${streak}j`} />
         </div>
 
         <div className="edu-cols">
@@ -137,7 +146,7 @@ export default function StudentDashboard() {
                       <div style={{ padding: '4px 14px 16px' }}>
                         <h3 className="h4" style={{ fontSize: 14.5, lineHeight: 1.3, minHeight: 38 }}>{c.title}</h3>
                         <div className="row between" style={{ marginTop: 10 }}>
-                          <Stars rating={4.8} size={13} />
+                          {c.rating > 0 ? <Stars rating={c.rating} size={13} /> : <span />}
                           <span style={{ fontWeight: 800, fontSize: 14.5 }}>
                             {c.price === 0 ? 'Gratuit' : c.price + '€'}
                           </span>
