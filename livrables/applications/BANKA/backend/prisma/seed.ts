@@ -1,8 +1,12 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { COMPTES_BASE } from '../src/services/compta.service';
 
 const prisma = new PrismaClient();
+
+// Dotation initiale en capital : fonds de démarrage de la caisse (HTG)
+const CAPITAL_INITIAL = 1_000_000;
 
 async function main() {
   console.log('Seed BANKA en cours...');
@@ -72,29 +76,41 @@ async function main() {
     },
   });
 
-  const planComptable = [
-    { numero: '101000', intitule: 'Capital social', type: 'CAPITAUX' },
-    { numero: '211000', intitule: 'Immobilisations corporelles', type: 'ACTIF' },
-    { numero: '411000', intitule: 'Comptes clients - épargne HTG', type: 'PASSIF' },
-    { numero: '412000', intitule: 'Comptes clients - courant HTG', type: 'PASSIF' },
-    { numero: '413000', intitule: 'Comptes clients - épargne USD', type: 'PASSIF' },
-    { numero: '421000', intitule: 'Portefeuille de prêts', type: 'ACTIF' },
-    { numero: '511000', intitule: 'Caisse HTG', type: 'ACTIF' },
-    { numero: '511100', intitule: 'Caisse USD', type: 'ACTIF' },
-    { numero: '512000', intitule: 'Banque principale', type: 'ACTIF' },
-    { numero: '611000', intitule: 'Frais financiers', type: 'CHARGE' },
-    { numero: '621000', intitule: 'Charges d\'exploitation', type: 'CHARGE' },
-    { numero: '711000', intitule: 'Intérêts sur prêts', type: 'PRODUIT' },
-    { numero: '712000', intitule: 'Frais de dossier', type: 'PRODUIT' },
-    { numero: '713000', intitule: 'Commissions et frais de service', type: 'PRODUIT' },
-  ];
-
-  for (const compte of planComptable) {
+  // Plan comptable : source unique COMPTES_BASE (le même que les écritures automatiques).
+  // L'ancien plan parallèle (101000, 511000, …) n'était référencé par aucune écriture.
+  for (const compte of COMPTES_BASE) {
     await prisma.compteComptable.upsert({
       where: { numero: compte.numero },
-      update: {},
-      create: compte as any,
+      update: { type: compte.type as any },
+      create: { numero: compte.numero, intitule: compte.intitule, type: compte.type as any },
     });
+  }
+  console.log(`${COMPTES_BASE.length} comptes du plan comptable insérés.`);
+
+  // Dotation initiale en capital : Débit 5700 Caisse / Crédit 1000 Capital social.
+  // Sans elle, la caisse comptable part de zéro et devient négative au premier décaissement.
+  const admin = await prisma.utilisateur.findUnique({ where: { email: 'admin@banka.ht' } });
+  const [caisse, capital] = await Promise.all([
+    prisma.compteComptable.findUnique({ where: { numero: '5700' } }),
+    prisma.compteComptable.findUnique({ where: { numero: '1000' } }),
+  ]);
+  if (admin && caisse && capital) {
+    const dejaDotee = await prisma.ecritureComptable.findFirst({
+      where: { compteDebitId: caisse.id, compteCreditId: capital.id },
+    });
+    if (!dejaDotee) {
+      await prisma.ecritureComptable.create({
+        data: {
+          compteDebitId: caisse.id,
+          compteCreditId: capital.id,
+          montant: CAPITAL_INITIAL,
+          libelle: 'Dotation initiale en capital',
+          date: new Date(),
+          creeParId: admin.id,
+        },
+      });
+      console.log(`Dotation initiale en capital : ${CAPITAL_INITIAL.toLocaleString('fr-FR')} HTG.`);
+    }
   }
 
   const configs = [

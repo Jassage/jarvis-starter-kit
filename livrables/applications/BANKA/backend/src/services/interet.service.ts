@@ -60,8 +60,10 @@ export async function crediterInteretsMensuels(): Promise<{ traites: number; err
           data: { solde: { increment: montantInteret } },
         });
 
+        // Les intérêts servis aux épargnants sont une charge pour la banque (6100),
+        // pas un produit : Débit 6100 (charge) / Crédit 2600 (le dépôt du client augmente)
         await creerEcritureAuto(tx, {
-          debitNumero:  '7100',
+          debitNumero:  '6100',
           creditNumero: '2600',
           montant: montantInteret,
           libelle,

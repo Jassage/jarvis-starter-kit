@@ -4,12 +4,12 @@ import { createAuditLog } from '../utils/audit';
 
 // ─── Comptes de base & écritures automatiques ─────────────────────────────────
 
-const COMPTES_BASE = [
+export const COMPTES_BASE = [
   // Classe 1 — Capitaux propres
-  { numero: '1000', intitule: 'Capital social',                          type: 'PASSIF'  },
-  { numero: '1100', intitule: 'Réserves légales',                        type: 'PASSIF'  },
-  { numero: '1200', intitule: 'Report à nouveau',                        type: 'PASSIF'  },
-  { numero: '1300', intitule: "Résultat de l'exercice",                  type: 'PASSIF'  },
+  { numero: '1000', intitule: 'Capital social',                          type: 'CAPITAUX' },
+  { numero: '1100', intitule: 'Réserves légales',                        type: 'CAPITAUX' },
+  { numero: '1200', intitule: 'Report à nouveau',                        type: 'CAPITAUX' },
+  { numero: '1300', intitule: "Résultat de l'exercice",                  type: 'CAPITAUX' },
   // Classe 2 — Opérations de crédit
   { numero: '2000', intitule: 'Prêts accordés',                          type: 'ACTIF'   },
   { numero: '2100', intitule: 'Provisions pour créances douteuses',      type: 'ACTIF'   },
@@ -23,6 +23,7 @@ const COMPTES_BASE = [
   { numero: '4400', intitule: 'État — impôts et taxes à payer',          type: 'PASSIF'  },
   { numero: '4500', intitule: 'Intérêts à payer sur dépôts',             type: 'PASSIF'  },
   { numero: '4600', intitule: 'Salaires nets à payer',                   type: 'PASSIF'  },
+  { numero: '4650', intitule: 'Avances au personnel',                    type: 'ACTIF'   },
   { numero: '4700', intitule: 'Cotisations sociales dues',               type: 'PASSIF'  },
   // Classe 5 — Trésorerie
   { numero: '5200', intitule: 'Banque correspondante',                   type: 'ACTIF'   },
@@ -46,7 +47,8 @@ export async function ensureComptesBase(): Promise<void> {
   for (const c of COMPTES_BASE) {
     await prisma.compteComptable.upsert({
       where: { numero: c.numero },
-      update: {},
+      // Resynchronise le type au démarrage : un compte de base mal typé fausse le bilan
+      update: { type: c.type as any },
       create: { numero: c.numero, intitule: c.intitule, type: c.type as any },
     });
   }
@@ -296,9 +298,23 @@ export async function getBilan(date?: Date) {
   for (const d of debits)  soldes[d.compteDebitId]  = (soldes[d.compteDebitId]  || 0) + Number(d._sum.montant || 0);
   for (const c of credits) soldes[c.compteCreditId] = (soldes[c.compteCreditId] || 0) - Number(c._sum.montant || 0);
 
-  const actifs    = comptes.filter((c) => c.type === 'ACTIF'    && (soldes[c.id] || 0) !== 0).map((c) => ({ numero: c.numero, intitule: c.intitule, solde: Math.abs(soldes[c.id] || 0) }));
-  const passifs   = comptes.filter((c) => c.type === 'PASSIF'   && (soldes[c.id] || 0) !== 0).map((c) => ({ numero: c.numero, intitule: c.intitule, solde: Math.abs(soldes[c.id] || 0) }));
-  const capitaux  = comptes.filter((c) => c.type === 'CAPITAUX' && (soldes[c.id] || 0) !== 0).map((c) => ({ numero: c.numero, intitule: c.intitule, solde: Math.abs(soldes[c.id] || 0) }));
+  // Convention de signe : solde = débits - crédits.
+  // Actif : solde débiteur positif attendu. Passif/Capitaux : solde créditeur → on inverse le signe.
+  const actifs    = comptes.filter((c) => c.type === 'ACTIF'    && (soldes[c.id] || 0) !== 0).map((c) => ({ numero: c.numero, intitule: c.intitule, solde: soldes[c.id] || 0 }));
+  const passifs   = comptes.filter((c) => c.type === 'PASSIF'   && (soldes[c.id] || 0) !== 0).map((c) => ({ numero: c.numero, intitule: c.intitule, solde: -(soldes[c.id] || 0) }));
+  const capitaux  = comptes.filter((c) => c.type === 'CAPITAUX' && (soldes[c.id] || 0) !== 0).map((c) => ({ numero: c.numero, intitule: c.intitule, solde: -(soldes[c.id] || 0) }));
+
+  // Résultat de l'exercice (produits - charges cumulés à la date) : intégré aux capitaux propres.
+  // Sans lui, le bilan est structurellement déséquilibré dès la première écriture de produit ou de charge.
+  let resultatExercice = 0;
+  for (const c of comptes) {
+    const solde = soldes[c.id] || 0;
+    if (c.type === 'PRODUIT') resultatExercice += -solde; // produits : soldes créditeurs
+    if (c.type === 'CHARGE')  resultatExercice -= solde;  // charges : soldes débiteurs
+  }
+  if (Math.abs(resultatExercice) >= 0.01) {
+    capitaux.push({ numero: '1300', intitule: "Résultat de l'exercice", solde: resultatExercice });
+  }
 
   const totalActif    = actifs.reduce((s, c) => s + c.solde, 0);
   const totalPassif   = passifs.reduce((s, c) => s + c.solde, 0);

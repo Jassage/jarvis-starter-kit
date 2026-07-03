@@ -502,11 +502,24 @@ export async function payerSalaires(periode: string, userId: string) {
       }
 
       if (Number(fiche.creditDeduit) > 0) {
+        // La retenue éteint la dette salariale (débit 4600) et réduit l'encours du prêt (crédit 2000)
         await creerEcritureAuto(tx, {
-          debitNumero:  '2000',
-          creditNumero: '4600',
+          debitNumero:  '4600',
+          creditNumero: '2000',
           montant: Number(fiche.creditDeduit),
           libelle: `Remboursement crédit retenu sur salaire ${emp.prenom} ${emp.nom} ${periode}`,
+          date: new Date(),
+          userId,
+        });
+      }
+
+      if (Number(fiche.avanceDeduite) > 0) {
+        // Apurement de l'avance : la créance 4650 (posée à l'octroi) est soldée par la retenue sur salaire
+        await creerEcritureAuto(tx, {
+          debitNumero:  '4600',
+          creditNumero: '4650',
+          montant: Number(fiche.avanceDeduite),
+          libelle: `Déduction avance sur salaire ${emp.prenom} ${emp.nom} ${periode}`,
           date: new Date(),
           userId,
         });
@@ -582,15 +595,17 @@ export async function creerAvance(data: {
 
     if (emp.compteId) {
       await tx.compte.update({ where: { id: emp.compteId }, data: { solde: { increment: data.montant } } });
-      await creerEcritureAuto(tx, {
-        debitNumero:  '4650',
-        creditNumero: '5700',
-        montant: data.montant,
-        libelle: `Avance sur salaire ${emp.prenom} ${emp.nom} — déduction prévue ${data.periodeDeduction}`,
-        date: new Date(),
-        userId,
-      });
     }
+    // L'argent sort de la caisse que l'avance soit virée sur le compte interne ou remise en espèces :
+    // Débit 4650 (créance sur l'employé) / Crédit 5700 (caisse)
+    await creerEcritureAuto(tx, {
+      debitNumero:  '4650',
+      creditNumero: '5700',
+      montant: data.montant,
+      libelle: `Avance sur salaire ${emp.prenom} ${emp.nom} — déduction prévue ${data.periodeDeduction}`,
+      date: new Date(),
+      userId,
+    });
 
     return created;
   });
@@ -625,6 +640,15 @@ export async function annulerAvance(avanceId: string, userId: string) {
       await tx.compte.update({ where: { id: avance.employe.compteId }, data: { solde: { decrement: Number(avance.montant) } } });
     }
     await (tx as any).avanceSalaire.update({ where: { id: avanceId }, data: { statut: 'ANNULEE' } });
+    // Contre-passation de l'écriture d'octroi : l'argent revient en caisse, la créance s'éteint
+    await creerEcritureAuto(tx, {
+      debitNumero:  '5700',
+      creditNumero: '4650',
+      montant: Number(avance.montant),
+      libelle: `Annulation avance sur salaire ${avance.employe.prenom} ${avance.employe.nom}`,
+      date: new Date(),
+      userId,
+    });
   });
 
   await createAuditLog({ userId, table: 'avances_salaire', action: 'ANNULATION', entiteId: avanceId });

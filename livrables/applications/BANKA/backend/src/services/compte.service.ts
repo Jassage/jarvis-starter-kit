@@ -117,6 +117,19 @@ export async function createCompte(data: {
       },
     });
 
+    // Dépôt initial : sans écriture, l'argent apparaît sur le solde du compte
+    // sans jamais entrer en caisse comptablement — cause de déséquilibre du bilan.
+    if (soldeInitial > 0) {
+      await creerEcritureAuto(tx, {
+        debitNumero:  '5700',
+        creditNumero: '2600',
+        montant:      soldeInitial,
+        libelle:      `Dépôt d'ouverture — ${created.numeroCompte}`,
+        date:         new Date(),
+        userId:       userId || 'SYSTEM',
+      });
+    }
+
     // Prélever les frais d'ouverture si configurés
     if (fraisOuverture > 0) {
       const reference = await generateReferenceTransaction('FRAIS');
