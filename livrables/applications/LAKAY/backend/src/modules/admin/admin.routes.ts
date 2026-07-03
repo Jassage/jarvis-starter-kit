@@ -6,6 +6,8 @@ import { sendSuccess } from '../../utils/response';
 import prisma from '../../config/database';
 import { parsePagination, paginate } from '../../utils/response';
 import { ListingStatus, UserRole } from '@prisma/client';
+import { activateSubscription, rejectPayment } from '../payments/payments.service';
+import { AppError } from '../../middlewares/errorHandler.middleware';
 
 const router = Router();
 
@@ -198,6 +200,59 @@ router.patch('/reports/:id', requireAdmin, asyncHandler(async (req, res) => {
     },
   });
   sendSuccess(res, { report }, 'Signalement mis à jour');
+}));
+
+// ─── Paiements (vérification manuelle des preuves) ───
+router.get('/payments', requireAdmin, asyncHandler(async (req, res) => {
+  const query = req.query as Record<string, string>;
+  const { page, limit, skip } = parsePagination(query);
+  const where = query.status
+    ? { status: query.status as 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED' }
+    : {};
+
+  const [payments, total] = await Promise.all([
+    prisma.payment.findMany({
+      where,
+      include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.payment.count({ where }),
+  ]);
+
+  sendSuccess(res, { payments }, 'Paiements', 200, { pagination: paginate(page, limit, total) });
+}));
+
+// Valider une preuve → active l'abonnement (logique centralisée dans le service)
+router.post('/payments/:id/approve', requireAdmin, asyncHandler(async (req, res) => {
+  const ok = await activateSubscription(req.params.id, `MANUAL-${req.user!.id}`);
+  if (!ok) throw new AppError('Paiement introuvable ou déjà traité', 404);
+
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user!.id,
+      action: 'PAYMENT_APPROVE',
+      entity: 'Payment',
+      entityId: req.params.id,
+    },
+  });
+  sendSuccess(res, null, 'Paiement validé, abonnement activé');
+}));
+
+// Rejeter une preuve
+router.post('/payments/:id/reject', requireAdmin, asyncHandler(async (req, res) => {
+  await rejectPayment(req.params.id, req.body.reason);
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user!.id,
+      action: 'PAYMENT_REJECT',
+      entity: 'Payment',
+      entityId: req.params.id,
+      changes: { reason: req.body.reason ?? null },
+    },
+  });
+  sendSuccess(res, null, 'Paiement rejeté');
 }));
 
 // ─── Configuration système ───

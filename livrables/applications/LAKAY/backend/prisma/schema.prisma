@@ -158,21 +158,21 @@ model User {
   maxActiveListings Int @default(3)
 
   // Relations
-  agency          Agency?           @relation("AgencyOwner")
+  agency           Agency?                   @relation("AgencyOwner")
   agencyMembership AgencyMember?
-  listings        Listing[]
-  favorites       Favorite[]
-  sentMessages    Message[]         @relation("MessageSender")
-  conversations   ConversationParticipant[]
-  notifications   Notification[]
-  reviews         Review[]
-  payments        Payment[]
-  subscription    Subscription?
-  visitRequests   VisitRequest[]
-  reports         Report[]          @relation("Reporter")
-  refreshTokens   RefreshToken[]
-  passwordResets  PasswordResetToken[]
-  auditLogs       AuditLog[]
+  listings         Listing[]
+  favorites        Favorite[]
+  sentMessages     Message[]                 @relation("MessageSender")
+  conversations    ConversationParticipant[]
+  notifications    Notification[]
+  reviews          Review[]
+  payments         Payment[]
+  subscription     Subscription?
+  visitRequests    VisitRequest[]
+  reports          Report[]                  @relation("Reporter")
+  refreshTokens    RefreshToken[]
+  passwordResets   PasswordResetToken[]
+  auditLogs        AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -188,17 +188,18 @@ model RefreshToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
+  @@index([userId])
   @@map("refresh_tokens")
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@map("password_reset_tokens")
 }
@@ -218,28 +219,28 @@ model EmailVerificationToken {
 // ─────────────────────────────────────────
 
 model Agency {
-  id          String  @id @default(cuid())
-  name        String
-  description String? @db.Text
-  logo        String?
-  logoPublicId String?
-  address     String?
-  phone       String?
-  email       String? @unique
-  website     String?
+  id            String  @id @default(cuid())
+  name          String
+  description   String? @db.Text
+  logo          String?
+  logoPublicId  String?
+  address       String?
+  phone         String?
+  email         String? @unique
+  website       String?
   licenseNumber String?
-  isVerified  Boolean @default(false)
-  isActive    Boolean @default(true)
+  isVerified    Boolean @default(false)
+  isActive      Boolean @default(true)
 
   // Social
-  facebook    String?
-  instagram   String?
-  whatsapp    String?
+  facebook  String?
+  instagram String?
+  whatsapp  String?
 
-  ownerId     String  @unique
-  owner       User    @relation("AgencyOwner", fields: [ownerId], references: [id])
-  members     AgencyMember[]
-  listings    Listing[]
+  ownerId  String         @unique
+  owner    User           @relation("AgencyOwner", fields: [ownerId], references: [id])
+  members  AgencyMember[]
+  listings Listing[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -265,61 +266,61 @@ model AgencyMember {
 // ─────────────────────────────────────────
 
 model Listing {
-  id          String        @id @default(cuid())
+  id          String @id @default(cuid())
   title       String
-  description String        @db.Text
+  description String @db.Text
 
   propertyType PropertyType
   listingType  ListingType
 
-  price       Decimal       @db.Decimal(12, 2)
-  currency    Currency      @default(HTG)
-  priceNegotiable Boolean   @default(false)
-  monthlyCharges  Decimal?  @db.Decimal(12, 2) // pour locations
+  price           Decimal  @db.Decimal(12, 2)
+  currency        Currency @default(HTG)
+  priceNegotiable Boolean  @default(false)
+  monthlyCharges  Decimal? @db.Decimal(12, 2) // pour locations
 
   // Location haïtienne
-  department  Department
-  commune     String
-  city        String
-  neighborhood String?
-  address     String?
-  landmark    String?      // Point de repère — crucial pour Haïti
-  latitude    Decimal?     @db.Decimal(10, 8)
-  longitude   Decimal?     @db.Decimal(11, 8)
+  department    Department
+  commune       String
+  city          String
+  neighborhood  String?
+  address       String?
+  landmark      String? // Point de repère — crucial pour Haïti
+  latitude      Decimal?   @db.Decimal(10, 8)
+  longitude     Decimal?   @db.Decimal(11, 8)
   googleMapsUrl String?
 
   // Détails du bien
-  bedrooms    Int?
-  bathrooms   Int?
-  area        Decimal?     @db.Decimal(10, 2)  // m²
-  floor       Int?
-  totalFloors Int?
-  yearBuilt   Int?
+  bedrooms      Int?
+  bathrooms     Int?
+  area          Decimal? @db.Decimal(10, 2) // m²
+  floor         Int?
+  totalFloors   Int?
+  yearBuilt     Int?
   parkingSpaces Int?
 
   // Équipements essentiels (contexte haïtien)
-  hasWater         Boolean @default(false)
-  hasElectricity   Boolean @default(false) // EDH
-  hasGenerator     Boolean @default(false)
-  hasSolarPanel    Boolean @default(false)
-  hasCistern       Boolean @default(false)
-  hasInternet      Boolean @default(false)
-  hasParking       Boolean @default(false)
-  hasPool          Boolean @default(false)
-  hasAC            Boolean @default(false)
-  isFurnished      Boolean @default(false)
-  petsAllowed      Boolean @default(false)
-  hasSecurity      Boolean @default(false) // gardien / portail
-  hasSeaView       Boolean @default(false)
-  hasMountainView  Boolean @default(false)
-  isAvailableNow   Boolean @default(true)
-  hasBalcony       Boolean @default(false)
-  hasGarden        Boolean @default(false)
+  hasWater        Boolean @default(false)
+  hasElectricity  Boolean @default(false) // EDH
+  hasGenerator    Boolean @default(false)
+  hasSolarPanel   Boolean @default(false)
+  hasCistern      Boolean @default(false)
+  hasInternet     Boolean @default(false)
+  hasParking      Boolean @default(false)
+  hasPool         Boolean @default(false)
+  hasAC           Boolean @default(false)
+  isFurnished     Boolean @default(false)
+  petsAllowed     Boolean @default(false)
+  hasSecurity     Boolean @default(false) // gardien / portail
+  hasSeaView      Boolean @default(false)
+  hasMountainView Boolean @default(false)
+  isAvailableNow  Boolean @default(true)
+  hasBalcony      Boolean @default(false)
+  hasGarden       Boolean @default(false)
 
   // Médias
-  images          ListingImage[]
-  videos          ListingVideo[]
-  virtualTourUrl  String?
+  images         ListingImage[]
+  videos         ListingVideo[]
+  virtualTourUrl String?
 
   // Statut & Modération
   status          ListingStatus @default(DRAFT)
@@ -328,62 +329,70 @@ model Listing {
   reviewedById    String?
 
   // Mise en avant
-  isFeatured      Boolean   @default(false)
-  featuredUntil   DateTime?
-  isSponsored     Boolean   @default(false)
-  sponsoredUntil  DateTime?
-  sponsoredTier   Int?      @default(0) // 1=bronze, 2=silver, 3=gold
+  isFeatured     Boolean   @default(false)
+  featuredUntil  DateTime?
+  isSponsored    Boolean   @default(false)
+  sponsoredUntil DateTime?
+  sponsoredTier  Int?      @default(0) // 1=bronze, 2=silver, 3=gold
 
   // Stats
-  viewCount       Int       @default(0)
-  contactCount    Int       @default(0)
-  favoriteCount   Int       @default(0)
+  viewCount     Int @default(0)
+  contactCount  Int @default(0)
+  favoriteCount Int @default(0)
 
-  expiresAt       DateTime?
+  expiresAt DateTime?
 
   // Relations
-  ownerId         String
-  owner           User      @relation(fields: [ownerId], references: [id])
-  agencyId        String?
-  agency          Agency?   @relation(fields: [agencyId], references: [id])
+  ownerId  String
+  owner    User    @relation(fields: [ownerId], references: [id])
+  agencyId String?
+  agency   Agency? @relation(fields: [agencyId], references: [id])
 
-  favorites       Favorite[]
-  conversations   Conversation[]
-  visitRequests   VisitRequest[]
-  reviews         Review[]
-  reports         Report[]
+  favorites     Favorite[]
+  conversations Conversation[]
+  visitRequests VisitRequest[]
+  reviews       Review[]
+  reports       Report[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Index — la recherche multi-filtres est le cœur de l'app
+  @@index([status, department, listingType, propertyType])
+  @@index([status, expiresAt])
+  @@index([status, price])
+  @@index([status, createdAt])
+  @@index([status, isSponsored, isFeatured])
+  @@index([ownerId])
+  @@index([agencyId])
   @@map("listings")
 }
 
 model ListingImage {
-  id         String   @id @default(cuid())
-  listingId  String
-  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  url        String
-  publicId   String?
-  alt        String?
-  order      Int      @default(0)
-  isPrimary  Boolean  @default(false)
-  width      Int?
-  height     Int?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url       String
+  publicId  String?
+  alt       String?
+  order     Int      @default(0)
+  isPrimary Boolean  @default(false)
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now())
 
   @@map("listing_images")
 }
 
 model ListingVideo {
-  id         String   @id @default(cuid())
-  listingId  String
-  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  url        String
-  publicId   String?
-  thumbnail  String?
-  duration   Int?     // secondes
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url       String
+  publicId  String?
+  thumbnail String?
+  duration  Int? // secondes
+  createdAt DateTime @default(now())
 
   @@map("listing_videos")
 }
@@ -402,38 +411,41 @@ model Favorite {
   createdAt  DateTime @default(now())
 
   @@unique([userId, listingId])
+  @@index([listingId])
   @@map("favorites")
 }
 
 model VisitRequest {
-  id           String      @id @default(cuid())
-  listingId    String
-  requesterId  String
-  listing      Listing     @relation(fields: [listingId], references: [id])
-  requester    User        @relation(fields: [requesterId], references: [id])
+  id          String  @id @default(cuid())
+  listingId   String
+  requesterId String
+  listing     Listing @relation(fields: [listingId], references: [id])
+  requester   User    @relation(fields: [requesterId], references: [id])
 
-  proposedDate DateTime
-  message      String?     @db.Text
-  status       VisitStatus @default(PENDING)
+  proposedDate  DateTime
+  message       String?     @db.Text
+  status        VisitStatus @default(PENDING)
   confirmedDate DateTime?
-  ownerNote    String?
+  ownerNote     String?
 
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@index([listingId])
+  @@index([requesterId])
   @@map("visit_requests")
 }
 
 model Review {
-  id        String   @id @default(cuid())
-  listingId String
-  userId    String
-  rating    Int      // 1–5
-  comment   String?  @db.Text
+  id         String  @id @default(cuid())
+  listingId  String
+  userId     String
+  rating     Int // 1–5
+  comment    String? @db.Text
   isVerified Boolean @default(false) // vérifié par admin
 
-  listing   Listing  @relation(fields: [listingId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
+  listing Listing @relation(fields: [listingId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -447,13 +459,13 @@ model Review {
 // ─────────────────────────────────────────
 
 model Conversation {
-  id          String    @id @default(cuid())
-  listingId   String?
-  listing     Listing?  @relation(fields: [listingId], references: [id])
-  subject     String?
+  id        String   @id @default(cuid())
+  listingId String?
+  listing   Listing? @relation(fields: [listingId], references: [id])
+  subject   String?
 
   participants ConversationParticipant[]
-  messages    Message[]
+  messages     Message[]
 
   lastMessageAt DateTime?
 
@@ -476,21 +488,23 @@ model ConversationParticipant {
 }
 
 model Message {
-  id             String       @id @default(cuid())
+  id             String  @id @default(cuid())
   conversationId String
   senderId       String
-  content        String       @db.Text
-  isRead         Boolean      @default(false)
+  content        String  @db.Text
+  isRead         Boolean @default(false)
 
   // Pièces jointes
   attachmentUrl  String?
-  attachmentType String?      // IMAGE, DOCUMENT
+  attachmentType String? // IMAGE, DOCUMENT
 
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender         User         @relation("MessageSender", fields: [senderId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("MessageSender", fields: [senderId], references: [id])
 
   createdAt DateTime @default(now())
 
+  @@index([conversationId, createdAt])
+  @@index([senderId])
   @@map("messages")
 }
 
@@ -508,10 +522,11 @@ model Notification {
   isRead  Boolean          @default(false)
   link    String?
 
-  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
+  @@index([userId, isRead, createdAt])
   @@map("notifications")
 }
 
@@ -520,16 +535,16 @@ model Notification {
 // ─────────────────────────────────────────
 
 model Subscription {
-  id        String           @id @default(cuid())
-  userId    String           @unique
-  plan      SubscriptionPlan @default(FREE)
-  isActive  Boolean          @default(true)
+  id       String           @id @default(cuid())
+  userId   String           @unique
+  plan     SubscriptionPlan @default(FREE)
+  isActive Boolean          @default(true)
 
-  startDate DateTime         @default(now())
+  startDate DateTime  @default(now())
   endDate   DateTime?
 
-  user      User             @relation(fields: [userId], references: [id])
-  payments  Payment[]
+  user     User      @relation(fields: [userId], references: [id])
+  payments Payment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -538,28 +553,29 @@ model Subscription {
 }
 
 model Payment {
-  id             String        @id @default(cuid())
+  id             String  @id @default(cuid())
   userId         String
   subscriptionId String?
-  listingId      String?       // pour annonces sponsorisées
+  listingId      String? // pour annonces sponsorisées
 
-  amount         Decimal       @db.Decimal(12, 2)
-  currency       Currency      @default(HTG)
-  method         PaymentMethod
-  status         PaymentStatus @default(PENDING)
+  amount   Decimal       @db.Decimal(12, 2)
+  currency Currency      @default(HTG)
+  method   PaymentMethod
+  status   PaymentStatus @default(PENDING)
 
-  providerRef    String?
-  providerData   Json?
+  providerRef  String?
+  providerData Json?
 
-  description    String?
-  metadata       Json?
+  description String?
+  metadata    Json?
 
-  user           User          @relation(fields: [userId], references: [id])
-  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([userId, createdAt])
   @@map("payments")
 }
 
@@ -568,17 +584,17 @@ model Payment {
 // ─────────────────────────────────────────
 
 model Report {
-  id          String       @id @default(cuid())
-  listingId   String
-  reporterId  String
-  listing     Listing      @relation(fields: [listingId], references: [id])
-  reporter    User         @relation("Reporter", fields: [reporterId], references: [id])
+  id         String  @id @default(cuid())
+  listingId  String
+  reporterId String
+  listing    Listing @relation(fields: [listingId], references: [id])
+  reporter   User    @relation("Reporter", fields: [reporterId], references: [id])
 
-  reason      ReportReason
-  description String?      @db.Text
-  status      ReportStatus @default(PENDING)
-  adminNote   String?
-  resolvedAt  DateTime?
+  reason       ReportReason
+  description  String?      @db.Text
+  status       ReportStatus @default(PENDING)
+  adminNote    String?
+  resolvedAt   DateTime?
   resolvedById String?
 
   createdAt DateTime @default(now())
@@ -617,11 +633,11 @@ model SystemConfig {
 }
 
 model SearchHistory {
-  id        String   @id @default(cuid())
-  userId    String?
-  query     Json
+  id          String   @id @default(cuid())
+  userId      String?
+  query       Json
   resultCount Int
-  createdAt DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   @@map("search_history")
 }

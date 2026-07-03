@@ -1,4 +1,6 @@
 import express from 'express';
+import crypto from 'crypto';
+import { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -10,10 +12,9 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { env } from './config/env';
 import { globalLimiter } from './middlewares/rateLimiter.middleware';
-import { requireAdmin } from './middlewares/rbac.middleware';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.middleware';
 import { swaggerSpec } from './config/swagger';
-import { notificationQueue, emailQueue } from './queues';
+import { notificationQueue, emailQueue, maintenanceQueue } from './queues';
 
 // Routes
 import authRoutes from './modules/auth/auth.routes';
@@ -24,6 +25,7 @@ import agenciesRoutes from './modules/agencies/agencies.routes';
 import favoritesRoutes from './modules/favorites/favorites.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import reviewsRoutes from './modules/reviews/reviews.routes';
+import reportsRoutes from './modules/reports/reports.routes';
 import paymentsRoutes from './modules/payments/payments.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import aiRoutes from './modules/ai/ai.routes';
@@ -64,17 +66,42 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 }));
 app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
 
-// ─── Bull Board (monitoring queues — admin only) ───
+// ─── Bull Board (monitoring queues — protégé par Basic Auth) ───
+// Dashboard HTML servi au navigateur : le Bearer token du localStorage ne peut
+// pas transiter, on utilise donc une Basic Auth par identifiants d'environnement.
+// Fail-closed : sans identifiants configurés, l'accès est refusé.
+function bullBoardAuth(req: Request, res: Response, next: NextFunction) {
+  if (!env.BULL_BOARD_USER || !env.BULL_BOARD_PASSWORD) {
+    return res.status(503).json({ success: false, message: 'Monitoring non configuré' });
+  }
+  const header = req.headers.authorization || '';
+  if (header.startsWith('Basic ')) {
+    const decoded = Buffer.from(header.slice(6), 'base64').toString();
+    const idx = decoded.indexOf(':');
+    const user = decoded.slice(0, idx);
+    const pass = decoded.slice(idx + 1);
+    // Comparaison à temps constant, avec garde de longueur (timingSafeEqual exige des tailles égales)
+    const safeEqual = (a: string, b: string) =>
+      a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+    if (safeEqual(user, env.BULL_BOARD_USER) && safeEqual(pass, env.BULL_BOARD_PASSWORD)) {
+      return next();
+    }
+  }
+  res.set('WWW-Authenticate', 'Basic realm="LAKAY Queues"');
+  return res.status(401).json({ success: false, message: 'Authentification requise' });
+}
+
 const bullBoardAdapter = new ExpressAdapter();
 bullBoardAdapter.setBasePath('/admin/queues');
 createBullBoard({
   queues: [
     new BullMQAdapter(notificationQueue),
     new BullMQAdapter(emailQueue),
+    new BullMQAdapter(maintenanceQueue),
   ],
   serverAdapter: bullBoardAdapter,
 });
-app.use('/admin/queues', requireAdmin, bullBoardAdapter.getRouter());
+app.use('/admin/queues', bullBoardAuth, bullBoardAdapter.getRouter());
 
 // ─── Routes API ───
 app.use('/api/auth', authRoutes);
@@ -85,6 +112,7 @@ app.use('/api/agencies', agenciesRoutes);
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/reviews', reviewsRoutes);
+app.use('/api/reports', reportsRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/ai', aiRoutes);

@@ -29,6 +29,7 @@ interface AuthState {
   refreshUser: () => Promise<void>;
   setTokens: (access: string, refresh: string) => void;
   setUser: (user: User) => void;
+  clearAuth: () => void;
 }
 
 const readToken = (key: string) =>
@@ -83,6 +84,15 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setUser: (user) => set({ user }),
+
+      // Réinitialise l'état d'auth sans appel réseau (utilisé quand le refresh échoue)
+      clearAuth: () => {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('lakay_token');
+          localStorage.removeItem('lakay_refresh_token');
+        }
+        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+      },
     }),
     {
       name: 'lakay-auth',

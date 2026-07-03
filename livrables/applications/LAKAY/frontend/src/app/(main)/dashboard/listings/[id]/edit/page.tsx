@@ -21,6 +21,17 @@ const PROPERTY_TYPES = [
   { value: 'WAREHOUSE', label: 'Entrepôt' },
 ];
 
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Brouillon',
+  PENDING_REVIEW: 'En révision',
+  ACTIVE: 'Active',
+  REJECTED: 'Refusée',
+  EXPIRED: 'Expirée',
+  RENTED: 'Louée',
+  SOLD: 'Vendue',
+  SUSPENDED: 'Suspendue',
+};
+
 interface ExistingImage {
   id: string;
   url: string;
@@ -135,19 +146,22 @@ export default function EditListingPage() {
       </div>
     );
   }
-  if (data.status !== 'DRAFT') {
+  // Statuts qu'un propriétaire ne peut pas éditer (alignés sur le backend)
+  const NON_EDITABLE = ['SUSPENDED', 'RENTED', 'SOLD'];
+  if (NON_EDITABLE.includes(data.status)) {
     return (
       <div className="text-center py-20 max-w-md mx-auto">
         <p className="text-gray-700 font-medium mb-2">Modification impossible</p>
         <p className="text-gray-500 text-sm mb-4">
-          Seules les annonces en brouillon peuvent être modifiées.<br />
-          Statut actuel : <strong>{data.status}</strong>
+          Une annonce {STATUS_LABELS[data.status]?.toLowerCase() ?? data.status} ne peut pas être modifiée.<br />
+          Contactez le support si nécessaire.
         </p>
         <Link href="/dashboard/listings" className="text-primary hover:underline">← Retour à mes annonces</Link>
       </div>
     );
   }
 
+  const willRequireReview = data.status !== 'DRAFT';
   const existingImages: ExistingImage[] = data.images ?? [];
   const totalImages = existingImages.length + newFiles.length;
 
@@ -160,8 +174,22 @@ export default function EditListingPage() {
 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Modifier l'annonce</h1>
-        <span className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">Brouillon</span>
+        <span className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">
+          {STATUS_LABELS[data.status] ?? data.status}
+        </span>
       </div>
+
+      {willRequireReview && (
+        <div className="mb-6 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <p className="text-sm text-amber-800">
+            Après enregistrement, cette annonce repassera en <strong>révision</strong> et sera
+            temporairement retirée de la recherche publique jusqu'à sa nouvelle validation.
+          </p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit(d => updateMutation.mutate(d as Record<string, unknown>))} className="space-y-6">
 

@@ -38,9 +38,22 @@ router.post('/listing/:listingId', requireAuth, validate(createReviewSchema), as
   if (!listing) throw new AppError('Annonce non trouvée', 404);
   if (listing.ownerId === req.user!.id) throw new AppError('Vous ne pouvez pas évaluer votre propre annonce', 400);
 
+  // Preuve d'interaction requise : une visite confirmée ou effectuée sur ce bien
+  const visit = await prisma.visitRequest.findFirst({
+    where: {
+      listingId: req.params.listingId,
+      requesterId: req.user!.id,
+      status: { in: ['CONFIRMED', 'COMPLETED'] },
+    },
+    select: { id: true },
+  });
+  if (!visit) {
+    throw new AppError('Vous devez avoir une visite confirmée sur ce bien pour laisser un avis', 403);
+  }
+
   const review = await prisma.review.upsert({
     where: { listingId_userId: { listingId: req.params.listingId, userId: req.user!.id } },
-    create: { listingId: req.params.listingId, userId: req.user!.id, ...req.body },
+    create: { listingId: req.params.listingId, userId: req.user!.id, isVerified: true, ...req.body },
     update: req.body,
     include: { user: { select: { id: true, firstName: true, lastName: true, avatar: true } } },
   });

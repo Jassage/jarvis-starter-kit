@@ -55,8 +55,10 @@ const LISTING_SELECT = {
   createdAt: true,
   updatedAt: true,
   images: { orderBy: { order: 'asc' as const }, select: { id: true, url: true, alt: true, order: true, isPrimary: true } },
-  owner: { select: { id: true, firstName: true, lastName: true, avatar: true, phone: true, whatsapp: true, isVerified: true } },
-  agency: { select: { id: true, name: true, logo: true, phone: true, isVerified: true } },
+  // Coordonnées de contact volontairement EXCLUES ici : elles ne sont servies
+  // qu'aux utilisateurs connectés via GET /listings/:id/contact (capture de leads + anti-scraping).
+  owner: { select: { id: true, firstName: true, lastName: true, avatar: true, isVerified: true } },
+  agency: { select: { id: true, name: true, logo: true, isVerified: true } },
   _count: { select: { favorites: true, reviews: true } },
 };
 
@@ -85,6 +87,11 @@ export async function createListing(ownerId: string, data: Record<string, unknow
   });
 }
 
+// Statuts qu'un propriétaire a le droit d'éditer lui-même
+const OWNER_EDITABLE_STATUSES: ListingStatus[] = ['DRAFT', 'PENDING_REVIEW', 'ACTIVE', 'REJECTED', 'EXPIRED'];
+// Champs jamais modifiables via l'API d'édition (contrôlés par le système / l'admin)
+const PROTECTED_LISTING_FIELDS = ['status', 'isFeatured', 'isSponsored', 'sponsoredTier', 'viewCount', 'contactCount', 'favoriteCount', 'reviewedAt', 'reviewedById', 'rejectionReason', 'ownerId', 'expiresAt'];
+
 export async function updateListing(id: string, userId: string, userRole: string, data: Record<string, unknown>) {
   const listing = await prisma.listing.findUnique({ where: { id } });
   if (!listing) throw new AppError('Annonce non trouvée', 404);
@@ -93,14 +100,26 @@ export async function updateListing(id: string, userId: string, userRole: string
   const isAdminUser = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
   if (!isOwner && !isAdminUser) throw new AppError('Permission refusée', 403);
 
-  // Propriétaire ne peut modifier qu'en DRAFT
+  // Un propriétaire ne peut pas éditer une annonce SUSPENDED / RENTED / SOLD
+  if (isOwner && !isAdminUser && !OWNER_EDITABLE_STATUSES.includes(listing.status)) {
+    throw new AppError('Cette annonce ne peut pas être modifiée dans son état actuel', 400);
+  }
+
+  // On ne fait jamais confiance aux champs protégés envoyés par le client
+  const safeData: Record<string, unknown> = { ...data };
+  for (const field of PROTECTED_LISTING_FIELDS) delete safeData[field];
+
+  // Toute édition d'une annonce déjà publiée par son propriétaire la renvoie en modération
   if (isOwner && !isAdminUser && listing.status !== 'DRAFT') {
-    throw new AppError('Vous ne pouvez modifier une annonce qu\'en brouillon', 400);
+    safeData.status = 'PENDING_REVIEW';
+    safeData.rejectionReason = null;
+    safeData.reviewedAt = null;
+    safeData.reviewedById = null;
   }
 
   const updated = await prisma.listing.update({
     where: { id },
-    data: data as Prisma.ListingUpdateInput,
+    data: safeData as Prisma.ListingUpdateInput,
     select: LISTING_SELECT,
   });
 
@@ -139,7 +158,10 @@ export async function updateListing(id: string, userId: string, userRole: string
 }
 
 export async function deleteListing(id: string, userId: string, userRole: string) {
-  const listing = await prisma.listing.findUnique({ where: { id } });
+  const listing = await prisma.listing.findUnique({
+    where: { id },
+    include: { images: { select: { publicId: true } } },
+  });
   if (!listing) throw new AppError('Annonce non trouvée', 404);
 
   const isOwner = listing.ownerId === userId;
@@ -147,13 +169,21 @@ export async function deleteListing(id: string, userId: string, userRole: string
   if (!isOwner && !isAdminUser) throw new AppError('Permission refusée', 403);
 
   await prisma.listing.delete({ where: { id } });
+
+  // Purge des assets Cloudinary (best-effort : ne bloque pas la suppression)
+  const publicIds = listing.images.map((img) => img.publicId).filter((p): p is string => !!p);
+  await Promise.allSettled(publicIds.map((publicId) => deleteFromCloudinary(publicId)));
 }
 
-export async function getListingById(id: string, userId?: string) {
+// Statuts publiquement visibles par n'importe qui
+const PUBLIC_LISTING_STATUSES: ListingStatus[] = ['ACTIVE', 'RENTED', 'SOLD'];
+
+export async function getListingById(id: string, userId?: string, userRole?: string) {
   const listing = await prisma.listing.findUnique({
     where: { id },
     select: {
       ...LISTING_SELECT,
+      ownerId: true,
       videos: { select: { id: true, url: true, thumbnail: true } },
       reviews: {
         take: 5,
@@ -165,8 +195,19 @@ export async function getListingById(id: string, userId?: string) {
 
   if (!listing) throw new AppError('Annonce non trouvée', 404);
 
-  // Incrémenter le compteur de vues
-  await prisma.listing.update({ where: { id }, data: { viewCount: { increment: 1 } } });
+  // Une annonce non publique (brouillon, en review, rejetée, expirée, suspendue)
+  // n'est visible que par son propriétaire ou un admin.
+  if (!PUBLIC_LISTING_STATUSES.includes(listing.status)) {
+    const isOwner = !!userId && listing.ownerId === userId;
+    const isAdminUser = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
+    if (!isOwner && !isAdminUser) throw new AppError('Annonce non trouvée', 404);
+  }
+
+  // Incrémenter le compteur de vues uniquement pour les annonces publiques,
+  // et jamais pour le propriétaire lui-même
+  if (PUBLIC_LISTING_STATUSES.includes(listing.status) && listing.ownerId !== userId) {
+    await prisma.listing.update({ where: { id }, data: { viewCount: { increment: 1 } } });
+  }
 
   // Vérifier si l'utilisateur a mis en favori
   let isFavorite = false;
@@ -176,6 +217,42 @@ export async function getListingById(id: string, userId?: string) {
   }
 
   return { ...listing, isFavorite };
+}
+
+/**
+ * Coordonnées de contact d'une annonce, réservées aux utilisateurs connectés.
+ * Incrémente `contactCount` (mesure de leads) et n'expose que pour les annonces publiques.
+ */
+export async function getListingContact(id: string, userId: string) {
+  const listing = await prisma.listing.findUnique({
+    where: { id },
+    select: {
+      status: true,
+      ownerId: true,
+      owner: { select: { firstName: true, lastName: true, phone: true, whatsapp: true } },
+      agency: { select: { name: true, phone: true } },
+    },
+  });
+  if (!listing) throw new AppError('Annonce non trouvée', 404);
+
+  // Le propriétaire/admin voit toujours ; sinon uniquement pour les annonces publiques
+  const isOwner = listing.ownerId === userId;
+  if (!isOwner && !PUBLIC_LISTING_STATUSES.includes(listing.status)) {
+    throw new AppError('Annonce non trouvée', 404);
+  }
+
+  // Comptabilise le lead (pas pour les vues du propriétaire sur sa propre annonce)
+  if (!isOwner) {
+    await prisma.listing.update({ where: { id }, data: { contactCount: { increment: 1 } } });
+  }
+
+  return {
+    ownerName: `${listing.owner.firstName} ${listing.owner.lastName}`,
+    phone: listing.owner.phone,
+    whatsapp: listing.owner.whatsapp,
+    agencyName: listing.agency?.name ?? null,
+    agencyPhone: listing.agency?.phone ?? null,
+  };
 }
 
 export async function getMyListings(userId: string, query: Record<string, string>) {
@@ -420,6 +497,19 @@ export async function getSimilarListings(currentId: string) {
   }
 
   return listings;
+}
+
+/**
+ * Passe en EXPIRED les annonces ACTIVE dont expiresAt est dépassée.
+ * Exécuté par le job de maintenance périodique.
+ * @returns le nombre d'annonces expirées
+ */
+export async function expireListings(): Promise<number> {
+  const { count } = await prisma.listing.updateMany({
+    where: { status: 'ACTIVE', expiresAt: { not: null, lt: new Date() } },
+    data: { status: 'EXPIRED' },
+  });
+  return count;
 }
 
 export async function getPendingListings(query: Record<string, string>) {

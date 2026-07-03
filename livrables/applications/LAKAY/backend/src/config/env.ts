@@ -26,6 +26,13 @@ const envSchema = z.object({
   MONCASH_CLIENT_ID: z.string().optional(),
   MONCASH_CLIENT_SECRET: z.string().optional(),
   MONCASH_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
+  // Secret partagé pour authentifier les webhooks de paiement entrants
+  MONCASH_WEBHOOK_SECRET: z.string().optional(),
+
+  NATCASH_CLIENT_ID: z.string().optional(),
+  NATCASH_CLIENT_SECRET: z.string().optional(),
+  NATCASH_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
+  NATCASH_WEBHOOK_SECRET: z.string().optional(),
 
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
@@ -38,6 +45,10 @@ const envSchema = z.object({
 
   CORS_ORIGINS: z.string().default('http://localhost:3004'),
   LOG_LEVEL: z.string().default('debug'),
+
+  // Basic Auth du dashboard Bull Board (monitoring des queues)
+  BULL_BOARD_USER: z.string().optional(),
+  BULL_BOARD_PASSWORD: z.string().optional(),
 
   ANTHROPIC_API_KEY: z.string().optional(),
 });

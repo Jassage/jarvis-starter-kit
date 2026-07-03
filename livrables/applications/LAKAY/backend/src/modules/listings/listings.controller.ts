@@ -18,8 +18,13 @@ export async function deleteListing(req: Request, res: Response) {
 }
 
 export async function getListing(req: Request, res: Response) {
-  const listing = await listingsService.getListingById(req.params.id, req.user?.id);
+  const listing = await listingsService.getListingById(req.params.id, req.user?.id, req.user?.role);
   sendSuccess(res, { listing });
+}
+
+export async function getListingContact(req: Request, res: Response) {
+  const contact = await listingsService.getListingContact(req.params.id, req.user!.id);
+  sendSuccess(res, contact);
 }
 
 export async function getMyListings(req: Request, res: Response) {

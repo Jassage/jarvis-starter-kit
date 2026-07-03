@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -26,35 +26,35 @@ interface PropertyMapProps {
 }
 
 export default function PropertyMap({ lat, lng, title }: PropertyMapProps) {
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  // On récupère l'instance Leaflet via ref et on la détruit proprement au démontage.
+  // Corrige "Map container is already initialized" causé par le double-mount de
+  // React StrictMode (dev) : sans remove(), le nœud DOM garde son _leaflet_id.
+  const [map, setMap] = useState<L.Map | null>(null);
 
   useEffect(() => {
-    return () => {
-      // Supprime _leaflet_id au cleanup pour éviter "Map container is already initialized"
-      // causé par le double-mount de React StrictMode en développement
-      const el = wrapperRef.current?.querySelector('.leaflet-container') as (HTMLElement & { _leaflet_id?: unknown }) | null;
-      if (el) delete el._leaflet_id;
-    };
-  }, []);
+    if (!map) return;
+    return () => { map.remove(); };
+  }, [map]);
 
   return (
-    <div ref={wrapperRef}>
-      <MapContainer
-        center={[lat, lng]}
-        zoom={15}
-        className="h-64 w-full rounded-lg z-0"
-        scrollWheelZoom={false}
-        style={{ height: '256px' }}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        />
-        <RecenterMap lat={lat} lng={lng} />
-        <Marker position={[lat, lng]}>
-          <Popup>{title}</Popup>
-        </Marker>
-      </MapContainer>
-    </div>
+    <MapContainer
+      // key par coordonnées : une nouvelle carte est créée à chaque annonce
+      key={`${lat},${lng}`}
+      ref={setMap}
+      center={[lat, lng]}
+      zoom={15}
+      className="h-64 w-full rounded-lg z-0"
+      scrollWheelZoom={false}
+      style={{ height: '256px' }}
+    >
+      <TileLayer
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      />
+      <RecenterMap lat={lat} lng={lng} />
+      <Marker position={[lat, lng]}>
+        <Popup>{title}</Popup>
+      </Marker>
+    </MapContainer>
   );
 }

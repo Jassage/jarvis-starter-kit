@@ -15,6 +15,9 @@ router.get('/featured', asyncHandler(ctrl.getFeaturedListings));
 router.get('/:id/similar', asyncHandler(ctrl.getSimilarListings));
 router.get('/:id', optionalAuth, validate(listingIdSchema), asyncHandler(ctrl.getListing));
 
+// Coordonnées de contact — réservées aux utilisateurs connectés (capture de leads)
+router.get('/:id/contact', requireAuth, validate(listingIdSchema), asyncHandler(ctrl.getListingContact));
+
 // Propriétaire authentifié
 router.post('/', requireAuth, validate(createListingSchema), asyncHandler(ctrl.createListing));
 router.get('/me/listings', requireAuth, asyncHandler(ctrl.getMyListings));

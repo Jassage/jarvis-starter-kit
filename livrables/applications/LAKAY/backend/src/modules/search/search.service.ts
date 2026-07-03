@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Prisma, PropertyType, ListingType, Department, Currency } from '@prisma/client';
 import prisma from '../../config/database';
 import { paginate, parsePagination } from '../../utils/response';
@@ -7,8 +8,9 @@ const SEARCH_CACHE_TTL = 300; // 5 minutes
 
 function buildCacheKey(filters: SearchFilters, rawQuery: Record<string, string>): string {
   const payload = JSON.stringify({ filters, page: rawQuery.page, limit: rawQuery.limit });
-  // Clé lisible sans dépendance crypto
-  return `lakay:search:${Buffer.from(payload).toString('base64').slice(0, 80)}`;
+  // Hash complet : déterministe et sans collision (le slice base64 pouvait en créer)
+  const hash = crypto.createHash('sha1').update(payload).digest('hex');
+  return `lakay:search:${hash}`;
 }
 
 export interface SearchFilters {
@@ -160,6 +162,15 @@ export async function search(filters: SearchFilters, rawQuery: Record<string, st
 
   if (filters.isFeatured) where.isFeatured = true;
 
+  // Filtrage géographique via bounding box (dans le WHERE → pagination & total corrects).
+  // On approxime le cercle par un carré ; le raffinage Haversine exact se fait ensuite sur la page.
+  if (filters.lat != null && filters.lng != null && filters.radiusKm) {
+    const latDelta = filters.radiusKm / 111.32;
+    const lngDelta = filters.radiusKm / (111.32 * Math.cos(toRad(filters.lat)) || 1);
+    where.latitude = { gte: filters.lat - latDelta, lte: filters.lat + latDelta };
+    where.longitude = { gte: filters.lng - lngDelta, lte: filters.lng + lngDelta };
+  }
+
   // Tri
   let orderBy: Prisma.ListingOrderByWithRelationInput[] = [];
   // Sponsorisés toujours en premier
@@ -178,19 +189,19 @@ export async function search(filters: SearchFilters, rawQuery: Record<string, st
     prisma.listing.count({ where }),
   ]);
 
-  // Filtrage géographique (si lat/lng/radius fournis)
+  // Raffinage Haversine sur la page pour retirer les coins du carré (bounding box → cercle).
+  // Purement cosmétique : la pagination reste pilotée par le total de la bounding box.
   let filteredListings = listings;
-  if (filters.lat && filters.lng && filters.radiusKm) {
-    filteredListings = listings.filter((l) => {
-      if (!l.latitude || !l.longitude) return true; // inclure si pas de coords
-      const dist = haversineKm(
-        filters.lat!,
-        filters.lng!,
-        Number(l.latitude),
-        Number(l.longitude)
-      );
-      return dist <= filters.radiusKm!;
-    });
+  if (filters.lat != null && filters.lng != null && filters.radiusKm) {
+    filteredListings = listings
+      .map((l) => ({
+        listing: l,
+        distanceKm: l.latitude != null && l.longitude != null
+          ? haversineKm(filters.lat!, filters.lng!, Number(l.latitude), Number(l.longitude))
+          : null,
+      }))
+      .filter((x) => x.distanceKm == null || x.distanceKm <= filters.radiusKm!)
+      .map((x) => ({ ...x.listing, distanceKm: x.distanceKm }));
   }
 
   const result = {

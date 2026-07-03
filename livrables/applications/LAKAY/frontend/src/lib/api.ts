@@ -1,6 +1,11 @@
 import axios, { AxiosRequestConfig, AxiosError } from 'axios';
+import { useAuthStore } from '../store/authStore';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4003/api';
+
+// Pages nécessitant une session : on n'y renvoie vers /login que si le refresh échoue.
+// Les pages publiques restent affichées (dégradation en état déconnecté).
+const PROTECTED_PREFIXES = ['/dashboard', '/admin'];
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -55,9 +60,17 @@ api.interceptors.response.use(
       } catch (refreshError) {
         failedQueue.forEach((p) => p.reject(refreshError));
         failedQueue = [];
-        localStorage.removeItem('lakay_token');
-        localStorage.removeItem('lakay_refresh_token');
-        window.location.href = '/login';
+        // Session expirée : on nettoie l'état d'auth sans appel réseau
+        try { useAuthStore.getState().clearAuth(); } catch {
+          localStorage.removeItem('lakay_token');
+          localStorage.removeItem('lakay_refresh_token');
+        }
+        // On ne redirige vers /login QUE depuis une page protégée.
+        // Sur une page publique (accueil, annonces…), on reste en place, déconnecté.
+        const path = typeof window !== 'undefined' ? window.location.pathname : '';
+        if (PROTECTED_PREFIXES.some((p) => path.startsWith(p))) {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
@@ -89,6 +102,7 @@ export const listingsApi = {
   delete: (id: string) => api.delete(`/listings/${id}`),
   deleteListing: (id: string) => api.delete(`/listings/${id}`),
   getById: (id: string) => api.get(`/listings/${id}`),
+  getContact: (id: string) => api.get(`/listings/${id}/contact`),
   getSimilar: (id: string) => api.get(`/listings/${id}/similar`),
   getMyListings: (params?: Record<string, unknown>) => api.get('/listings/me/listings', { params }),
   submit: (id: string) => api.post(`/listings/${id}/submit`),
@@ -133,6 +147,11 @@ export const notificationsApi = {
   delete: (id: string) => api.delete(`/notifications/${id}`),
 };
 
+export const reportsApi = {
+  create: (listingId: string, reason: string, description?: string) =>
+    api.post('/reports', { listingId, reason, description }),
+};
+
 export const agenciesApi = {
   getAll: (params?: Record<string, string>) => api.get('/agencies', { params }),
   getById: (id: string) => api.get(`/agencies/${id}`),
@@ -143,7 +162,11 @@ export const agenciesApi = {
 export const paymentsApi = {
   getPlans: () => api.get('/payments/plans'),
   getHistory: () => api.get('/payments/history'),
+  getMethods: () => api.get('/payments/methods'),
   initiateMoncash: (planId: string, currency?: string) => api.post('/payments/moncash/initiate', { planId, currency }),
+  initiateNatcash: (planId: string, currency?: string) => api.post('/payments/natcash/initiate', { planId, currency }),
+  submitProof: (formData: FormData) =>
+    api.post('/payments/submit-proof', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
 export const adminApi = {
@@ -155,11 +178,14 @@ export const adminApi = {
   reviewListing: (id: string, action: 'APPROVE' | 'REJECT', rejectionReason?: string) =>
     api.post(`/listings/${id}/review`, { action, rejectionReason }),
   suspendListing: (id: string) => api.patch(`/admin/listings/${id}/suspend`),
+  getPayments: (params?: Record<string, unknown>) => api.get('/admin/payments', { params }),
+  approvePayment: (id: string) => api.post(`/admin/payments/${id}/approve`),
+  rejectPayment: (id: string, reason?: string) => api.post(`/admin/payments/${id}/reject`, { reason }),
   getReports: (params?: Record<string, unknown>) => api.get('/admin/reports', { params }),
   resolveReport: (id: string, status: 'RESOLVED' | 'DISMISSED', adminNote?: string) =>
     api.patch(`/admin/reports/${id}`, { status, adminNote }),
   getConfig: () => api.get('/admin/config'),
-  updateConfig: (key: string, value: string) => api.put(`/admin/config/${key}`, { value }),
+  updateConfig: (key: string, value: string, label?: string) => api.put('/admin/config', { key, value, label }),
   getAuditLogs: (params?: Record<string, unknown>) => api.get('/admin/audit-logs', { params }),
 };
 
