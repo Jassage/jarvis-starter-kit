@@ -86,7 +86,8 @@ html, body {
 .card-accent-violet { border-left: 3px solid var(--color-violet); }
 .card-accent-rose   { border-left: 3px solid var(--color-rose); }
 
-.input {
+/* :where() ramène la spécificité à 0 pour que les utilitaires Tailwind (pl-10, pr-11...) l'emportent toujours */
+:where(.input) {
   width: 100%;
   padding: 0.65rem 0.9rem;
   border-radius: var(--radius);
