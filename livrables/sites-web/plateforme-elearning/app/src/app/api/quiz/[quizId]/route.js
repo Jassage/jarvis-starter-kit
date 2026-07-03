@@ -44,5 +44,13 @@ export async function POST(request, { params }) {
     },
   });
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  await prisma.activityLog.upsert({
+    where: { userId_date: { userId: session.user.id, date: today } },
+    update: {},
+    create: { userId: session.user.id, date: today },
+  });
+
   return NextResponse.json(attempt);
 }

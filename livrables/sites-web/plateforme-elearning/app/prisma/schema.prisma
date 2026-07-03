@@ -52,6 +52,9 @@ model User {
   certificates   Certificate[]
   notifications  Notification[]
   reviews        Review[]
+  conversationParticipants ConversationParticipant[]
+  sentMessages             Message[]
+  activityLogs             ActivityLog[]
 }
 
 model Account {
@@ -113,6 +116,7 @@ model Course {
   enrollments  Enrollment[]
   certificates Certificate[]
   reviews      Review[]
+  conversations Conversation[]
 
   createdAt DateTime @default(now())
 
@@ -232,6 +236,7 @@ model Certificate {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, courseId])
   @@index([userId])
   @@index([courseId])
 }
@@ -263,4 +268,54 @@ model Review {
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@unique([userId, courseId])
+}
+
+// ============ MESSAGERIE ============
+
+model Conversation {
+  id        String   @id @default(cuid())
+  courseId  String?
+  createdAt DateTime @default(now())
+
+  course       Course?                   @relation(fields: [courseId], references: [id])
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             String   @id @default(cuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  senderId       String
+  body           String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+// ============ ACTIVITE / SERIE ============
+
+model ActivityLog {
+  id     String   @id @default(cuid())
+  userId String
+  date   DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
 }

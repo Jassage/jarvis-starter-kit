@@ -42,6 +42,16 @@ export async function POST(request) {
     create: { userId: session.user.id, lessonId, completed, completedAt: completed ? new Date() : null },
   });
 
+  if (completed) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    await prisma.activityLog.upsert({
+      where: { userId_date: { userId: session.user.id, date: today } },
+      update: {},
+      create: { userId: session.user.id, date: today },
+    });
+  }
+
   // Recalcule le % de progression dans l'enrollment
   const lesson = await prisma.lesson.findUnique({
     where: { id: lessonId },
@@ -68,6 +78,38 @@ export async function POST(request) {
         where: { userId: session.user.id, courseId },
         data: { progress: progressPct, lastSeenAt: new Date() },
       });
+
+      if (progressPct === 100) {
+        const existingCert = await prisma.certificate.findUnique({
+          where: { userId_courseId: { userId: session.user.id, courseId } },
+        });
+
+        if (!existingCert) {
+          const attempts = await prisma.quizAttempt.findMany({
+            where: { userId: session.user.id, quiz: { lesson: { module: { courseId } } } },
+            select: { score: true },
+          });
+          const score = attempts.length > 0
+            ? Math.round(attempts.reduce((s, a) => s + a.score, 0) / attempts.length)
+            : 100;
+          const certId = `CERT-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+          const course = lesson.module.course;
+
+          await prisma.certificate.create({
+            data: { certId, userId: session.user.id, courseId, score, hours: course.hours },
+          });
+
+          await prisma.notification.create({
+            data: {
+              userId: session.user.id,
+              icon: 'award',
+              color: 'amber',
+              title: 'Certificat débloqué',
+              body: `Tu as terminé « ${course.title} » avec succès.`,
+            },
+          });
+        }
+      }
     }
   }
 

@@ -16,7 +16,7 @@ export async function GET() {
       course: { select: { title: true, color: true } },
     },
     orderBy: { lastSeenAt: 'desc' },
-    take: 20,
+    take: 200,
   });
 
   return NextResponse.json(enrollments);
