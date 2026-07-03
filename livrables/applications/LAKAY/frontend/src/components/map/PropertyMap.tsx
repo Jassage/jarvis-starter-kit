@@ -1,6 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -11,14 +10,6 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-function RecenterMap({ lat, lng }: { lat: number; lng: number }) {
-  const map = useMap();
-  useEffect(() => {
-    map.setView([lat, lng], 15);
-  }, [lat, lng, map]);
-  return null;
-}
-
 interface PropertyMapProps {
   lat: number;
   lng: number;
@@ -26,35 +17,40 @@ interface PropertyMapProps {
 }
 
 export default function PropertyMap({ lat, lng, title }: PropertyMapProps) {
-  // On récupère l'instance Leaflet via ref et on la détruit proprement au démontage.
-  // Corrige "Map container is already initialized" causé par le double-mount de
-  // React StrictMode (dev) : sans remove(), le nœud DOM garde son _leaflet_id.
-  const [map, setMap] = useState<L.Map | null>(null);
+  // API Leaflet impérative plutôt que <MapContainer> (react-leaflet) : le
+  // callback ref interne de MapContainer relit un state figé par closure et
+  // peut appeler `new L.Map(node)` deux fois sur le même nœud sous le mode
+  // "reappear" de Next.js 15 dev, avant qu'un effet de nettoyage ne s'exécute
+  // ("Map container is already initialized", reproductible dès le premier
+  // montage). Une garde useRef sur l'instance L.Map contourne le problème.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
 
   useEffect(() => {
-    if (!map) return;
-    return () => { map.remove(); };
-  }, [map]);
+    if (!containerRef.current || mapRef.current) return;
+    const map = L.map(containerRef.current, { scrollWheelZoom: false }).setView([lat, lng], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+    markerRef.current = L.marker([lat, lng]).addTo(map).bindPopup(title);
+    mapRef.current = map;
 
-  return (
-    <MapContainer
-      // key par coordonnées : une nouvelle carte est créée à chaque annonce
-      key={`${lat},${lng}`}
-      ref={setMap}
-      center={[lat, lng]}
-      zoom={15}
-      className="h-64 w-full rounded-lg z-0"
-      scrollWheelZoom={false}
-      style={{ height: '256px' }}
-    >
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-      />
-      <RecenterMap lat={lat} lng={lng} />
-      <Marker position={[lat, lng]}>
-        <Popup>{title}</Popup>
-      </Marker>
-    </MapContainer>
-  );
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- création unique ; les changements sont suivis ci-dessous
+  }, []);
+
+  // Recentre / déplace le marker si les coordonnées ou le titre changent sans recréer la carte.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.setView([lat, lng], 15);
+    markerRef.current?.setLatLng([lat, lng]).setPopupContent(title);
+  }, [lat, lng, title]);
+
+  return <div ref={containerRef} className="h-64 w-full rounded-lg z-0" style={{ height: '256px' }} />;
 }

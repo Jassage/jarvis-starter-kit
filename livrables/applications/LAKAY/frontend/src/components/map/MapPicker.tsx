@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -10,18 +9,6 @@ L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
-
-function ClickHandler({ onChange }: { onChange: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click(e) {
-      onChange(
-        parseFloat(e.latlng.lat.toFixed(6)),
-        parseFloat(e.latlng.lng.toFixed(6)),
-      );
-    },
-  });
-  return null;
-}
 
 interface MapPickerProps {
   lat?: number | null;
@@ -33,36 +20,64 @@ interface MapPickerProps {
 const HAITI_CENTER: [number, number] = [18.54, -72.33];
 
 export default function MapPicker({ lat, lng, onChange }: MapPickerProps) {
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  // API Leaflet impérative plutôt que <MapContainer> (react-leaflet) : le
+  // callback ref interne de MapContainer relit un state figé par closure et
+  // peut appeler `new L.Map(node)` deux fois sur le même nœud sous le mode
+  // "reappear" de Next.js 15 dev, avant qu'un effet de nettoyage ne s'exécute
+  // ("Map container is already initialized", reproductible dès le premier
+  // montage). Une garde useRef sur l'instance L.Map contourne le problème.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    const hasMarker = typeof lat === 'number' && typeof lng === 'number';
+    const center: [number, number] = hasMarker ? [lat!, lng!] : HAITI_CENTER;
+
+    const map = L.map(containerRef.current, { scrollWheelZoom: false }).setView(center, hasMarker ? 14 : 8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      onChangeRef.current(parseFloat(e.latlng.lat.toFixed(6)), parseFloat(e.latlng.lng.toFixed(6)));
+    });
+    if (hasMarker) markerRef.current = L.marker(center).addTo(map);
+    mapRef.current = map;
+
     return () => {
-      const el = wrapperRef.current?.querySelector('.leaflet-container') as (HTMLElement & { _leaflet_id?: unknown }) | null;
-      if (el) delete el._leaflet_id;
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- création unique ; lat/lng suivis par l'effet ci-dessous
   }, []);
 
-  const hasMarker = typeof lat === 'number' && typeof lng === 'number';
-  const markerPos: [number, number] | null = hasMarker ? [lat!, lng!] : null;
-  const center: [number, number] = markerPos ?? HAITI_CENTER;
-  const zoom = markerPos ? 14 : 8;
+  // Suit les changements externes de lat/lng (reset du formulaire, etc.) sans recréer la carte.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const hasMarker = typeof lat === 'number' && typeof lng === 'number';
+    if (!hasMarker) {
+      markerRef.current?.remove();
+      markerRef.current = null;
+      return;
+    }
+    const pos: [number, number] = [lat!, lng!];
+    if (markerRef.current) {
+      markerRef.current.setLatLng(pos);
+    } else {
+      markerRef.current = L.marker(pos).addTo(map);
+    }
+  }, [lat, lng]);
 
   return (
-    <div ref={wrapperRef} className="rounded-xl overflow-hidden border border-gray-200">
-      <MapContainer
-        center={center}
-        zoom={zoom}
-        className="w-full"
-        scrollWheelZoom={false}
-        style={{ height: '220px', cursor: 'crosshair' }}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        />
-        <ClickHandler onChange={onChange} />
-        {markerPos && <Marker position={markerPos} />}
-      </MapContainer>
-    </div>
+    <div
+      ref={containerRef}
+      className="rounded-xl overflow-hidden border border-gray-200 w-full"
+      style={{ height: '220px', cursor: 'crosshair' }}
+    />
   );
 }
