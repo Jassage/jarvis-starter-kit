@@ -12,6 +12,7 @@ import {
 import { useState, useCallback } from 'react';
 import { listingsApi, messagesApi, favoritesApi, reportsApi } from '../../../../lib/api';
 import { useAuthStore } from '../../../../store/authStore';
+import { useHasMounted } from '../../../../hooks/useHasMounted';
 import {
   formatPrice, PROPERTY_TYPE_LABELS, LISTING_TYPE_LABELS,
   DEPARTMENT_LABELS, timeAgo, cn
@@ -139,7 +140,9 @@ export default function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { isAuthenticated, user: currentUser } = useAuthStore();
+  const hasMounted = useHasMounted();
+  const { isAuthenticated: storeAuthenticated, user: currentUser } = useAuthStore();
+  const isAuthenticated = hasMounted && storeAuthenticated;
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [contactMsg, setContactMsg] = useState('');
   const [sendingMsg, setSendingMsg] = useState(false);

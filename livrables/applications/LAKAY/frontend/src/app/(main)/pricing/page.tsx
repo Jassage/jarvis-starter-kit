@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
 import { paymentsApi } from '@/lib/api';
+import { useHasMounted } from '@/hooks/useHasMounted';
 
 const PLANS = [
   {
@@ -256,7 +257,9 @@ function SubscriptionModal({ plan, onClose }: { plan: Plan; onClose: () => void 
 }
 
 export default function PricingPage() {
-  const { isAuthenticated } = useAuthStore();
+  const hasMounted = useHasMounted();
+  const { isAuthenticated: storeAuthenticated } = useAuthStore();
+  const isAuthenticated = hasMounted && storeAuthenticated;
   const router = useRouter();
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
 
