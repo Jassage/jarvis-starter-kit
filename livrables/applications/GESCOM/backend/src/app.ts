@@ -15,6 +15,7 @@ import clientRoutes from './routes/client.routes';
 import venteRoutes from './routes/vente.routes';
 import fournisseurRoutes from './routes/fournisseur.routes';
 import achatRoutes from './routes/achat.routes';
+import transfertRoutes from './routes/transfert.routes';
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/ventes', venteRoutes);
 app.use('/api/fournisseurs', fournisseurRoutes);
 app.use('/api/achats', achatRoutes);
+app.use('/api/transferts', transfertRoutes);
 
 app.use(errorHandler);
 

@@ -1,11 +1,11 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, Warehouse, ShoppingCart, Truck, Calculator, Users, Building2, X } from 'lucide-react';
+import { LayoutDashboard, Package, Warehouse, ShoppingCart, Truck, Calculator, Users, Building2, ArrowRightLeft, X } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 
-// Modules sans href : pas encore construits, affichés à titre de roadmap (Phases 2-5).
+// Modules sans href : pas encore construits, affichés à titre de roadmap (Phase 5).
 const NAV = [
   { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
   { href: '/produits', label: 'Produits', icon: Package },
@@ -14,6 +14,7 @@ const NAV = [
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/achats', label: 'Achats', icon: Truck },
   { href: '/fournisseurs', label: 'Fournisseurs', icon: Building2 },
+  { href: '/transferts', label: 'Transferts', icon: ArrowRightLeft },
   { href: null, label: 'Comptabilité', icon: Calculator },
 ];
 
