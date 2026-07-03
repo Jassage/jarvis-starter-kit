@@ -15,6 +15,7 @@ const PAGES: Record<string, { title: string; subtitle: string }> = {
   '/fournisseurs': { title: 'Fournisseurs', subtitle: 'Gestion de la base fournisseurs' },
   '/transferts': { title: 'Transferts', subtitle: 'Mouvements inter-sites boutique ↔ entrepôt' },
   '/compta': { title: 'Comptabilité', subtitle: 'Journal, grand livre et états financiers' },
+  '/rapports': { title: 'Rapports', subtitle: 'Ventes, stock, achats et clients' },
 };
 
 export default function Header() {

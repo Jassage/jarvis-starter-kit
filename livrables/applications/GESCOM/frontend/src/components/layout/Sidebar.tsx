@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, Warehouse, ShoppingCart, Truck, Calculator, Users, Building2, ArrowRightLeft, X } from 'lucide-react';
+import { LayoutDashboard, Package, Warehouse, ShoppingCart, Truck, Calculator, Users, Building2, ArrowRightLeft, BarChart3, X } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -15,6 +15,7 @@ const NAV = [
   { href: '/fournisseurs', label: 'Fournisseurs', icon: Building2 },
   { href: '/transferts', label: 'Transferts', icon: ArrowRightLeft },
   { href: '/compta', label: 'Comptabilité', icon: Calculator },
+  { href: '/rapports', label: 'Rapports', icon: BarChart3 },
 ];
 
 export default function Sidebar() {
