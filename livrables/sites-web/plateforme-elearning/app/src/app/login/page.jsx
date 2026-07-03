@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { signIn, getSession } from 'next-auth/react';
+import { useState, useEffect } from 'react';
+import { signIn, getSession, getCsrfToken } from 'next-auth/react';
 import Icon from '@/components/Icon';
 import Logo from '@/components/Logo';
 import { useGo } from '@/lib/navigation';
@@ -20,6 +20,10 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const isSignup = mode === 'signup';
   const emailOk = /\S+@\S+\.\S+/.test(email);
+
+  // Pre-charge le cookie CSRF des l'affichage du formulaire pour eviter une
+  // course entre la recuperation du token et la soumission du login.
+  useEffect(() => { getCsrfToken(); }, []);
 
   const redirectByRole = (r) => {
     const role = (r || 'STUDENT').toLowerCase();
@@ -48,7 +52,12 @@ export default function Auth() {
       }
 
       const session = await getSession();
-      redirectByRole(session?.user?.role);
+      if (!session?.user) {
+        setError('La connexion a échoué. Réessaie.');
+        setLoading(false);
+        return;
+      }
+      redirectByRole(session.user.role);
     } catch (err) {
       setError('Une erreur est survenue. Réessaie.');
       setLoading(false);
