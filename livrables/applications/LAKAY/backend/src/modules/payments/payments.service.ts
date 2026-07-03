@@ -1,25 +1,28 @@
-import crypto from 'crypto';
-import Stripe from 'stripe';
-import { PaymentMethod, SubscriptionPlan } from '@prisma/client';
-import prisma from '../../config/database';
-import { AppError } from '../../middlewares/errorHandler.middleware';
-import { sendEmail, subscriptionActivatedTemplate } from '../../utils/email';
-import { uploadToCloudinary } from '../../config/cloudinary';
-import { getIO } from '../../config/socket';
-import { env } from '../../config/env';
+import crypto from "crypto";
+import Stripe from "stripe";
+import { PaymentMethod, SubscriptionPlan } from "@prisma/client";
+import prisma from "../../config/database";
+import { AppError } from "../../middlewares/errorHandler.middleware";
+import { sendEmail, subscriptionActivatedTemplate } from "../../utils/email";
+import { uploadToCloudinary } from "../../config/cloudinary";
+import { getIO } from "../../config/socket";
+import { env } from "../../config/env";
 
 // Source de vérité unique des tarifs (partagée entre /plans, initiate MonCash et NatCash)
 // `days` = durée réellement accordée à l'activation, doit correspondre à ce qui est
 // annoncé sur la page pricing frontend (Basic "/ 3 mois", Professionnel "/ 6 mois").
-export const PLAN_PRICES: Record<string, { htg: number; usd: number; name: string; days: number }> = {
-  BASIC: { htg: 2500, usd: 20, name: 'Basic', days: 90 },
-  PROFESSIONAL: { htg: 7500, usd: 60, name: 'Professionnel', days: 180 },
-  ENTERPRISE: { htg: 20000, usd: 160, name: 'Entreprise', days: 365 },
+export const PLAN_PRICES: Record<
+  string,
+  { htg: number; usd: number; name: string; days: number }
+> = {
+  BASIC: { htg: 2500, usd: 20, name: "Basic", days: 90 },
+  PROFESSIONAL: { htg: 7500, usd: 60, name: "Professionnel", days: 180 },
+  ENTERPRISE: { htg: 20000, usd: 160, name: "Entreprise", days: 365 },
 };
 
 // Plans qui confèrent le badge "vérifié / pro". Le badge est DÉRIVÉ du plan
 // (pas de champ dupliqué en base) — à consommer côté front via subscription.plan.
-const PRO_PLANS: SubscriptionPlan[] = ['PROFESSIONAL', 'ENTERPRISE'];
+const PRO_PLANS: SubscriptionPlan[] = ["PROFESSIONAL", "ENTERPRISE"];
 export function isProPlan(plan?: SubscriptionPlan | null): boolean {
   return !!plan && PRO_PLANS.includes(plan);
 }
@@ -28,7 +31,10 @@ export function isProPlan(plan?: SubscriptionPlan | null): boolean {
  * Vérifie un secret de webhook en temps constant (anti timing attack).
  * Fail-closed : si aucun secret n'est configuré côté serveur, renvoie false.
  */
-export function verifyWebhookSecret(provided: string, expected?: string): boolean {
+export function verifyWebhookSecret(
+  provided: string,
+  expected?: string,
+): boolean {
   if (!expected) return false;
   const a = Buffer.from(provided);
   const b = Buffer.from(expected);
@@ -46,10 +52,10 @@ export async function initiatePlanPayment(
   method: PaymentMethod,
 ) {
   const price = PLAN_PRICES[planId];
-  if (!price) throw new AppError('Plan invalide', 400);
+  if (!price) throw new AppError("Plan invalide", 400);
 
-  const cur = currency === 'USD' ? 'USD' : 'HTG';
-  const amount = cur === 'USD' ? price.usd : price.htg;
+  const cur = currency === "USD" ? "USD" : "HTG";
+  const amount = cur === "USD" ? price.usd : price.htg;
 
   const payment = await prisma.payment.create({
     data: {
@@ -57,7 +63,7 @@ export async function initiatePlanPayment(
       amount,
       currency: cur,
       method,
-      status: 'PENDING',
+      status: "PENDING",
       description: `Abonnement LAKAY ${planId}`,
       metadata: { planId },
     },
@@ -72,7 +78,8 @@ export async function initiatePlanPayment(
 
 let stripeClient: Stripe | null = null;
 function getStripe(): Stripe {
-  if (!env.STRIPE_SECRET_KEY) throw new AppError('Paiement par carte non configuré', 503); // fail-closed
+  if (!env.STRIPE_SECRET_KEY)
+    throw new AppError("Paiement par carte non configuré", 503); // fail-closed
   if (!stripeClient) stripeClient = new Stripe(env.STRIPE_SECRET_KEY);
   return stripeClient;
 }
@@ -83,35 +90,51 @@ function getStripe(): Stripe {
  */
 export async function initiateStripeCheckout(userId: string, planId: string) {
   const price = PLAN_PRICES[planId];
-  if (!price) throw new AppError('Plan invalide', 400);
+  if (!price) throw new AppError("Plan invalide", 400);
 
-  const { payment } = await initiatePlanPayment(userId, planId, 'USD', 'STRIPE');
+  const { payment } = await initiatePlanPayment(
+    userId,
+    planId,
+    "USD",
+    "STRIPE",
+  );
   const stripe = getStripe();
 
   const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    payment_method_types: ['card'],
-    line_items: [{
-      price_data: {
-        currency: 'usd',
-        unit_amount: Math.round(price.usd * 100),
-        product_data: { name: `Abonnement LAKAY ${price.name}` },
+    mode: "payment",
+    payment_method_types: ["card"],
+    line_items: [
+      {
+        price_data: {
+          currency: "usd",
+          unit_amount: Math.round(price.usd * 100),
+          product_data: { name: `Abonnement LAKAY ${price.name}` },
+        },
+        quantity: 1,
       },
-      quantity: 1,
-    }],
+    ],
     metadata: { paymentId: payment.id },
     success_url: `${env.FRONTEND_URL}/dashboard?stripe=success`,
     cancel_url: `${env.FRONTEND_URL}/pricing?stripe=cancelled`,
   });
 
-  if (!session.url) throw new AppError('Impossible de créer la session de paiement', 502);
+  if (!session.url)
+    throw new AppError("Impossible de créer la session de paiement", 502);
   return { url: session.url };
 }
 
 /** Vérifie la signature Stripe et décode l'événement (lève si secret absent ou signature invalide). */
-export function constructStripeEvent(rawBody: Buffer, signature: string): Stripe.Event {
-  if (!env.STRIPE_WEBHOOK_SECRET) throw new AppError('Webhook Stripe non configuré', 503);
-  return getStripe().webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET);
+export function constructStripeEvent(
+  rawBody: Buffer,
+  signature: string,
+): Stripe.Event {
+  if (!env.STRIPE_WEBHOOK_SECRET)
+    throw new AppError("Webhook Stripe non configuré", 503);
+  return getStripe().webhooks.constructEvent(
+    rawBody,
+    signature,
+    env.STRIPE_WEBHOOK_SECRET,
+  );
 }
 
 /**
@@ -128,9 +151,12 @@ export function constructStripeEvent(rawBody: Buffer, signature: string): Stripe
  *
  * @returns true si l'activation a été effectuée, false si déjà traité (idempotence)
  */
-export async function activateSubscription(paymentId: string, transactionId?: string): Promise<boolean> {
+export async function activateSubscription(
+  paymentId: string,
+  transactionId?: string,
+): Promise<boolean> {
   const payment = await prisma.payment.findFirst({
-    where: { id: paymentId, status: 'PENDING' },
+    where: { id: paymentId, status: "PENDING" },
   });
   if (!payment) return false; // inconnu ou déjà traité → idempotent
 
@@ -139,30 +165,55 @@ export async function activateSubscription(paymentId: string, transactionId?: st
   const activated = await prisma.$transaction(async (tx) => {
     // Compare-and-swap : ne bascule que si TOUJOURS PENDING (anti double-traitement concurrent)
     const swap = await tx.payment.updateMany({
-      where: { id: payment.id, status: 'PENDING' },
-      data: { status: 'COMPLETED', providerRef: transactionId },
+      where: { id: payment.id, status: "PENDING" },
+      data: { status: "COMPLETED", providerRef: transactionId },
     });
     if (swap.count === 0) return false;
 
     if (!planId || !PLAN_PRICES[planId]) return true; // paiement hors-plan (ex. sponsoring) : rien de plus
 
     const plan = planId as SubscriptionPlan;
-    const endDate = new Date();
+    const currentSubscription = await tx.subscription.findUnique({
+      where: { userId: payment.userId },
+    });
+    const now = new Date();
+    const baseDate =
+      currentSubscription?.endDate && currentSubscription.endDate > now
+        ? currentSubscription.endDate
+        : now;
+    const endDate = new Date(baseDate);
     endDate.setDate(endDate.getDate() + PLAN_PRICES[planId].days);
 
     const subscription = await tx.subscription.upsert({
       where: { userId: payment.userId },
       create: { userId: payment.userId, plan, endDate, isActive: true },
-      update: { plan, endDate, isActive: true, startDate: new Date() },
+      update: {
+        plan,
+        endDate,
+        isActive: true,
+        startDate:
+          currentSubscription?.endDate && currentSubscription.endDate > now
+            ? currentSubscription.startDate
+            : now,
+      },
     });
     // Lie le paiement à l'abonnement pour l'historique
-    await tx.payment.update({ where: { id: payment.id }, data: { subscriptionId: subscription.id } });
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { subscriptionId: subscription.id },
+    });
 
     // ENTERPRISE : vérifie l'agence du compte, si c'en est un
-    if (plan === 'ENTERPRISE') {
-      const agency = await tx.agency.findUnique({ where: { ownerId: payment.userId }, select: { id: true } });
+    if (plan === "ENTERPRISE") {
+      const agency = await tx.agency.findUnique({
+        where: { ownerId: payment.userId },
+        select: { id: true },
+      });
       if (agency) {
-        await tx.agency.update({ where: { id: agency.id }, data: { isVerified: true } });
+        await tx.agency.update({
+          where: { id: agency.id },
+          data: { isVerified: true },
+        });
       }
     }
 
@@ -170,11 +221,11 @@ export async function activateSubscription(paymentId: string, transactionId?: st
     await tx.notification.create({
       data: {
         userId: payment.userId,
-        type: 'PAYMENT_SUCCESS',
-        title: 'Abonnement activé',
+        type: "PAYMENT_SUCCESS",
+        title: "Abonnement activé",
         message: `Votre abonnement ${PLAN_PRICES[planId].name} est actif pour ${PLAN_PRICES[planId].days} jours.`,
         data: { plan: planId, paymentId: payment.id },
-        link: '/dashboard',
+        link: "/dashboard",
       },
     });
 
@@ -185,8 +236,12 @@ export async function activateSubscription(paymentId: string, transactionId?: st
   if (activated && planId && PLAN_PRICES[planId]) {
     // Notifie le front en temps réel pour rafraîchir le plan affiché
     try {
-      getIO().to(`user:${payment.userId}`).emit('subscription_updated', { plan: planId });
-    } catch { /* Socket non disponible */ }
+      getIO()
+        .to(`user:${payment.userId}`)
+        .emit("subscription_updated", { plan: planId });
+    } catch {
+      /* Socket non disponible */
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: payment.userId },
@@ -196,7 +251,10 @@ export async function activateSubscription(paymentId: string, transactionId?: st
       await sendEmail({
         to: user.email,
         subject: `🎉 Abonnement ${PLAN_PRICES[planId].name} activé — LAKAY`,
-        html: subscriptionActivatedTemplate(user.firstName, PLAN_PRICES[planId].name),
+        html: subscriptionActivatedTemplate(
+          user.firstName,
+          PLAN_PRICES[planId].name,
+        ),
       });
     }
   }
@@ -207,8 +265,8 @@ export async function activateSubscription(paymentId: string, transactionId?: st
 /** Marque un paiement PENDING comme échoué (idempotent). */
 export async function failPayment(paymentId: string): Promise<void> {
   await prisma.payment.updateMany({
-    where: { id: paymentId, status: 'PENDING' },
-    data: { status: 'FAILED' },
+    where: { id: paymentId, status: "PENDING" },
+    data: { status: "FAILED" },
   });
 }
 
@@ -219,26 +277,37 @@ export async function failPayment(paymentId: string): Promise<void> {
 // ─────────────────────────────────────────
 
 // Numéros de réception, éditables par l'admin via SystemConfig (clés PAYMENT_*).
-const PAYMENT_NUMBER_DEFAULTS: Record<string, { number: string; name: string }> = {
-  MONCASH: { number: '+509 0000-0000', name: 'LAKAY' },
-  NATCASH: { number: '+509 0000-0000', name: 'LAKAY' },
+const PAYMENT_NUMBER_DEFAULTS: Record<
+  string,
+  { number: string; name: string }
+> = {
+  MONCASH: { number: "+509 0000-0000", name: "LAKAY" },
+  NATCASH: { number: "+509 0000-0000", name: "LAKAY" },
 };
 
 export async function getPaymentNumbers() {
   const configs = await prisma.systemConfig.findMany({
-    where: { key: { in: [
-      'PAYMENT_MONCASH_NUMBER', 'PAYMENT_MONCASH_NAME',
-      'PAYMENT_NATCASH_NUMBER', 'PAYMENT_NATCASH_NAME',
-    ] } },
+    where: {
+      key: {
+        in: [
+          "PAYMENT_MONCASH_NUMBER",
+          "PAYMENT_MONCASH_NAME",
+          "PAYMENT_NATCASH_NUMBER",
+          "PAYMENT_NATCASH_NAME",
+        ],
+      },
+    },
   });
   const map = Object.fromEntries(configs.map((c) => [c.key, c.value]));
   return {
     MONCASH: {
-      number: map.PAYMENT_MONCASH_NUMBER || PAYMENT_NUMBER_DEFAULTS.MONCASH.number,
+      number:
+        map.PAYMENT_MONCASH_NUMBER || PAYMENT_NUMBER_DEFAULTS.MONCASH.number,
       name: map.PAYMENT_MONCASH_NAME || PAYMENT_NUMBER_DEFAULTS.MONCASH.name,
     },
     NATCASH: {
-      number: map.PAYMENT_NATCASH_NUMBER || PAYMENT_NUMBER_DEFAULTS.NATCASH.number,
+      number:
+        map.PAYMENT_NATCASH_NUMBER || PAYMENT_NUMBER_DEFAULTS.NATCASH.number,
       name: map.PAYMENT_NATCASH_NAME || PAYMENT_NUMBER_DEFAULTS.NATCASH.name,
     },
   };
@@ -262,33 +331,40 @@ interface ProofInput {
  */
 export async function submitPaymentProof(userId: string, input: ProofInput) {
   const price = PLAN_PRICES[input.planId];
-  if (!price) throw new AppError('Plan invalide', 400);
-  if (input.method !== 'MONCASH' && input.method !== 'NATCASH') {
-    throw new AppError('Méthode de paiement invalide', 400);
+  if (!price) throw new AppError("Plan invalide", 400);
+  if (input.method !== "MONCASH" && input.method !== "NATCASH") {
+    throw new AppError("Méthode de paiement invalide", 400);
   }
   if (!input.transactionRef?.trim()) {
-    throw new AppError('La référence de la transaction est requise', 400);
+    throw new AppError("La référence de la transaction est requise", 400);
   }
 
   // Empêche l'accumulation : une seule preuve en attente par utilisateur à la fois
   const pending = await prisma.payment.findFirst({
-    where: { userId, status: 'PENDING' },
+    where: { userId, status: "PENDING" },
     select: { id: true },
   });
   if (pending) {
-    throw new AppError('Vous avez déjà un paiement en attente de vérification.', 409);
+    throw new AppError(
+      "Vous avez déjà un paiement en attente de vérification.",
+      409,
+    );
   }
 
   let proofImageUrl: string | undefined;
   if (input.screenshot) {
-    const uploaded = await uploadToCloudinary(input.screenshot, `payment-proofs/${userId}`, {
-      transformation: [{ width: 1280, crop: 'limit', quality: 80 }],
-    });
+    const uploaded = await uploadToCloudinary(
+      input.screenshot,
+      `payment-proofs/${userId}`,
+      {
+        transformation: [{ width: 1280, crop: "limit", quality: 80 }],
+      },
+    );
     proofImageUrl = uploaded.url;
   }
 
-  const cur = input.currency === 'USD' ? 'USD' : 'HTG';
-  const amount = cur === 'USD' ? price.usd : price.htg;
+  const cur = input.currency === "USD" ? "USD" : "HTG";
+  const amount = cur === "USD" ? price.usd : price.htg;
 
   return prisma.payment.create({
     data: {
@@ -296,7 +372,7 @@ export async function submitPaymentProof(userId: string, input: ProofInput) {
       amount,
       currency: cur,
       method: input.method,
-      status: 'PENDING',
+      status: "PENDING",
       description: `Abonnement LAKAY ${input.planId} (preuve manuelle)`,
       metadata: {
         planId: input.planId,
@@ -330,7 +406,7 @@ export async function expireSubscriptions(): Promise<number> {
 
   const expired = await prisma.subscription.findMany({
     where: {
-      plan: { not: 'FREE' },
+      plan: { not: "FREE" },
       isActive: true,
       endDate: { not: null, lt: now },
     },
@@ -341,13 +417,19 @@ export async function expireSubscriptions(): Promise<number> {
   for (const sub of expired) {
     await prisma.$transaction(async (tx) => {
       // Repasse en FREE (FREE reste "actif" : c'est le socle gratuit)
-      await tx.subscription.update({
-        where: { id: sub.id },
-        data: { plan: 'FREE', isActive: true, endDate: null },
+      const updated = await tx.subscription.updateMany({
+        where: {
+          id: sub.id,
+          plan: { not: "FREE" },
+          isActive: true,
+          endDate: { not: null, lt: now },
+        },
+        data: { plan: "FREE", isActive: true, endDate: null },
       });
+      if (updated.count === 0) return;
 
       // Retire la vérification de l'agence si l'ancien plan était ENTERPRISE
-      if (sub.plan === 'ENTERPRISE') {
+      if (sub.plan === "ENTERPRISE") {
         await tx.agency.updateMany({
           where: { ownerId: sub.userId, isVerified: true },
           data: { isVerified: false },
@@ -357,11 +439,12 @@ export async function expireSubscriptions(): Promise<number> {
       await tx.notification.create({
         data: {
           userId: sub.userId,
-          type: 'SUBSCRIPTION_EXPIRING',
-          title: 'Abonnement expiré',
-          message: 'Votre abonnement est arrivé à échéance. Vous êtes repassé au plan gratuit. Renouvelez pour retrouver vos avantages.',
+          type: "SUBSCRIPTION_EXPIRING",
+          title: "Abonnement expiré",
+          message:
+            "Votre abonnement est arrivé à échéance. Vous êtes repassé au plan gratuit. Renouvelez pour retrouver vos avantages.",
           data: { previousPlan: sub.plan },
-          link: '/pricing',
+          link: "/pricing",
         },
       });
     });
@@ -372,25 +455,31 @@ export async function expireSubscriptions(): Promise<number> {
 
 /** Rejette une preuve : passe le paiement en FAILED + notifie l'utilisateur. */
 export async function rejectPayment(paymentId: string, reason?: string) {
-  const payment = await prisma.payment.findFirst({ where: { id: paymentId, status: 'PENDING' } });
-  if (!payment) throw new AppError('Paiement introuvable ou déjà traité', 404);
+  const payment = await prisma.payment.findFirst({
+    where: { id: paymentId, status: "PENDING" },
+    select: { userId: true },
+  });
+  if (!payment) throw new AppError("Paiement introuvable ou déjà traité", 404);
 
-  await prisma.$transaction([
-    prisma.payment.updateMany({
-      where: { id: paymentId, status: 'PENDING' },
-      data: { status: 'FAILED' },
-    }),
-    prisma.notification.create({
+  await prisma.$transaction(async (tx) => {
+    const result = await tx.payment.updateMany({
+      where: { id: paymentId, status: "PENDING" },
+      data: { status: "FAILED" },
+    });
+    if (result.count === 0)
+      throw new AppError("Paiement introuvable ou déjà traité", 404);
+
+    await tx.notification.create({
       data: {
         userId: payment.userId,
-        type: 'PAYMENT_FAILED',
-        title: 'Paiement non validé',
+        type: "PAYMENT_FAILED",
+        title: "Paiement non validé",
         message: reason
           ? `Votre preuve de paiement a été rejetée : ${reason}`
-          : 'Votre preuve de paiement n\'a pas pu être validée. Contactez le support.',
+          : "Votre preuve de paiement n'a pas pu être validée. Contactez le support.",
         data: { paymentId },
-        link: '/pricing',
+        link: "/pricing",
       },
-    }),
-  ]);
+    });
+  });
 }
