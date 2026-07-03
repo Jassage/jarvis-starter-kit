@@ -5,7 +5,6 @@ import { LayoutDashboard, Package, Warehouse, ShoppingCart, Truck, Calculator, U
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 
-// Modules sans href : pas encore construits, affichés à titre de roadmap (Phase 5).
 const NAV = [
   { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
   { href: '/produits', label: 'Produits', icon: Package },
@@ -15,7 +14,7 @@ const NAV = [
   { href: '/achats', label: 'Achats', icon: Truck },
   { href: '/fournisseurs', label: 'Fournisseurs', icon: Building2 },
   { href: '/transferts', label: 'Transferts', icon: ArrowRightLeft },
-  { href: null, label: 'Comptabilité', icon: Calculator },
+  { href: '/compta', label: 'Comptabilité', icon: Calculator },
 ];
 
 export default function Sidebar() {
@@ -30,7 +29,7 @@ export default function Sidebar() {
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-30 lg:hidden"
-          style={{ background: 'rgba(11,23,51,0.5)' }}
+          style={{ background: 'rgba(9,18,15,0.5)' }}
           onClick={closeSidebar}
         />
       )}
@@ -44,16 +43,16 @@ export default function Sidebar() {
         <div className="px-6 py-6 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div
-              className="w-10 h-10 rounded-2xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #16a34a, #059669)' }}
+              className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm"
+              style={{ background: 'var(--gradient-brand)' }}
             >
               <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 text-white">
                 <path d="M3 9l9-7 9 7M5 9v11h14V9M9 20v-6h6v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div>
-              <p className="font-extrabold text-lg leading-none" style={{ color: 'var(--color-ink)' }}>GESCOM</p>
-              <p className="text-[11px] font-medium" style={{ color: 'var(--color-ink-3)' }}>Gestion commerciale</p>
+              <p className="font-extrabold text-lg leading-none tracking-tight" style={{ color: 'var(--color-ink)' }}>GESCOM</p>
+              <p className="text-[11px] font-medium mt-0.5" style={{ color: 'var(--color-ink-3)' }}>Gestion commerciale</p>
             </div>
           </div>
           <button onClick={closeSidebar} className="lg:hidden p-1.5 rounded-lg" style={{ color: 'var(--color-ink-3)' }}>
@@ -65,32 +64,20 @@ export default function Sidebar() {
           <p className="px-3 mb-2 text-[11px] font-bold tracking-widest" style={{ color: 'var(--color-ink-3)' }}>MENU</p>
           {NAV.map((item) => {
             const Icon = item.icon;
-            const active = item.href && pathname === item.href;
-            const disabled = !item.href;
-            const content = (
-              <span
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all"
-                style={{
-                  background: active ? 'linear-gradient(135deg, rgba(22,163,74,0.12), rgba(5,150,105,0.06))' : 'transparent',
-                  color: active ? 'var(--color-primary-2)' : disabled ? 'var(--color-ink-3)' : 'var(--color-ink-2)',
-                  opacity: disabled ? 0.55 : 1,
-                  cursor: disabled ? 'default' : 'pointer',
-                }}
-              >
-                <Icon className="w-[18px] h-[18px]" />
-                {item.label}
-                {disabled && (
-                  <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-line-2)', color: 'var(--color-ink-3)' }}>
-                    Bientôt
-                  </span>
-                )}
-              </span>
-            );
-
-            if (disabled) return <div key={item.label}>{content}</div>;
+            const active = pathname === item.href;
             return (
-              <Link key={item.href} href={item.href!} onClick={closeSidebar}>
-                {content}
+              <Link key={item.href} href={item.href} onClick={closeSidebar}>
+                <span
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all relative"
+                  style={{
+                    background: active ? 'var(--color-primary-soft)' : 'transparent',
+                    color: active ? 'var(--color-primary-2)' : 'var(--color-ink-2)',
+                  }}
+                >
+                  {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full" style={{ background: 'var(--color-primary-2)' }} />}
+                  <Icon className="w-[18px] h-[18px]" />
+                  {item.label}
+                </span>
               </Link>
             );
           })}
@@ -98,10 +85,10 @@ export default function Sidebar() {
 
         {utilisateur && (
           <div className="p-4 border-t" style={{ borderColor: 'var(--color-line)' }}>
-            <div className="flex items-center gap-3 p-3 rounded-2xl" style={{ background: 'var(--color-line-2)' }}>
+            <div className="flex items-center gap-3 p-3 rounded-2xl" style={{ background: 'var(--color-surface-2)' }}>
               <div
                 className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-                style={{ background: 'linear-gradient(135deg, #16a34a, #059669)' }}
+                style={{ background: 'var(--gradient-brand)' }}
               >
                 {initiales}
               </div>

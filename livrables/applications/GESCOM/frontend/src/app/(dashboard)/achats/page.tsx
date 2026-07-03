@@ -4,15 +4,19 @@ import { Truck, Clock, PackageCheck, ShoppingBag } from 'lucide-react';
 import { useAchatStore, Commande } from '@/stores/achatStore';
 import { formatMontant, formatRelativeTime } from '@/lib/utils';
 import Modal from '@/components/ui/Modal';
+import Badge, { BadgeTone } from '@/components/ui/Badge';
+import StatCard from '@/components/ui/StatCard';
+import PageToolbar from '@/components/ui/PageToolbar';
+import EmptyState from '@/components/ui/EmptyState';
 import NouvelleCommandeModal from '@/components/achats/NouvelleCommandeModal';
 import ReceptionModal from '@/components/achats/ReceptionModal';
 
-const STATUT_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
-  BROUILLON: { bg: 'var(--color-line-2)', fg: 'var(--color-ink-2)', label: 'Brouillon' },
-  ENVOYEE: { bg: '#eff6ff', fg: '#2563eb', label: 'Envoyée' },
-  RECUE_PARTIELLE: { bg: 'var(--color-warning-soft)', fg: 'var(--color-warning)', label: 'Partielle' },
-  RECUE: { bg: 'var(--color-success-soft)', fg: 'var(--color-success)', label: 'Reçue' },
-  ANNULEE: { bg: 'var(--color-danger-soft)', fg: 'var(--color-danger)', label: 'Annulée' },
+const STATUT_STYLE: Record<string, { tone: BadgeTone; label: string }> = {
+  BROUILLON: { tone: 'neutral', label: 'Brouillon' },
+  ENVOYEE: { tone: 'info', label: 'Envoyée' },
+  RECUE_PARTIELLE: { tone: 'warning', label: 'Partielle' },
+  RECUE: { tone: 'success', label: 'Reçue' },
+  ANNULEE: { tone: 'danger', label: 'Annulée' },
 };
 
 export default function AchatsPage() {
@@ -43,58 +47,21 @@ export default function AchatsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card p-5 card-accent-blue">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}>
-              <Clock className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold tracking-widest" style={{ color: 'var(--color-ink-3)' }}>EN ATTENTE</p>
-              <p className="text-xl font-extrabold" style={{ color: 'var(--color-ink)' }}>{enAttente}</p>
-            </div>
-          </div>
-        </div>
-        <div className="card p-5 card-accent-green">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ background: 'linear-gradient(135deg, #16a34a, #059669)' }}>
-              <PackageCheck className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold tracking-widest" style={{ color: 'var(--color-ink-3)' }}>REÇUES</p>
-              <p className="text-xl font-extrabold" style={{ color: 'var(--color-ink)' }}>{commandes.filter((c) => c.statut === 'RECUE').length}</p>
-            </div>
-          </div>
-        </div>
-        <div className="card p-5 card-accent-violet">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white" style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}>
-              <ShoppingBag className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold tracking-widest" style={{ color: 'var(--color-ink-3)' }}>VALEUR TOTALE</p>
-              <p className="text-xl font-extrabold" style={{ color: 'var(--color-ink)' }}>{formatMontant(totalMoisCmds)} HTG</p>
-            </div>
-          </div>
-        </div>
+        <StatCard compact icon={Clock} theme="blue" label="EN ATTENTE" value={String(enAttente)} />
+        <StatCard compact icon={PackageCheck} theme="brand" label="REÇUES" value={String(commandes.filter((c) => c.statut === 'RECUE').length)} />
+        <StatCard compact icon={ShoppingBag} theme="violet" label="VALEUR TOTALE" value={`${formatMontant(totalMoisCmds)} HTG`} />
       </div>
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold" style={{ color: 'var(--color-ink-2)' }}>Toutes les commandes</h2>
-        <button onClick={() => setModalCreer(true)} className="px-4 py-2.5 rounded-xl text-sm font-bold text-white"
-          style={{ background: 'linear-gradient(135deg, #16a34a, #059669)' }}>
-          + Nouvelle commande
-        </button>
-      </div>
+      <PageToolbar actionLabel="Nouvelle commande" onAction={() => setModalCreer(true)} />
 
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full table-shell">
             <thead>
-              <tr style={{ background: 'var(--color-line-2)' }}>
+              <tr>
                 {['N°', 'Date', 'Fournisseur', 'Destination', 'Livraison prévue', 'Lignes', 'Statut', 'Actions'].map((h) => (
-                  <th key={h} className="text-left px-4 py-3 font-semibold whitespace-nowrap" style={{ color: 'var(--color-ink-2)' }}>{h}</th>
+                  <th key={h}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -102,19 +69,17 @@ export default function AchatsPage() {
               {commandes.map((c) => {
                 const s = STATUT_STYLE[c.statut];
                 return (
-                  <tr key={c.id} className="border-t" style={{ borderColor: 'var(--color-line-2)' }}>
-                    <td className="px-4 py-3 font-mono text-xs font-semibold" style={{ color: 'var(--color-primary-2)' }}>{c.numero}</td>
-                    <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--color-ink-2)' }}>{formatRelativeTime(c.dateCommande)}</td>
-                    <td className="px-4 py-3 font-medium whitespace-nowrap" style={{ color: 'var(--color-ink)' }}>{c.fournisseur.nom}</td>
-                    <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--color-ink-2)' }}>{c.emplacement.nom}</td>
-                    <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--color-ink-2)' }}>
+                  <tr key={c.id}>
+                    <td className="font-mono text-xs font-semibold" style={{ color: 'var(--color-primary-2)' }}>{c.numero}</td>
+                    <td className="whitespace-nowrap">{formatRelativeTime(c.dateCommande)}</td>
+                    <td className="font-medium whitespace-nowrap" style={{ color: 'var(--color-ink)' }}>{c.fournisseur.nom}</td>
+                    <td className="whitespace-nowrap">{c.emplacement.nom}</td>
+                    <td className="whitespace-nowrap">
                       {c.dateLivraisonPrevue ? new Date(c.dateLivraisonPrevue).toLocaleDateString('fr-FR') : '—'}
                     </td>
-                    <td className="px-4 py-3 text-center" style={{ color: 'var(--color-ink-2)' }}>{c.lignes.length}</td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: s.bg, color: s.fg }}>{s.label}</span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap space-x-2">
+                    <td className="text-center">{c.lignes.length}</td>
+                    <td><Badge tone={s.tone}>{s.label}</Badge></td>
+                    <td className="whitespace-nowrap space-x-2">
                       {canRecevoir(c) && (
                         <button onClick={() => setCommandeReception(c)} className="text-xs font-semibold inline-flex items-center gap-1"
                           style={{ color: 'var(--color-primary-2)' }}>
@@ -122,7 +87,7 @@ export default function AchatsPage() {
                         </button>
                       )}
                       {canEnvoyer(c) && (
-                        <button onClick={() => handleEnvoyer(c)} className="text-xs font-semibold" style={{ color: '#2563eb' }}>
+                        <button onClick={() => handleEnvoyer(c)} className="text-xs font-semibold" style={{ color: 'var(--color-info)' }}>
                           Envoyer
                         </button>
                       )}
@@ -139,9 +104,7 @@ export default function AchatsPage() {
           </table>
         </div>
         {!isLoading && commandes.length === 0 && (
-          <div className="text-center py-12 text-sm" style={{ color: 'var(--color-ink-3)' }}>
-            Aucune commande. Créez votre première commande d&apos;achat ci-dessus.
-          </div>
+          <EmptyState icon={ShoppingBag} title="Aucune commande" hint="Créez votre première commande d'achat ci-dessus." />
         )}
       </div>
 

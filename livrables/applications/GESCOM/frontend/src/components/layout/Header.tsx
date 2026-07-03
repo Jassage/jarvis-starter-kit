@@ -13,6 +13,8 @@ const PAGES: Record<string, { title: string; subtitle: string }> = {
   '/clients': { title: 'Clients', subtitle: 'Gestion de la base clients' },
   '/achats': { title: 'Achats', subtitle: 'Commandes fournisseurs et réceptions' },
   '/fournisseurs': { title: 'Fournisseurs', subtitle: 'Gestion de la base fournisseurs' },
+  '/transferts': { title: 'Transferts', subtitle: 'Mouvements inter-sites boutique ↔ entrepôt' },
+  '/compta': { title: 'Comptabilité', subtitle: 'Journal, grand livre et états financiers' },
 };
 
 export default function Header() {
@@ -49,7 +51,7 @@ export default function Header() {
           <Menu className="w-5 h-5" />
         </button>
         <div className="min-w-0">
-          <h1 className="text-base sm:text-lg font-bold truncate" style={{ color: 'var(--color-ink)' }}>{page.title}</h1>
+          <h1 className="text-base sm:text-lg font-bold truncate tracking-tight" style={{ color: 'var(--color-ink)' }}>{page.title}</h1>
           <p className="hidden sm:block text-sm truncate" style={{ color: 'var(--color-ink-3)' }}>{page.subtitle}</p>
         </div>
       </div>
@@ -58,11 +60,11 @@ export default function Header() {
         <button
           onClick={() => setMenuOpen((v) => !v)}
           className="flex items-center gap-2 pl-2 pr-2.5 sm:pr-3 py-1.5 rounded-full transition-colors"
-          style={{ background: menuOpen ? 'var(--color-line-2)' : 'transparent' }}
+          style={{ background: menuOpen ? 'var(--color-surface-2)' : 'transparent' }}
         >
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-            style={{ background: 'linear-gradient(135deg, #16a34a, #059669)' }}
+            style={{ background: 'var(--gradient-brand)' }}
           >
             {initiales}
           </div>

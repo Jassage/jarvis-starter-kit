@@ -1,8 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { Users } from 'lucide-react';
 import { useClientStore, Client } from '@/stores/clientStore';
 import { formatMontant } from '@/lib/utils';
 import Modal from '@/components/ui/Modal';
+import Badge from '@/components/ui/Badge';
+import PageToolbar from '@/components/ui/PageToolbar';
+import EmptyState from '@/components/ui/EmptyState';
 import ClientForm from '@/components/clients/ClientForm';
 
 export default function ClientsPage() {
@@ -32,52 +36,28 @@ export default function ClientsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <input
-          className="input sm:max-w-xs"
-          placeholder="Rechercher un client..."
-          value={search}
-          onChange={(e) => handleSearch(e.target.value)}
-        />
-        <button
-          onClick={openCreate}
-          className="px-4 py-2.5 rounded-xl text-sm font-bold text-white shrink-0"
-          style={{ background: 'var(--color-primary-2)' }}
-        >
-          + Nouveau client
-        </button>
-      </div>
+      <PageToolbar search={search} onSearch={handleSearch} searchPlaceholder="Rechercher un client..." actionLabel="Nouveau client" onAction={openCreate} />
 
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full table-shell">
             <thead>
-              <tr style={{ background: 'var(--color-line-2)' }}>
+              <tr>
                 {['Nom', 'Type', 'Téléphone', 'Solde dû', ''].map((h) => (
-                  <th key={h} className="text-left px-4 py-3 font-semibold whitespace-nowrap" style={{ color: 'var(--color-ink-2)' }}>{h}</th>
+                  <th key={h}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {clients.map((c) => (
-                <tr key={c.id} className="border-t" style={{ borderColor: 'var(--color-line-2)' }}>
-                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-ink)' }}>{c.nom}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="px-2 py-0.5 rounded-full text-xs font-semibold"
-                      style={{
-                        background: c.type === 'GROSSISTE' ? 'var(--color-primary-soft)' : 'var(--color-line-2)',
-                        color: c.type === 'GROSSISTE' ? 'var(--color-primary-2)' : 'var(--color-ink-2)',
-                      }}
-                    >
-                      {c.type === 'GROSSISTE' ? 'Grossiste' : 'Particulier'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-ink-2)' }}>{c.telephone || '—'}</td>
-                  <td className="px-4 py-3 font-semibold" style={{ color: Number(c.soldeDu) > 0 ? 'var(--color-danger)' : 'var(--color-ink-3)' }}>
+                <tr key={c.id}>
+                  <td className="font-semibold" style={{ color: 'var(--color-ink)' }}>{c.nom}</td>
+                  <td><Badge tone={c.type === 'GROSSISTE' ? 'brand' : 'neutral'}>{c.type === 'GROSSISTE' ? 'Grossiste' : 'Particulier'}</Badge></td>
+                  <td>{c.telephone || '—'}</td>
+                  <td className="font-semibold" style={{ color: Number(c.soldeDu) > 0 ? 'var(--color-danger)' : 'var(--color-ink-3)' }}>
                     {Number(c.soldeDu) > 0 ? `${formatMontant(c.soldeDu)} HTG` : '—'}
                   </td>
-                  <td className="px-4 py-3 text-right space-x-3 whitespace-nowrap">
+                  <td className="text-right space-x-3 whitespace-nowrap">
                     <button onClick={() => openEdit(c)} className="text-xs font-semibold" style={{ color: 'var(--color-primary-2)' }}>Modifier</button>
                     <button onClick={() => handleArchive(c)} className="text-xs font-semibold" style={{ color: 'var(--color-danger)' }}>Archiver</button>
                   </td>
@@ -87,7 +67,7 @@ export default function ClientsPage() {
           </table>
         </div>
         {!isLoading && clients.length === 0 && (
-          <div className="text-center py-12 text-sm" style={{ color: 'var(--color-ink-3)' }}>Aucun client pour le moment.</div>
+          <EmptyState icon={Users} title="Aucun client pour le moment" />
         )}
       </div>
 

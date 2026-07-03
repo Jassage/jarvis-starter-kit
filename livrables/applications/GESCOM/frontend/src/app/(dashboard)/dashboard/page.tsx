@@ -3,60 +3,20 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Wallet, Package, AlertTriangle, ShoppingCart, Store, Warehouse, Truck,
-  ArrowUpRight, ArrowDownRight, Plus, Sparkles, TrendingUp, TrendingDown, Minus,
+  ArrowUpRight, ArrowDownRight, Plus, Sparkles,
   Wrench, CreditCard, Trophy, Users, CheckCircle2,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useDashboardStore } from '@/stores/dashboardStore';
 import { formatMontant, formatMontantCompact, formatRelativeTime } from '@/lib/utils';
 import Modal from '@/components/ui/Modal';
+import StatCard from '@/components/ui/StatCard';
 import NouvelleVenteModal from '@/components/ventes/NouvelleVenteModal';
 import NouvelleCommandeModal from '@/components/achats/NouvelleCommandeModal';
 import QuickAjustementModal from '@/components/stock/QuickAjustementModal';
 
 const ROLES_VENTE = ['SUPER_ADMIN', 'GERANT', 'VENDEUR'];
 const ROLES_STOCK = ['SUPER_ADMIN', 'GERANT', 'MAGASINIER'];
-
-const KPI_THEME = {
-  green: { bg: 'linear-gradient(135deg, #16a34a, #059669)' },
-  blue: { bg: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
-  amber: { bg: 'linear-gradient(135deg, #f59e0b, #d97706)' },
-  violet: { bg: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' },
-  rose: { bg: 'linear-gradient(135deg, #f43f5e, #e11d48)' },
-} as const;
-
-function TrendBadge({ pct }: { pct: number }) {
-  const Icon = pct > 0 ? TrendingUp : pct < 0 ? TrendingDown : Minus;
-  const color = pct > 0 ? 'var(--color-success)' : pct < 0 ? 'var(--color-danger)' : 'var(--color-ink-3)';
-  const bg = pct > 0 ? 'var(--color-success-soft)' : pct < 0 ? 'var(--color-danger-soft)' : 'var(--color-line-2)';
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold" style={{ background: bg, color }}>
-      <Icon className="w-3 h-3" />
-      {pct > 0 ? '+' : ''}{pct}%
-    </span>
-  );
-}
-
-function KpiCard({
-  icon: Icon, theme, label, value, sub, trend,
-}: {
-  icon: typeof Wallet; theme: keyof typeof KPI_THEME; label: string; value: string; sub?: string; trend?: number;
-}) {
-  const c = KPI_THEME[theme];
-  return (
-    <div className="card card-hover p-5 sm:p-6 relative overflow-hidden">
-      <div className="flex items-center justify-between mb-4">
-        <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-white shadow-sm" style={{ background: c.bg }}>
-          <Icon className="w-5 h-5" />
-        </div>
-        {trend !== undefined && <TrendBadge pct={trend} />}
-      </div>
-      <p className="text-[11px] font-bold tracking-widest mb-1.5" style={{ color: 'var(--color-ink-3)' }}>{label}</p>
-      <p className="text-2xl sm:text-3xl font-extrabold tracking-tight" style={{ color: 'var(--color-ink)' }}>{value}</p>
-      {sub && <p className="text-xs mt-1.5" style={{ color: 'var(--color-ink-3)' }}>{sub}</p>}
-    </div>
-  );
-}
 
 const RANG_STYLE = [
   { bg: '#fef3c7', fg: '#b45309' }, // or
@@ -108,7 +68,7 @@ export default function DashboardPage() {
       {/* Hero */}
       <div
         className="relative overflow-hidden rounded-3xl px-6 sm:px-9 py-8 sm:py-10 flex flex-col gap-6"
-        style={{ background: 'linear-gradient(135deg, #0a2417 0%, #15803d 55%, #16a34a 100%)' }}
+        style={{ background: 'var(--gradient-brand-deep)' }}
       >
         <div
           className="absolute inset-0 pointer-events-none opacity-[0.08]"
@@ -126,7 +86,7 @@ export default function DashboardPage() {
               <Sparkles className="w-3 h-3" />
               GESTION COMMERCIALE
             </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
               Bonjour, {utilisateur?.prenom} 👋
             </h2>
             <p className="text-sm capitalize mt-1" style={{ color: 'rgba(255,255,255,0.7)' }}>{today}</p>
@@ -140,7 +100,7 @@ export default function DashboardPage() {
               <button
                 onClick={() => setAction('vente')}
                 className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl text-sm font-bold transition-transform hover:scale-[1.03]"
-                style={{ background: 'white', color: '#15803d' }}
+                style={{ background: 'white', color: 'var(--color-primary)' }}
               >
                 <Plus className="w-4 h-4" />
                 Nouvelle vente
@@ -172,14 +132,14 @@ export default function DashboardPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-5">
-        <KpiCard
+        <StatCard
           icon={Wallet}
-          theme="green"
+          theme="brand"
           label="VALEUR DU STOCK"
           value={formatMontantCompact(stats?.valeurStockTotal ?? 0)}
           sub={`${formatMontant(stats?.valeurStockTotal ?? 0)} HTG au coût d'achat`}
         />
-        <KpiCard
+        <StatCard
           icon={ShoppingCart}
           theme="blue"
           label="VENTES DU JOUR"
@@ -187,21 +147,21 @@ export default function DashboardPage() {
           sub={`${stats?.ventesDuJour?.count ?? 0} vente(s) validée(s)`}
           trend={stats?.tendanceVentes?.variationPct}
         />
-        <KpiCard
+        <StatCard
           icon={CreditCard}
           theme="rose"
           label="ENCOURS CRÉDIT CLIENTS"
           value={formatMontantCompact(stats?.encoursCreditTotal ?? 0)}
           sub={stats && stats.clientsRisque.length > 0 ? `${stats.clientsRisque.length} client(s) à solde positif` : 'Aucun encours'}
         />
-        <KpiCard
+        <StatCard
           icon={AlertTriangle}
           theme="amber"
           label="ALERTES DE STOCK"
           value={String(stats?.produitsSousAlerte ?? 0)}
           sub={stats && stats.produitsSousAlerte > 0 ? 'À traiter sur la page Stock' : 'Tout est sous contrôle'}
         />
-        <KpiCard icon={Package} theme="violet" label="PRODUITS ACTIFS" value={String(stats?.totalProduits ?? 0)} />
+        <StatCard icon={Package} theme="violet" label="PRODUITS ACTIFS" value={String(stats?.totalProduits ?? 0)} />
       </div>
 
       {/* Commandes en attente de réception */}
@@ -209,13 +169,13 @@ export default function DashboardPage() {
         <div
           className="card p-4 flex items-center justify-between gap-3 flex-wrap"
           style={{
-            background: stats.commandesEnRetard > 0 ? 'var(--color-danger-soft)' : '#eff6ff',
-            border: `1px solid ${stats.commandesEnRetard > 0 ? 'rgba(239,68,68,0.25)' : 'rgba(37,99,235,0.2)'}`,
+            background: stats.commandesEnRetard > 0 ? 'var(--color-danger-soft)' : 'var(--color-info-soft)',
+            border: `1px solid ${stats.commandesEnRetard > 0 ? 'rgba(220,38,38,0.2)' : 'rgba(37,99,235,0.2)'}`,
           }}
         >
           <div className="flex items-center gap-3">
-            <Truck className="w-5 h-5 shrink-0" style={{ color: stats.commandesEnRetard > 0 ? 'var(--color-danger)' : '#2563eb' }} />
-            <p className="text-sm font-semibold" style={{ color: stats.commandesEnRetard > 0 ? 'var(--color-danger)' : '#1d4ed8' }}>
+            <Truck className="w-5 h-5 shrink-0" style={{ color: stats.commandesEnRetard > 0 ? 'var(--color-danger)' : 'var(--color-info)' }} />
+            <p className="text-sm font-semibold" style={{ color: stats.commandesEnRetard > 0 ? 'var(--color-danger)' : 'var(--color-info)' }}>
               {stats.commandesEnAttente} commande{stats.commandesEnAttente > 1 ? 's' : ''} en attente de réception
               {stats.commandesEnRetard > 0 && ` · ${stats.commandesEnRetard} en retard sur la livraison prévue`}
             </p>
@@ -223,7 +183,7 @@ export default function DashboardPage() {
           <Link
             href="/achats"
             className="text-xs font-bold px-3 py-1.5 rounded-lg shrink-0"
-            style={{ background: stats.commandesEnRetard > 0 ? 'var(--color-danger)' : '#2563eb', color: 'white' }}
+            style={{ background: stats.commandesEnRetard > 0 ? 'var(--color-danger)' : 'var(--color-info)', color: 'white' }}
           >
             Voir les achats →
           </Link>
@@ -246,7 +206,7 @@ export default function DashboardPage() {
                   <div
                     className="w-full rounded-t-lg transition-all"
                     title={`${formatMontant(v.montant)} HTG · ${v.count} vente(s)`}
-                    style={{ height: `${hauteurPct}%`, background: 'linear-gradient(180deg, #16a34a, #059669)', minHeight: 4 }}
+                    style={{ height: `${hauteurPct}%`, background: 'var(--gradient-brand)', minHeight: 4 }}
                   />
                   <span className="text-[11px] font-bold capitalize" style={{ color: 'var(--color-ink-3)' }}>{jour}</span>
                 </div>
@@ -277,7 +237,7 @@ export default function DashboardPage() {
                   <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--color-line-2)' }}>
                     <div
                       className="h-full rounded-full transition-all"
-                      style={{ width: `${Math.max(4, (r.valeur / valeurMax) * 100)}%`, background: 'linear-gradient(90deg, #16a34a, #059669)' }}
+                      style={{ width: `${Math.max(4, (r.valeur / valeurMax) * 100)}%`, background: 'var(--gradient-brand)' }}
                     />
                   </div>
                 </div>
@@ -312,7 +272,7 @@ export default function DashboardPage() {
                     <span className="text-sm font-bold shrink-0" style={{ color: 'var(--color-ink)' }}>{formatMontantCompact(p.montantVendu)}</span>
                   </div>
                   <div className="h-1.5 rounded-full overflow-hidden mt-1.5" style={{ background: 'var(--color-line-2)' }}>
-                    <div className="h-full rounded-full" style={{ width: `${Math.max(4, (p.montantVendu / produitMax) * 100)}%`, background: 'linear-gradient(90deg, #f59e0b, #d97706)' }} />
+                    <div className="h-full rounded-full" style={{ width: `${Math.max(4, (p.montantVendu / produitMax) * 100)}%`, background: 'var(--gradient-amber)' }} />
                   </div>
                   <p className="text-xs mt-1" style={{ color: 'var(--color-ink-3)' }}>{p.quantiteVendue} {p.unite} vendu(e)s</p>
                 </div>
