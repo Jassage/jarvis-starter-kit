@@ -145,33 +145,44 @@ export async function recevoirCommande(
     await tx.commandeFournisseur.update({ where: { id }, data: { statut: nouveauStatut } });
 
     // Écriture comptable : Débit Stock(355) → Crédit Fournisseurs(401)
-    try {
-      const totalRecu = lignesReception.reduce((sum, r) => {
-        const ligne = commande.lignes.find((l) => l.id === r.ligneId);
-        return sum + (ligne ? Math.min(r.quantiteRecue, ligne.quantiteCommandee - ligne.quantiteRecue) * Number(ligne.prixUnitaireAchat) : 0);
-      }, 0);
+    const totalRecu = lignesReception.reduce((sum, r) => {
+      const ligne = commande.lignes.find((l) => l.id === r.ligneId);
+      return sum + (ligne ? Math.min(r.quantiteRecue, ligne.quantiteCommandee - ligne.quantiteRecue) * Number(ligne.prixUnitaireAchat) : 0);
+    }, 0);
 
-      if (totalRecu > 0) {
+    if (totalRecu > 0) {
+      try {
         const [compteStock, compteFournisseur] = await Promise.all([
           tx.compteComptable.findUnique({ where: { numero: '355' } }),
           tx.compteComptable.findUnique({ where: { numero: '401' } }),
         ]);
-        if (compteStock && compteFournisseur) {
-          await tx.ecritureComptable.create({
-            data: {
-              compteDebitId: compteStock.id,
-              compteCreditId: compteFournisseur.id,
-              montant: new Prisma.Decimal(totalRecu),
-              libelle: `Réception ${commande.numero}`,
-              userId,
-              referenceType: 'COMMANDE',
-              referenceId: id,
-            },
-          });
-        }
+        if (!compteStock || !compteFournisseur) throw new Error('Compte introuvable');
+        await tx.ecritureComptable.create({
+          data: {
+            compteDebitId: compteStock.id,
+            compteCreditId: compteFournisseur.id,
+            montant: new Prisma.Decimal(totalRecu),
+            libelle: `Réception ${commande.numero}`,
+            userId,
+            referenceType: 'COMMANDE',
+            referenceId: id,
+          },
+        });
+      } catch (err) {
+        // L'opération d'achat ne doit pas être bloquée par une erreur comptable,
+        // mais l'échec est tracé pour réconciliation manuelle par le comptable.
+        await tx.ecritureEchec.create({
+          data: {
+            compteDebitNumero: '355',
+            compteCreditNumero: '401',
+            montant: new Prisma.Decimal(totalRecu),
+            libelle: `Réception ${commande.numero}`,
+            erreur: err instanceof Error ? err.message : String(err),
+            referenceType: 'COMMANDE',
+            referenceId: id,
+          },
+        });
       }
-    } catch {
-      // Écriture échouée → EcritureEchec (log seul, ne bloque pas la réception)
     }
   });
 
