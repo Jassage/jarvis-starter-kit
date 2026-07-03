@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Shield, Users, Heart, Flag, Ban, CheckCircle } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "@/lib/api";
@@ -22,20 +23,27 @@ interface Stats {
 }
 
 export default function AdminPage() {
+  const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [tab, setTab] = useState<"stats" | "reports">("stats");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      api.get("/admin/stats").catch(() => ({ data: { data: null } })),
-      api.get("/admin/reports").catch(() => ({ data: { data: [] } })),
-    ]).then(([statsRes, reportsRes]) => {
-      setStats(statsRes.data.data);
-      setReports(reportsRes.data.data ?? []);
-    }).finally(() => setLoading(false));
-  }, []);
+    api.get("/auth/me").then(({ data }) => {
+      if (!data.data?.isAdmin) {
+        router.replace("/discover");
+        return;
+      }
+      Promise.all([
+        api.get("/admin/stats").catch(() => ({ data: { data: null } })),
+        api.get("/admin/reports").catch(() => ({ data: { data: [] } })),
+      ]).then(([statsRes, reportsRes]) => {
+        setStats(statsRes.data.data);
+        setReports(reportsRes.data.data ?? []);
+      }).finally(() => setLoading(false));
+    }).catch(() => router.replace("/discover"));
+  }, [router]);
 
   const banUser = async (userId: string, name: string) => {
     if (!confirm(`Bannir ${name} ?`)) return;

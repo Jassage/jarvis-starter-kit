@@ -143,20 +143,27 @@ export async function verifyMoncashPayment(orderId: string) {
   );
 
   const payment = res.data.payment;
-  if (payment?.message === "successful") {
-    // Retrouver userId depuis l'orderId stocké
-    const marker = `moncash_${orderId}_`;
-    const user = await prisma.user.findFirst({
-      where: { resetPasswordToken: { startsWith: marker } },
-    });
-    if (user) {
-      const planId = user.resetPasswordToken?.replace(marker, "") || "1mo";
-      await activatePremium(user.id, planId);
-      await prisma.user.update({ where: { id: user.id }, data: { resetPasswordToken: null } });
-    }
-    return true;
-  }
-  return false;
+  if (payment?.message !== "successful") return false;
+
+  // Retrouver userId depuis l'orderId stocké
+  const marker = `moncash_${orderId}_`;
+  const user = await prisma.user.findFirst({
+    where: { resetPasswordToken: { startsWith: marker } },
+  });
+  if (!user) return true; // déjà traité (marqueur déjà consommé) ou orderId inconnu
+
+  // Verrou atomique : le callback peut être appelé plusieurs fois pour le même
+  // paiement (retry MonCash, refresh navigateur). Seul l'appel qui réussit à
+  // consommer le marqueur active le Premium ; les autres no-op.
+  const claimed = await prisma.user.updateMany({
+    where: { id: user.id, resetPasswordToken: user.resetPasswordToken },
+    data: { resetPasswordToken: null },
+  });
+  if (claimed.count === 0) return true; // consommé entre-temps par un appel concurrent
+
+  const planId = user.resetPasswordToken?.replace(marker, "") || "1mo";
+  await activatePremium(user.id, planId);
+  return true;
 }
 
 // ─── Activation Premium ───────────────────────────────────────────────────────

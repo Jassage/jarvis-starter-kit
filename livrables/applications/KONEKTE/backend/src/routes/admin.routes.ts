@@ -1,11 +1,12 @@
 import { Router, Response } from "express";
-import { requireAuth } from "../middlewares/auth.middleware";
+import { requireAuth, requireAdmin } from "../middlewares/auth.middleware";
 import { AuthRequest } from "../types";
 import { prisma } from "../lib/prisma";
 
 const router = Router();
+router.use(requireAuth, requireAdmin);
 
-router.get("/stats", requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+router.get("/stats", async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const [totalUsers, totalMatches, totalMessages, pendingReports] = await Promise.all([
       prisma.user.count({ where: { isActive: true, isBanned: false } }),
@@ -19,7 +20,7 @@ router.get("/stats", requireAuth, async (req: AuthRequest, res: Response): Promi
   }
 });
 
-router.get("/reports", requireAuth, async (_req: AuthRequest, res: Response): Promise<void> => {
+router.get("/reports", async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     const reports = await prisma.report.findMany({
       orderBy: { createdAt: "desc" },
@@ -35,7 +36,7 @@ router.get("/reports", requireAuth, async (_req: AuthRequest, res: Response): Pr
   }
 });
 
-router.patch("/reports/:id/review", requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+router.patch("/reports/:id/review", async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     await prisma.report.update({
       where: { id: req.params.id as string },
@@ -47,7 +48,7 @@ router.patch("/reports/:id/review", requireAuth, async (req: AuthRequest, res: R
   }
 });
 
-router.post("/ban/:userId", requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post("/ban/:userId", async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     await prisma.user.update({
       where: { id: req.params.userId as string },

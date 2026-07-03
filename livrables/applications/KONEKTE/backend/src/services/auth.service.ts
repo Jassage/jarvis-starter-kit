@@ -111,6 +111,7 @@ export const getMeService = async (userId: string) => {
     subscriptionPlan: user.subscriptionPlan,
     boostsRemaining: user.boostsRemaining,
     lastSeenAt: user.lastSeenAt,
+    isAdmin: user.isAdmin,
     profile: user.profile,
     photos: user.photos,
   };
