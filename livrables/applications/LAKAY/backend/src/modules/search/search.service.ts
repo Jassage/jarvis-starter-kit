@@ -1,16 +1,32 @@
 import crypto from 'crypto';
 import { Prisma, PropertyType, ListingType, Department, Currency } from '@prisma/client';
 import prisma from '../../config/database';
-import { paginate, parsePagination } from '../../utils/response';
 import redis from '../../config/redis';
+import { encodeCursor, decodeCursor, buildCursorWhere, serializeSortValue } from '../../utils/cursorPagination';
 
 const SEARCH_CACHE_TTL = 300; // 5 minutes
 
 function buildCacheKey(filters: SearchFilters, rawQuery: Record<string, string>): string {
-  const payload = JSON.stringify({ filters, page: rawQuery.page, limit: rawQuery.limit });
+  const payload = JSON.stringify({ filters, cursor: rawQuery.cursor || '', limit: rawQuery.limit });
   // Hash complet : déterministe et sans collision (le slice base64 pouvait en créer)
   const hash = crypto.createHash('sha1').update(payload).digest('hex');
   return `lakay:search:${hash}`;
+}
+
+const SORT_FIELD_BY_OPTION = {
+  price_asc: { field: 'price' as const, direction: 'asc' as const },
+  price_desc: { field: 'price' as const, direction: 'desc' as const },
+  date_asc: { field: 'createdAt' as const, direction: 'asc' as const },
+  date_desc: { field: 'createdAt' as const, direction: 'desc' as const },
+  views: { field: 'viewCount' as const, direction: 'desc' as const },
+  relevance: { field: 'createdAt' as const, direction: 'desc' as const },
+} as const;
+
+interface SearchCursor {
+  isSponsored: boolean;
+  isFeatured: boolean;
+  sortValue: string;
+  id: string;
 }
 
 export interface SearchFilters {
@@ -97,7 +113,8 @@ const LISTING_CARD_SELECT = {
 };
 
 export async function search(filters: SearchFilters, rawQuery: Record<string, string>) {
-  const { page, limit, skip } = parsePagination(rawQuery);
+  const limit = Math.min(Math.max(parseInt(rawQuery.limit || '20', 10) || 20, 1), 60);
+  const cursor = decodeCursor<SearchCursor>(rawQuery.cursor);
 
   // Cache Redis — lecture (fault-tolerant : si Redis est KO, on continue sans cache)
   const cacheKey = buildCacheKey(filters, rawQuery);
@@ -171,27 +188,52 @@ export async function search(filters: SearchFilters, rawQuery: Record<string, st
     where.longitude = { gte: filters.lng - lngDelta, lte: filters.lng + lngDelta };
   }
 
-  // Tri
-  let orderBy: Prisma.ListingOrderByWithRelationInput[] = [];
-  // Sponsorisés toujours en premier
-  orderBy.push({ isSponsored: 'desc' }, { isFeatured: 'desc' });
+  // Tri : sponsorisés puis mis en avant toujours en premier, puis critère choisi,
+  // puis id en tiebreaker (nécessaire pour un curseur stable et sans doublon/saut).
+  const primarySort = SORT_FIELD_BY_OPTION[filters.sortBy ?? 'date_desc'] ?? SORT_FIELD_BY_OPTION.date_desc;
+  const orderBy: Prisma.ListingOrderByWithRelationInput[] = [
+    { isSponsored: 'desc' },
+    { isFeatured: 'desc' },
+    { [primarySort.field]: primarySort.direction },
+    { id: 'asc' },
+  ];
 
-  switch (filters.sortBy) {
-    case 'price_asc': orderBy.push({ price: 'asc' }); break;
-    case 'price_desc': orderBy.push({ price: 'desc' }); break;
-    case 'date_asc': orderBy.push({ createdAt: 'asc' }); break;
-    case 'views': orderBy.push({ viewCount: 'desc' }); break;
-    default: orderBy.push({ createdAt: 'desc' });
+  // Reprise après curseur : combiné en AND avec les filtres (pas en OR, qui est
+  // déjà utilisé par la recherche texte `filters.q` sur `where.OR`).
+  let finalWhere: Prisma.ListingWhereInput = where;
+  if (cursor) {
+    const sortValue = primarySort.field === 'createdAt' ? new Date(cursor.sortValue) : cursor.sortValue;
+    const cursorWhere = buildCursorWhere([
+      { field: 'isSponsored', direction: 'desc', value: cursor.isSponsored },
+      { field: 'isFeatured', direction: 'desc', value: cursor.isFeatured },
+      { field: primarySort.field, direction: primarySort.direction, value: sortValue },
+      { field: 'id', direction: 'asc', value: cursor.id },
+    ]);
+    finalWhere = { AND: [where, cursorWhere] };
   }
 
-  const [listings, total] = await Promise.all([
-    prisma.listing.findMany({ where, select: LISTING_CARD_SELECT, orderBy, skip, take: limit }),
-    prisma.listing.count({ where }),
+  const [rows, total] = await Promise.all([
+    prisma.listing.findMany({ where: finalWhere, select: LISTING_CARD_SELECT, orderBy, take: limit + 1 }),
+    prisma.listing.count({ where }), // total sur les filtres seuls (hors curseur), pour l'affichage "N résultats"
   ]);
 
+  const hasMore = rows.length > limit;
+  const listings = hasMore ? rows.slice(0, limit) : rows;
+
+  let nextCursor: string | null = null;
+  if (hasMore) {
+    const last = listings[listings.length - 1];
+    nextCursor = encodeCursor({
+      isSponsored: last.isSponsored,
+      isFeatured: last.isFeatured,
+      sortValue: serializeSortValue(last[primarySort.field as 'price' | 'createdAt' | 'viewCount']),
+      id: last.id,
+    });
+  }
+
   // Raffinage Haversine sur la page pour retirer les coins du carré (bounding box → cercle).
-  // Purement cosmétique : la pagination reste pilotée par le total de la bounding box.
-  let filteredListings = listings;
+  // Purement cosmétique : le curseur reste piloté par l'ordre des lignes en base.
+  let filteredListings: unknown[] = listings;
   if (filters.lat != null && filters.lng != null && filters.radiusKm) {
     filteredListings = listings
       .map((l) => ({
@@ -206,7 +248,7 @@ export async function search(filters: SearchFilters, rawQuery: Record<string, st
 
   const result = {
     listings: filteredListings,
-    pagination: paginate(page, limit, total),
+    pagination: { limit, hasMore, nextCursor, total },
     appliedFilters: filters,
   };
 

@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { LayoutGrid, Map as MapIcon, Loader2 } from 'lucide-react';
 import { SearchBar } from '../../../components/search/SearchBar';
 import { FilterPanel, Filters } from '../../../components/search/FilterPanel';
@@ -58,14 +58,22 @@ export default function PropertiesPage() {
     return params;
   }, [filters, appliedParams]);
 
-  const { data, isLoading, isFetching } = useQuery({
+  const {
+    data, isLoading, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['search', appliedParams],
-    queryFn: () => searchApi.search(appliedParams).then((r) => r.data),
+    queryFn: ({ pageParam }) =>
+      searchApi.search(pageParam ? { ...appliedParams, cursor: pageParam } : appliedParams).then((r) => r.data),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => {
+      const p = lastPage?.meta?.pagination as { nextCursor?: string | null } | undefined;
+      return p?.nextCursor ?? undefined;
+    },
     staleTime: 60 * 1000,
   });
 
-  const listings = data?.data || [];
-  const pagination = data?.meta?.pagination as { total?: number; page?: number; pages?: number } | undefined;
+  const listings = data?.pages.flatMap((p) => p.data) || [];
+  const pagination = data?.pages[0]?.meta?.pagination as { total?: number } | undefined;
 
   const applyFilters = () => {
     const params = buildQueryParams();
@@ -190,26 +198,16 @@ export default function PropertiesPage() {
                   ))}
                 </div>
 
-                {/* Pagination */}
-                {pagination && pagination.pages && pagination.pages > 1 && (
-                  <div className="flex justify-center gap-2 mt-8">
-                    {Array.from({ length: Math.min(pagination.pages, 10) }, (_, i) => i + 1).map((p) => (
-                      <button
-                        key={p}
-                        onClick={() => {
-                          const params = { ...appliedParams, page: String(p) };
-                          setAppliedParams(params);
-                        }}
-                        className={cn(
-                          'w-9 h-9 rounded-lg text-sm font-medium transition-colors',
-                          pagination.page === p
-                            ? 'bg-primary-500 text-white'
-                            : 'border border-gray-200 text-gray-600 hover:border-primary-300'
-                        )}
-                      >
-                        {p}
-                      </button>
-                    ))}
+                {/* Charger plus (scroll infini par curseur) */}
+                {hasNextPage && (
+                  <div className="flex justify-center mt-8">
+                    <button
+                      onClick={() => fetchNextPage()}
+                      disabled={isFetchingNextPage}
+                      className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:border-primary-300 hover:text-primary-600 disabled:opacity-50 transition-colors"
+                    >
+                      {isFetchingNextPage ? <><Loader2 className="w-4 h-4 animate-spin" /> Chargement...</> : 'Charger plus d\'annonces'}
+                    </button>
                   </div>
                 )}
               </>
