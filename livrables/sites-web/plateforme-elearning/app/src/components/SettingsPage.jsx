@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import Icon from './Icon';
 import AppShell from './AppShell';
 import Switch from './Switch';
-import { ROLE_USER } from '@/lib/nav-config';
+import { ROLE_USER, getInitials } from '@/lib/nav-config';
 import { useGo } from '@/lib/navigation';
 
 const EXTRA_TAB = {
@@ -15,9 +16,44 @@ const EXTRA_TAB = {
 
 export default function SettingsPage({ role }) {
   const go = useGo();
-  const user = ROLE_USER[role] || ROLE_USER.student;
+  const { data: session } = useSession();
+  const userMock = ROLE_USER[role] || ROLE_USER.student;
   const extra = EXTRA_TAB[role];
   const [tab, setTab] = useState('profile');
+
+  const [profileName, setProfileName] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileMsg, setProfileMsg] = useState(null);
+
+  useEffect(() => {
+    fetch('/api/user/profile')
+      .then(r => r.json())
+      .then(data => {
+        if (data.name) setProfileName(data.name);
+        if (data.email) setProfileEmail(data.email);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function saveProfile() {
+    if (!profileName.trim()) return;
+    setSavingProfile(true);
+    setProfileMsg(null);
+    try {
+      const r = await fetch('/api/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: profileName }),
+      });
+      if (r.ok) setProfileMsg({ ok: true, text: 'Profil enregistré.' });
+      else setProfileMsg({ ok: false, text: 'Erreur lors de la sauvegarde.' });
+    } catch {
+      setProfileMsg({ ok: false, text: 'Erreur réseau.' });
+    } finally {
+      setSavingProfile(false);
+    }
+  }
 
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifPush, setNotifPush] = useState(true);
@@ -56,21 +92,23 @@ export default function SettingsPage({ role }) {
         {tab === 'profile' && (
           <div className="card card-pad anim-in">
             <div className="row gap-16" style={{ alignItems: 'center', marginBottom: 24 }}>
-              <div className="avatar avatar-lg" style={{ background: user.avColor, color: user.avInk, width: 64, height: 64, fontSize: 20, borderRadius: 'var(--r-lg)' }}>{user.initials}</div>
+              <div className="avatar avatar-lg" style={{ background: userMock.avColor, color: userMock.avInk, width: 64, height: 64, fontSize: 20, borderRadius: 'var(--r-lg)' }}>
+                {profileName ? getInitials(profileName) : userMock.initials}
+              </div>
               <div className="col gap-4">
-                <span style={{ fontWeight: 700, fontSize: 16 }}>{user.name}</span>
-                <span className="small muted">{user.role}</span>
+                <span style={{ fontWeight: 700, fontSize: 16 }}>{profileName || userMock.name}</span>
+                <span className="small muted">{profileEmail || userMock.role}</span>
               </div>
               <button className="btn btn-outline btn-sm" style={{ marginLeft: 'auto' }}><Icon name="upload" size={15} />Changer la photo</button>
             </div>
             <div className="col gap-16">
               <div className="col gap-6">
                 <label className="small" style={{ fontWeight: 650 }}>Nom complet</label>
-                <input className="input" defaultValue={user.name} />
+                <input className="input" value={profileName} onChange={e => setProfileName(e.target.value)} placeholder="Ton nom…" />
               </div>
               <div className="col gap-6">
                 <label className="small" style={{ fontWeight: 650 }}>Adresse e-mail</label>
-                <input className="input" type="email" defaultValue={`${user.name.toLowerCase().replace(' ', '.')}@eduspher.com`} />
+                <input className="input" type="email" value={profileEmail} readOnly style={{ opacity: 0.7, cursor: 'not-allowed' }} />
               </div>
               <div className="col gap-6">
                 <label className="small" style={{ fontWeight: 650 }}>Bio</label>
@@ -85,7 +123,16 @@ export default function SettingsPage({ role }) {
                 </select>
               </div>
             </div>
-            <button className="btn btn-primary" style={{ marginTop: 20 }}><Icon name="check" size={16} />Enregistrer les modifications</button>
+            <div className="row gap-12" style={{ marginTop: 20, alignItems: 'center' }}>
+              <button className="btn btn-primary" onClick={saveProfile} disabled={savingProfile}>
+                <Icon name="check" size={16} />{savingProfile ? 'Enregistrement…' : 'Enregistrer les modifications'}
+              </button>
+              {profileMsg && (
+                <span className={'small ' + (profileMsg.ok ? '' : 'error')} style={{ color: profileMsg.ok ? 'var(--green)' : 'var(--rose)' }}>
+                  {profileMsg.text}
+                </span>
+              )}
+            </div>
           </div>
         )}
 

@@ -20,6 +20,8 @@ export default function CoursePage() {
   const [tab, setTab] = useState('apercu');
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [enrolling, setEnrolling] = useState(false);
+  const [enrollMsg, setEnrollMsg] = useState('');
 
   const courseId = searchParams.get('id');
 
@@ -45,6 +47,58 @@ export default function CoursePage() {
     if (!Array.isArray(data)) return {};
     return Object.fromEntries(data.map(p => [p.lessonId, p.completed]));
   }, []);
+
+  const activateEnrollment = useCallback(async (courseId) => {
+    const [refreshed, progress] = await Promise.all([
+      loadCourse(courseId),
+      loadProgress(courseId),
+    ]);
+    if (refreshed) {
+      setCourse(refreshed);
+      setLessonProgress(progress);
+      if (refreshed.modules?.length > 0) {
+        setOpenMods(new Set([refreshed.modules[0].id]));
+        const allL = refreshed.modules.flatMap(m => m.lessons);
+        const first = allL.find(l => !progress[l.id]);
+        setCurrentId(first?.id || allL[0]?.id || null);
+      }
+    }
+  }, [loadCourse, loadProgress]);
+
+  const handleEnroll = useCallback(async () => {
+    if (!course) return;
+    setEnrolling(true);
+    setEnrollMsg('');
+
+    if (course.price > 0) {
+      const res = await fetch('/api/payments/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseId: course.id }),
+      });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setEnrollMsg(data.error || 'Impossible de créer la session de paiement.');
+      setEnrolling(false);
+      return;
+    }
+
+    const res = await fetch('/api/user/enrollments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ courseId: course.id }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      await activateEnrollment(course.id);
+    } else {
+      setEnrollMsg(data.error || "Erreur lors de l'inscription.");
+    }
+    setEnrolling(false);
+  }, [course, activateEnrollment]);
 
   useEffect(() => {
     async function init() {
@@ -124,6 +178,135 @@ export default function CoursePage() {
     );
   }
 
+  if (!course.enrollment) {
+    const totalLessons = (course.modules || []).reduce((s, m) => s + (m.lessons?.length || 0), 0);
+    const paymentJustDone = searchParams.get('payment') === 'success';
+    return (
+      <AppShell role="student" active="course" go={go}
+        title={course.title}
+        subtitle={`${course.category} · ${course.author?.name || 'Formateur'}`}>
+        <div className="edu-content-narrow">
+          {/* Banner */}
+          <div className="course-video" style={{ marginBottom: 28, borderRadius: 12, overflow: 'hidden' }}>
+            <div className="course-video-grid" />
+            <div className="col" style={{ alignItems: 'center', gap: 8, color: '#fff', position: 'relative', zIndex: 1 }}>
+              <Icon name="play" size={44} fill />
+              <span style={{ fontWeight: 600, opacity: .9 }}>Aperçu du cours</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 28, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            {/* Left */}
+            <div className="col gap-22" style={{ flex: '1 1 320px', minWidth: 0 }}>
+              <div className="col gap-12">
+                <div className="row gap-10 wrap">
+                  <span className={'badge badge-' + (course.color || 'brand')}>{course.category}</span>
+                  <span className="small muted">{course.level}</span>
+                  <span className="small muted row gap-5"><Icon name="clock" size={14} />{course.hours}h</span>
+                  <span className="small muted row gap-5"><Icon name="users" size={14} />{course._count?.enrollments ?? 0} inscrits</span>
+                </div>
+                <p style={{ lineHeight: 1.65, color: 'var(--ink-2)', fontSize: 15 }}>
+                  {course.description || 'Aucune description disponible pour ce cours.'}
+                </p>
+              </div>
+
+              <div className="card card-pad row gap-12" style={{ padding: '12px 16px' }}>
+                <div className="avatar avatar-lg" style={{ background: 'var(--violet-soft)', color: 'var(--violet)' }}>
+                  {(course.author?.name || 'F').split(' ').map(w => w[0]).join('').slice(0, 2)}
+                </div>
+                <div className="col">
+                  <span style={{ fontWeight: 700 }}>{course.author?.name || 'Formateur'}</span>
+                  <span className="tiny muted">Formateur EduSpher</span>
+                </div>
+              </div>
+
+              {(course.modules || []).length > 0 && (
+                <div className="col gap-10">
+                  <h3 className="h3">Contenu du cours</h3>
+                  <span className="small muted">{course.modules.length} modules · {totalLessons} leçons</span>
+                  <div className="col gap-6">
+                    {(course.modules || []).map((m, mi) => (
+                      <div key={m.id} className="card card-pad row between" style={{ padding: '10px 14px' }}>
+                        <div className="row gap-10">
+                          <div style={{ width: 24, height: 24, borderRadius: 6, background: 'var(--bg-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)' }}>{mi + 1}</span>
+                          </div>
+                          <span style={{ fontWeight: 600, fontSize: 14 }}>{m.title}</span>
+                        </div>
+                        <span className="tiny muted" style={{ flexShrink: 0 }}>{m.lessons?.length ?? 0} leçons</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right: enroll card */}
+            <div style={{ flex: '0 0 260px', minWidth: 220 }}>
+              <div className="card card-pad col gap-16" style={{ position: 'sticky', top: 16 }}>
+                <div>
+                  <div style={{ fontSize: 30, fontWeight: 800, color: course.price === 0 ? 'var(--green)' : 'var(--ink)' }}>
+                    {course.price === 0 ? 'Gratuit' : `${course.price} €`}
+                  </div>
+                  <span className="tiny muted">
+                    {course.price === 0 ? 'Accès immédiat, sans carte' : 'Accès à vie après achat'}
+                  </span>
+                </div>
+
+                {paymentJustDone && (
+                  <div className="col gap-10" style={{ background: 'var(--green-soft, #f0fdf4)', border: '1px solid var(--green)', borderRadius: 8, padding: '12px 14px' }}>
+                    <div className="row gap-8">
+                      <Icon name="checkCircle" size={16} style={{ color: 'var(--green)', flexShrink: 0 }} />
+                      <span className="small" style={{ fontWeight: 600, color: 'var(--green)' }}>Paiement confirmé !</span>
+                    </div>
+                    <span className="tiny muted">L'accès est en cours d'activation. Clique sur Actualiser dans quelques secondes.</span>
+                    <button className="btn btn-outline btn-sm" onClick={() => activateEnrollment(course.id)}>
+                      <Icon name="refresh" size={14} />Actualiser
+                    </button>
+                  </div>
+                )}
+
+                {enrollMsg && !paymentJustDone && (
+                  <p className="small" style={{ background: 'var(--bg-2)', padding: '10px 12px', borderRadius: 8, margin: 0, color: 'var(--ink-2)' }}>
+                    {enrollMsg}
+                  </p>
+                )}
+
+                {!paymentJustDone && (
+                  <button className="btn btn-primary btn-block" onClick={handleEnroll} disabled={enrolling}>
+                    {enrolling
+                      ? course.price > 0 ? 'Redirection…' : 'Inscription…'
+                      : course.price === 0
+                        ? "S'inscrire gratuitement"
+                        : `Acheter pour ${course.price} €`}
+                  </button>
+                )}
+
+                <div className="col gap-10" style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+                  {[
+                    ['clock', `${course.hours}h de contenu`],
+                    ['layers', `${course.modules?.length ?? 0} modules`],
+                    ['award', 'Certificat de réussite'],
+                    ['refresh', 'Accès à vie'],
+                  ].map(([icon, text]) => (
+                    <div key={text} className="row gap-8 small">
+                      <Icon name={icon} size={14} style={{ color: 'var(--ink-3)', flexShrink: 0 }} />
+                      {text}
+                    </div>
+                  ))}
+                </div>
+
+                <button className="btn btn-ghost btn-sm btn-block" onClick={() => go('student')}>
+                  <Icon name="chevL" size={14} />Retour au dashboard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   const allLessons = (course.modules || []).flatMap(m => m.lessons);
   const total = allLessons.length;
   const completed = allLessons.filter(l => lessonProgress[l.id]).length;
@@ -151,41 +334,46 @@ export default function CoursePage() {
       <div className="course-layout">
         {/* MAIN */}
         <div className="course-main scroll-y">
-          {/* Video placeholder */}
-          <div className="course-video">
-            <div className="course-video-grid" />
-            {!playing ? (
-              <button className="course-play" onClick={() => setPlaying(true)} aria-label="Lire">
-                <Icon name="play" size={30} fill />
-              </button>
-            ) : (
-              <div className="col" style={{ alignItems: 'center', color: '#fff', gap: 10 }}>
-                <Icon name="video" size={40} style={{ opacity: .9 }} />
-                <span style={{ fontWeight: 600, opacity: .85 }}>Lecture en cours…</span>
-              </div>
-            )}
-            {current && (
-              <div style={{ position: 'absolute', top: 16, left: 18 }}>
-                <span className="badge" style={{ background: 'rgba(0,0,0,.3)', color: '#fff', backdropFilter: 'blur(4px)' }}>
-                  Leçon {idx + 1} / {total}
+          {/* Lesson content player */}
+          {current?.type === 'VIDEO' && current?.contentUrl ? (
+            <video
+              key={current.id}
+              src={current.contentUrl}
+              controls
+              style={{ width: '100%', display: 'block', background: '#000', maxHeight: 480 }}
+              onEnded={() => { if (!isCurrentDone) toggleDone(currentId); }}
+            />
+          ) : current?.type === 'PDF' && current?.contentUrl ? (
+            <div style={{ width: '100%', height: 500, background: '#f5f5f5' }}>
+              <iframe
+                key={current.id}
+                src={current.contentUrl}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+                title={current.title}
+              />
+            </div>
+          ) : (
+            <div className="course-video">
+              <div className="course-video-grid" />
+              <div className="col" style={{ alignItems: 'center', color: '#fff', gap: 8, position: 'relative', zIndex: 1 }}>
+                <Icon name={current?.type === 'QUIZ' ? 'quiz' : current?.type === 'PROJECT' ? 'flag' : 'video'} size={36} style={{ opacity: .85 }} />
+                <span style={{ fontWeight: 600, opacity: .85, fontSize: 14 }}>
+                  {current?.type === 'QUIZ'
+                    ? 'Quiz — accès depuis le tableau de bord'
+                    : current?.type === 'PROJECT'
+                    ? 'Projet pratique'
+                    : 'Aucun fichier pour cette leçon'}
                 </span>
               </div>
-            )}
-            <div className="course-controls">
-              <button style={{ color: '#fff' }} onClick={() => setPlaying(p => !p)}>
-                <Icon name={playing ? 'pause' : 'play'} size={20} fill />
-              </button>
-              <div className="course-scrub" onClick={() => setPlaying(true)}>
-                <div className="course-scrub-fill" style={{ width: playing ? '42%' : '12%', transition: 'width .3s' }} />
-              </div>
-              <span className="small tnum" style={{ color: '#fff', fontWeight: 600 }}>
-                {current?.duration || '—'}
-              </span>
-              <button style={{ color: '#fff' }} aria-label="Plein écran">
-                <Icon name="layers" size={18} />
-              </button>
+              {current && (
+                <div style={{ position: 'absolute', top: 16, left: 18, zIndex: 2 }}>
+                  <span className="badge" style={{ background: 'rgba(0,0,0,.3)', color: '#fff', backdropFilter: 'blur(4px)' }}>
+                    Leçon {idx + 1} / {total}
+                  </span>
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           {/* Below video */}
           <div style={{ padding: '22px 28px 0' }}>

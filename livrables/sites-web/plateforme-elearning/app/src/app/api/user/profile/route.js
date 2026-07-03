@@ -32,3 +32,21 @@ export async function GET() {
 
   return NextResponse.json(user);
 }
+
+export async function PATCH(request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+  }
+
+  const { name } = await request.json();
+  if (!name?.trim()) return NextResponse.json({ error: 'Nom requis' }, { status: 400 });
+
+  const user = await prisma.user.update({
+    where: { id: session.user.id },
+    data: { name: name.trim() },
+    select: { id: true, name: true, email: true, role: true },
+  });
+
+  return NextResponse.json(user);
+}

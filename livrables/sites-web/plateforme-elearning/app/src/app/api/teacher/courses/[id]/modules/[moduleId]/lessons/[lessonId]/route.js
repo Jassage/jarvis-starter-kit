@@ -22,7 +22,7 @@ export async function PUT(request, { params }) {
   const owned = await checkLessonOwnership(params.id, params.moduleId, params.lessonId, session.user.id);
   if (!owned) return NextResponse.json({ error: 'Leçon introuvable' }, { status: 404 });
 
-  const { title, type, duration, order } = await request.json();
+  const { title, type, duration, order, contentUrl } = await request.json();
 
   const updated = await prisma.lesson.update({
     where: { id: params.lessonId },
@@ -31,6 +31,7 @@ export async function PUT(request, { params }) {
       ...(type && VALID_TYPES.includes(type) && { type }),
       ...(duration !== undefined && { duration: duration.trim() || '—' }),
       ...(order !== undefined && { order }),
+      ...(contentUrl === null && { contentUrl: null }),
     },
   });
 

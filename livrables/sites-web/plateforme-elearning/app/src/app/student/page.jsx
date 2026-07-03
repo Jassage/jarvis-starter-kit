@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import Icon from '@/components/Icon';
 import AppShell from '@/components/AppShell';
 import CourseThumb from '@/components/CourseThumb';
@@ -12,6 +13,7 @@ import { useGo } from '@/lib/navigation';
 
 export default function StudentDashboard() {
   const go = useGo();
+  const router = useRouter();
   const { data: session } = useSession();
   const [enrollments, setEnrollments] = useState([]);
   const [allCourses, setAllCourses] = useState([]);
@@ -81,7 +83,7 @@ export default function StudentDashboard() {
                   if (!c) return null;
                   return (
                     <div key={e.id} className="edu-continue anim-up" style={{ animationDelay: `${i * 0.05}s` }}
-                      onClick={() => go('course')}>
+                      onClick={() => router.push('/course?id=' + e.courseId)}>
                       <div className="edu-continue-thumb">
                         <CourseThumb course={{ color: c.color, title: c.title }} h={86} />
                       </div>
@@ -128,7 +130,7 @@ export default function StudentDashboard() {
                 <div className="edu-grid edu-grid-3">
                   {recs.map((c, i) => (
                     <div key={c.id} className="edu-rec-card anim-up" style={{ animationDelay: `${i * 0.05}s` }}
-                      onClick={() => go('course')}>
+                      onClick={() => router.push('/course?id=' + c.id)}>
                       <div style={{ padding: 9 }}>
                         <CourseThumb course={{ color: c.color, title: c.title }} h={120} />
                       </div>
