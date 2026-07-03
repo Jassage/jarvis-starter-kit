@@ -5,5 +5,5 @@ export const createEcritureSchema = z.object({
   compteCreditId: z.string().min(1, 'Compte crédit requis'),
   montant: z.coerce.number().positive('Montant > 0'),
   libelle: z.string().min(1, 'Libellé requis').max(255),
-  date: z.string().optional(),
+  date: z.string().refine((value) => !Number.isNaN(new Date(value).getTime()), { message: 'Date invalide' }).optional(),
 });

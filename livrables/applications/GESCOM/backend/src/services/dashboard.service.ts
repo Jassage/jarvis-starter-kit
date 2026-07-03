@@ -1,4 +1,4 @@
-import prisma from '../utils/prisma';
+import prisma from "../utils/prisma";
 
 function startOfDay(d: Date): Date {
   const x = new Date(d);
@@ -28,13 +28,16 @@ export async function getDashboardStats() {
     ventes7JoursBrut,
     lignesVente7Jours,
     clientsRisqueBrut,
+    clientsRisqueCount,
     encoursCredit,
     commandesEnAttenteCount,
     commandesEnRetardCount,
     commandesListeBrut,
   ] = await Promise.all([
     prisma.produit.findMany({ where: { actif: true } }),
-    prisma.stockEmplacement.findMany({ include: { produit: true, emplacement: true } }),
+    prisma.stockEmplacement.findMany({
+      include: { produit: true, emplacement: true },
+    }),
     prisma.emplacement.findMany({ where: { actif: true } }),
     prisma.mouvementStock.findMany({
       include: {
@@ -42,53 +45,85 @@ export async function getDashboardStats() {
         emplacement: { select: { nom: true } },
         utilisateur: { select: { nom: true, prenom: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: 8,
     }),
-    prisma.vente.findMany({ where: { statut: 'VALIDEE', dateVente: { gte: debutJour } }, select: { montantTotal: true } }),
-    prisma.vente.findMany({ where: { statut: 'VALIDEE', dateVente: { gte: debutHier, lt: debutJour } }, select: { montantTotal: true } }),
     prisma.vente.findMany({
-      where: { statut: 'VALIDEE', dateVente: { gte: debut7Jours } },
+      where: { statut: "VALIDEE", dateVente: { gte: debutJour } },
+      select: { montantTotal: true },
+    }),
+    prisma.vente.findMany({
+      where: {
+        statut: "VALIDEE",
+        dateVente: { gte: debutHier, lt: debutJour },
+      },
+      select: { montantTotal: true },
+    }),
+    prisma.vente.findMany({
+      where: { statut: "VALIDEE", dateVente: { gte: debut7Jours } },
       select: { dateVente: true, montantTotal: true },
     }),
     prisma.ligneVente.findMany({
-      where: { vente: { statut: 'VALIDEE', dateVente: { gte: debut7Jours } } },
+      where: { vente: { statut: "VALIDEE", dateVente: { gte: debut7Jours } } },
       select: {
         quantite: true,
         montantLigne: true,
-        produit: { select: { id: true, nom: true, reference: true, unite: true } },
+        produit: {
+          select: { id: true, nom: true, reference: true, unite: true },
+        },
       },
     }),
     prisma.client.findMany({
       where: { actif: true, soldeDu: { gt: 0 } },
-      orderBy: { soldeDu: 'desc' },
+      orderBy: { soldeDu: "desc" },
       take: 5,
       select: { id: true, nom: true, type: true, soldeDu: true },
     }),
-    prisma.client.aggregate({ where: { actif: true }, _sum: { soldeDu: true } }),
-    prisma.commandeFournisseur.count({ where: { statut: { in: ['ENVOYEE', 'RECUE_PARTIELLE'] } } }),
+    prisma.client.count({ where: { actif: true, soldeDu: { gt: 0 } } }),
+    prisma.client.aggregate({
+      where: { actif: true },
+      _sum: { soldeDu: true },
+    }),
     prisma.commandeFournisseur.count({
-      where: { statut: { in: ['ENVOYEE', 'RECUE_PARTIELLE'] }, dateLivraisonPrevue: { lt: maintenant } },
+      where: { statut: { in: ["ENVOYEE", "RECUE_PARTIELLE"] } },
+    }),
+    prisma.commandeFournisseur.count({
+      where: {
+        statut: { in: ["ENVOYEE", "RECUE_PARTIELLE"] },
+        dateLivraisonPrevue: { lt: maintenant },
+      },
     }),
     prisma.commandeFournisseur.findMany({
-      where: { statut: { in: ['ENVOYEE', 'RECUE_PARTIELLE'] } },
+      where: { statut: { in: ["ENVOYEE", "RECUE_PARTIELLE"] } },
       include: { fournisseur: { select: { nom: true } } },
-      orderBy: { dateLivraisonPrevue: 'asc' },
+      orderBy: { dateLivraisonPrevue: "asc" },
       take: 5,
     }),
   ]);
 
   // Stock
-  const valeurStockTotal = stocks.reduce((sum, s) => sum + s.quantite * Number(s.produit.prixAchatMoyen), 0);
+  const valeurStockTotal = stocks.reduce(
+    (sum, s) => sum + s.quantite * Number(s.produit.prixAchatMoyen),
+    0,
+  );
   const stocksAlerte = stocks
     .filter((s) => s.produit.actif && s.quantite <= s.produit.seuilAlerte)
-    .sort((a, b) => (a.quantite - a.produit.seuilAlerte) - (b.quantite - b.produit.seuilAlerte));
+    .sort(
+      (a, b) =>
+        a.quantite -
+        a.produit.seuilAlerte -
+        (b.quantite - b.produit.seuilAlerte),
+    );
   const produitsSousAlerte = stocksAlerte.length;
   const alertesStock = stocksAlerte.slice(0, 5).map((s) => ({
     produitId: s.produit.id,
     reference: s.produit.reference,
     nom: s.produit.nom,
-    emplacement: { id: s.emplacement.id, nom: s.emplacement.nom, type: s.emplacement.type },
+    emplacement: {
+      id: s.emplacement.id,
+      nom: s.emplacement.nom,
+      type: s.emplacement.type,
+    },
     quantite: s.quantite,
     seuilAlerte: s.produit.seuilAlerte,
   }));
@@ -100,16 +135,28 @@ export async function getDashboardStats() {
       nom: e.nom,
       type: e.type,
       quantiteTotale: stocksEmp.reduce((sum, s) => sum + s.quantite, 0),
-      valeur: stocksEmp.reduce((sum, s) => sum + s.quantite * Number(s.produit.prixAchatMoyen), 0),
+      valeur: stocksEmp.reduce(
+        (sum, s) => sum + s.quantite * Number(s.produit.prixAchatMoyen),
+        0,
+      ),
     };
   });
 
   // Ventes / tendance
-  const montantJour = ventesJour.reduce((sum, v) => sum + Number(v.montantTotal), 0);
-  const montantHier = ventesHier.reduce((sum, v) => sum + Number(v.montantTotal), 0);
-  const variationPct = montantHier > 0
-    ? Math.round(((montantJour - montantHier) / montantHier) * 1000) / 10
-    : montantJour > 0 ? 100 : 0;
+  const montantJour = ventesJour.reduce(
+    (sum, v) => sum + Number(v.montantTotal),
+    0,
+  );
+  const montantHier = ventesHier.reduce(
+    (sum, v) => sum + Number(v.montantTotal),
+    0,
+  );
+  const variationPct =
+    montantHier > 0
+      ? Math.round(((montantJour - montantHier) / montantHier) * 1000) / 10
+      : montantJour > 0
+        ? 100
+        : 0;
 
   // Ventes 7 jours en buckets quotidiens (jours sans vente = 0, pas d'absence)
   const buckets = new Map<string, { montant: number; count: number }>();
@@ -126,10 +173,23 @@ export async function getDashboardStats() {
       bucket.count += 1;
     }
   }
-  const ventes7Jours = Array.from(buckets.entries()).map(([date, v]) => ({ date, montant: v.montant, count: v.count }));
+  const ventes7Jours = Array.from(buckets.entries()).map(([date, v]) => ({
+    date,
+    montant: v.montant,
+    count: v.count,
+  }));
 
   // Top produits vendus (7 jours)
-  const parProduit = new Map<string, { nom: string; reference: string; unite: string; quantiteVendue: number; montantVendu: number }>();
+  const parProduit = new Map<
+    string,
+    {
+      nom: string;
+      reference: string;
+      unite: string;
+      quantiteVendue: number;
+      montantVendu: number;
+    }
+  >();
   for (const l of lignesVente7Jours) {
     const entry = parProduit.get(l.produit.id) ?? {
       nom: l.produit.nom,
@@ -148,7 +208,12 @@ export async function getDashboardStats() {
     .slice(0, 5);
 
   // Clients à risque (solde dû)
-  const clientsRisque = clientsRisqueBrut.map((c) => ({ id: c.id, nom: c.nom, type: c.type, soldeDu: Number(c.soldeDu) }));
+  const clientsRisque = clientsRisqueBrut.map((c) => ({
+    id: c.id,
+    nom: c.nom,
+    type: c.type,
+    soldeDu: Number(c.soldeDu),
+  }));
   const encoursCreditTotal = Number(encoursCredit._sum.soldeDu ?? 0);
 
   // Commandes fournisseur en attente
@@ -173,6 +238,7 @@ export async function getDashboardStats() {
     ventes7Jours,
     topProduits,
     clientsRisque,
+    clientsRisqueCount,
     encoursCreditTotal,
     commandesEnAttente: commandesEnAttenteCount,
     commandesEnRetard: commandesEnRetardCount,

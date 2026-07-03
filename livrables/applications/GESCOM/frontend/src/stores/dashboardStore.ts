@@ -1,11 +1,11 @@
-'use client';
-import { create } from 'zustand';
-import api from '@/lib/api';
+"use client";
+import { create } from "zustand";
+import api from "@/lib/api";
 
 export interface RepartitionEmplacement {
   id: string;
   nom: string;
-  type: 'BOUTIQUE' | 'ENTREPOT';
+  type: "BOUTIQUE" | "ENTREPOT";
   quantiteTotale: number;
   valeur: number;
 }
@@ -47,7 +47,7 @@ export interface TopProduit {
 export interface ClientRisque {
   id: string;
   nom: string;
-  type: 'PARTICULIER' | 'GROSSISTE';
+  type: "PARTICULIER" | "GROSSISTE";
   soldeDu: number;
 }
 
@@ -72,6 +72,7 @@ export interface DashboardStats {
   ventes7Jours: VenteJour[];
   topProduits: TopProduit[];
   clientsRisque: ClientRisque[];
+  clientsRisqueCount: number;
   encoursCreditTotal: number;
   commandesEnAttente: number;
   commandesEnRetard: number;
@@ -90,7 +91,7 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   fetchStats: async () => {
     set({ isLoading: true });
     try {
-      const { data } = await api.get('/dashboard/stats');
+      const { data } = await api.get("/dashboard/stats");
       set({ stats: data.data, isLoading: false });
     } catch (e) {
       set({ isLoading: false });

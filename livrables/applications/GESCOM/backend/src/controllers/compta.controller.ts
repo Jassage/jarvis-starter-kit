@@ -3,7 +3,9 @@ import { AuthRequest, ok } from '../types';
 import * as comptaService from '../services/compta.service';
 
 function parseDate(v: unknown): Date | undefined {
-  return typeof v === 'string' && v ? new Date(v) : undefined;
+  if (typeof v !== 'string' || !v) return undefined;
+  const date = new Date(v);
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
 export async function planComptable(req: AuthRequest, res: Response, next: NextFunction) {
