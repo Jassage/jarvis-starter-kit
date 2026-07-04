@@ -1,4 +1,4 @@
-import { Router, Response } from "express";
+import { Router, Request, Response } from "express";
 import { requireAuth } from "../middlewares/auth.middleware";
 import { authLimiter } from "../middlewares/rateLimit.middleware";
 import { AuthRequest } from "../types";
@@ -12,14 +12,34 @@ import {
   verifyEmailService,
   changePasswordService,
   deleteAccountService,
+  refreshTokenService,
+  logoutService,
 } from "../services/auth.service";
 
 const router = Router();
 
+const REFRESH_COOKIE = "konekte_refresh";
+const isProd = process.env.NODE_ENV === "production";
+
+const setRefreshCookie = (res: Response, token: string) => {
+  res.cookie(REFRESH_COOKIE, token, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    path: "/api/auth",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+};
+
+const clearRefreshCookie = (res: Response) => {
+  res.clearCookie(REFRESH_COOKIE, { path: "/api/auth" });
+};
+
 router.post("/register", authLimiter, async (req, res: Response): Promise<void> => {
   try {
     const data = registerSchema.parse(req.body);
-    const result = await registerService(data);
+    const { refreshToken, ...result } = await registerService(data);
+    setRefreshCookie(res, refreshToken);
     res.status(201).json({ success: true, data: result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Erreur serveur";
@@ -30,12 +50,34 @@ router.post("/register", authLimiter, async (req, res: Response): Promise<void> 
 router.post("/login", authLimiter, async (req, res: Response): Promise<void> => {
   try {
     const data = loginSchema.parse(req.body);
-    const result = await loginService(data);
+    const { refreshToken, ...result } = await loginService(data);
+    setRefreshCookie(res, refreshToken);
     res.json({ success: true, data: result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Erreur serveur";
     res.status(401).json({ success: false, error: message });
   }
+});
+
+router.post("/refresh", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rawToken = req.cookies?.[REFRESH_COOKIE];
+    if (!rawToken) { res.status(401).json({ success: false, error: "Non authentifié" }); return; }
+
+    const { refreshToken, ...result } = await refreshTokenService(rawToken);
+    setRefreshCookie(res, refreshToken);
+    res.json({ success: true, data: result });
+  } catch (err: unknown) {
+    clearRefreshCookie(res);
+    const message = err instanceof Error ? err.message : "Erreur serveur";
+    res.status(401).json({ success: false, error: message });
+  }
+});
+
+router.post("/logout", async (req: Request, res: Response): Promise<void> => {
+  await logoutService(req.cookies?.[REFRESH_COOKIE]).catch(() => {});
+  clearRefreshCookie(res);
+  res.json({ success: true });
 });
 
 router.get("/me", requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {

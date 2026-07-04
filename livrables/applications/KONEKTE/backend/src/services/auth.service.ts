@@ -29,12 +29,14 @@ export const registerService = async (data: RegisterInput) => {
     include: { profile: true },
   });
 
-  const token = generateToken(user.id, user.email, user.subscriptionPlan);
+  const token = generateAccessToken(user.id, user.email, user.subscriptionPlan);
+  const refreshToken = await generateRefreshToken(user.id);
 
   sendVerificationEmail(user.email, emailVerifyToken).catch(() => {});
 
   return {
     token,
+    refreshToken,
     user: {
       id: user.id,
       email: user.email,
@@ -63,10 +65,12 @@ export const loginService = async (data: LoginInput) => {
     data: { lastSeenAt: new Date() },
   });
 
-  const token = generateToken(user.id, user.email, user.subscriptionPlan);
+  const token = generateAccessToken(user.id, user.email, user.subscriptionPlan);
+  const refreshToken = await generateRefreshToken(user.id);
 
   return {
     token,
+    refreshToken,
     user: {
       id: user.id,
       email: user.email,
@@ -159,6 +163,7 @@ export const changePasswordService = async (userId: string, currentPassword: str
 
   const passwordHash = await bcrypt.hash(newPassword, 12);
   await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+  await revokeAllRefreshTokens(userId);
 };
 
 export const deleteAccountService = async (userId: string, password: string) => {
@@ -169,13 +174,80 @@ export const deleteAccountService = async (userId: string, password: string) => 
   if (!isValid) throw new Error("Mot de passe incorrect");
 
   await prisma.user.update({ where: { id: userId }, data: { isActive: false, email: `deleted_${Date.now()}_${user.email}` } });
+  await revokeAllRefreshTokens(userId);
 };
 
-const generateToken = (userId: string, email: string, plan: string) => {
+// ─── Jetons ───────────────────────────────────────────────────────────────────
+// Access token : court (JWT stateless, envoyé dans l'en-tête Authorization).
+// Refresh token : long (opaque, en cookie httpOnly, tracé en base pour pouvoir
+// être révoqué — contrairement à un JWT seul qui reste valide jusqu'à expiration).
+
+const generateAccessToken = (userId: string, email: string, plan: string) => {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET non configuré");
 
   return jwt.sign({ userId, email, plan }, secret, {
-    expiresIn: (process.env.JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"]) ?? "7d",
+    expiresIn: (process.env.ACCESS_TOKEN_EXPIRES_IN as jwt.SignOptions["expiresIn"]) ?? "15m",
+  });
+};
+
+const hashToken = (raw: string) => crypto.createHash("sha256").update(raw).digest("hex");
+
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+const generateRefreshToken = async (userId: string) => {
+  const raw = crypto.randomBytes(48).toString("hex");
+  await prisma.refreshToken.create({
+    data: {
+      userId,
+      tokenHash: hashToken(raw),
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+    },
+  });
+  return raw;
+};
+
+export const refreshTokenService = async (rawToken: string) => {
+  const record = await prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(rawToken) } });
+  if (!record || record.revokedAt || record.expiresAt < new Date()) {
+    throw new Error("Session expirée, reconnecte-toi");
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: record.userId }, include: { profile: true } });
+  if (!user || !user.isActive || user.isBanned) throw new Error("Compte inactif");
+
+  // Rotation : l'ancien refresh token est révoqué dès qu'il sert une fois.
+  await prisma.refreshToken.update({ where: { id: record.id }, data: { revokedAt: new Date() } });
+
+  const token = generateAccessToken(user.id, user.email, user.subscriptionPlan);
+  const refreshToken = await generateRefreshToken(user.id);
+
+  return {
+    token,
+    refreshToken,
+    user: {
+      id: user.id,
+      email: user.email,
+      firstName: user.profile?.firstName,
+      city: user.profile?.city,
+      isEmailVerified: user.isEmailVerified,
+      subscriptionPlan: user.subscriptionPlan,
+      profileComplete: user.profile?.profileComplete ?? 0,
+    },
+  };
+};
+
+export const logoutService = async (rawToken?: string) => {
+  if (!rawToken) return;
+  await prisma.refreshToken.updateMany({
+    where: { tokenHash: hashToken(rawToken), revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+};
+
+export const revokeAllRefreshTokens = async (userId: string) => {
+  await prisma.refreshToken.updateMany({
+    where: { userId, revokedAt: null },
+    data: { revokedAt: new Date() },
   });
 };

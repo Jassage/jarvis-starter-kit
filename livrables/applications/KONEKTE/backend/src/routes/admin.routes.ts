@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { requireAuth, requireAdmin } from "../middlewares/auth.middleware";
 import { AuthRequest } from "../types";
 import { prisma } from "../lib/prisma";
+import { revokeAllRefreshTokens } from "../services/auth.service";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -58,6 +59,7 @@ router.post("/ban/:userId", async (req: AuthRequest, res: Response): Promise<voi
       where: { reportedId: req.params.userId as string },
       data: { isReviewed: true },
     });
+    await revokeAllRefreshTokens(req.params.userId as string);
     res.json({ success: true });
   } catch {
     res.status(400).json({ success: false, error: "Utilisateur introuvable" });

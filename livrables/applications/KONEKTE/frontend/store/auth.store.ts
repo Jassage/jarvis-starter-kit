@@ -16,10 +16,12 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isLoading: boolean;
+  authChecked: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  bootstrap: () => Promise<void>;
 }
 
 interface RegisterData {
@@ -37,14 +39,14 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       isLoading: false,
+      authChecked: false,
 
       login: async (email, password) => {
         set({ isLoading: true });
         try {
           const { data } = await api.post("/auth/login", { email, password });
           const { token, user } = data.data;
-          localStorage.setItem("konekte_token", token);
-          set({ token, user, isLoading: false });
+          set({ token, user, isLoading: false, authChecked: true });
         } catch (err) {
           set({ isLoading: false });
           throw err;
@@ -56,8 +58,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { data } = await api.post("/auth/register", formData);
           const { token, user } = data.data;
-          localStorage.setItem("konekte_token", token);
-          set({ token, user, isLoading: false });
+          set({ token, user, isLoading: false, authChecked: true });
         } catch (err) {
           set({ isLoading: false });
           throw err;
@@ -65,9 +66,22 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        localStorage.removeItem("konekte_token");
+        api.post("/auth/logout").catch(() => {});
         set({ user: null, token: null });
         window.location.href = "/login";
+      },
+
+      // Appelé au chargement de l'app : échange le cookie httpOnly de refresh
+      // contre un nouvel access token (celui-ci n'est plus persisté en
+      // localStorage, il ne vit qu'en mémoire le temps de la session).
+      bootstrap: async () => {
+        try {
+          const { data } = await api.post("/auth/refresh");
+          const { token, user } = data.data;
+          set({ token, user, authChecked: true });
+        } catch {
+          set({ token: null, user: null, authChecked: true });
+        }
       },
 
       refreshUser: async () => {
@@ -89,6 +103,6 @@ export const useAuthStore = create<AuthState>()(
         }
       },
     }),
-    { name: "konekte_auth", partialize: (s) => ({ token: s.token, user: s.user }) }
+    { name: "konekte_auth", partialize: (s) => ({ user: s.user }) }
   )
 );
