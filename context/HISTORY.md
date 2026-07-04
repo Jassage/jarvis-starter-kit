@@ -7,7 +7,297 @@
 
 ---
 
+## 2026-07-03 (nuit)
+
+### KONEKTE : audit senior dev + durcissement sécurité complet (RBAC, paiements, auth par cookie, scaling Socket.io)
+
+**Contexte :** Jaslin a demandé d'analyser KONEKTE ("analyser connecter", clarifié ensuite). Audit senior dev en lecture seule (agent dédié) sur backend + frontend, puis correctifs appliqués par vagues successives validées avec lui à chaque étape.
+
+**🔴 Critiques (1ère vague) :**
+- **RBAC admin absent** : aucun champ `role`/`isAdmin` sur `User`, les routes `/admin/*` (stats, reports, ban) n'étaient protégées que par `requireAuth` — n'importe quel compte fraîchement créé pouvait bannir un autre utilisateur. Fix : champ `isAdmin` + middleware `requireAdmin` vérifié en base à chaque requête (pas depuis le JWT, pour qu'une révocation soit immédiate), garde ajoutée aussi côté frontend (`/admin` redirige un non-admin vers `/discover`).
+- **Callback MonCash rejouable** : `GET /moncash/callback` public et sans protection contre le rejeu pouvait, en théorie, prolonger le Premium deux fois pour un seul paiement. Fix : verrou atomique (compare-and-swap) avant `activatePremium`.
+
+**🟠 Importants (2e vague) :**
+- Validation Zod (contrôle 18 ans à l'inscription) écrite mais jamais branchée sur le vrai routeur monté (`auth.controller.ts` était du code mort) — corrigé, controller mort supprimé.
+- Rate limiting ajouté sur `/auth/login` et `/auth/register` (10 tentatives/15 min).
+- **Fuite de données sur "Qui m'a liké"** : un compte FREE recevait déjà la vraie photo et le vrai prénom dans la réponse API, seul un flou CSS masquait l'info à l'écran (contournable via l'onglet réseau du navigateur). Fix : flou appliqué côté serveur via une transformation Cloudinary, prénom/âge/ville masqués à la source.
+- Quota de 3 Super Likes/jour imposé côté serveur (n'était vérifié que par le compteur affiché au frontend).
+- Index Prisma ajoutés sur les requêtes les plus fréquentes (messages, notifications, swipes, profils pour la découverte) — aucun n'existait avant.
+- **Replay Stripe** : ledger `WebhookEvent` (id Stripe en clé primaire) rendant `handleStripeWebhook` idempotent.
+
+**Chantiers plus larges (validés séparément par Jaslin) :**
+- **Migration auth JWT localStorage → refresh token cookie httpOnly** : l'ancien JWT unique de 7 jours en localStorage était volable via une seule faille XSS et ne pouvait jamais être révoqué avant expiration. Nouveau modèle `RefreshToken` (token opaque haché SHA-256, rotation à chaque usage, révocable individuellement ou en masse par utilisateur), access token JWT ramené à 15 minutes et gardé en mémoire côté frontend (plus persisté), refresh token en cookie httpOnly. `changePasswordService`, `deleteAccountService` et le ban admin révoquent désormais toutes les sessions actives.
+- **Adapter Redis pour Socket.io** : `onlineUsers` (Map en mémoire locale au process) cassait dès qu'on tourne sur plusieurs instances Railway. Remplacé par des rooms Socket.io par utilisateur (`user:{id}`) + `@socket.io/redis-adapter` avec `ioredis` (le Redis système de la machine est en 5.x, incompatible avec le client `redis` v4+ qui exige RESP3/HELLO — `ioredis` reste compatible). Actif uniquement si `REDIS_URL` est définie, sinon retombe sur l'adapter mémoire (comportement inchangé en dev local). Bonus : un utilisateur avec plusieurs onglets ouverts n'est plus marqué "hors ligne" dès que l'un d'eux se ferme (bug latent de l'ancienne Map, sans rapport avec le scaling).
+
+**Vérifications, toutes en conditions réelles (pas de simple lecture de code) :**
+- RBAC : testé via API réelle (403 vs 200 selon `isAdmin`) + navigateur (redirection non-admin confirmée, page admin rendue avec vraies stats pour un vrai admin).
+- MonCash/Stripe : simulation de callback/webhook concurrent ou rejoué, confirmant qu'une seule activation a lieu (webhook Stripe rejoué deux fois via une vraie signature de test : 31 jours ajoutés, pas 62).
+- Auth cookie : inscription réelle en navigateur, cookie httpOnly confirmé invisible via `document.cookie`, navigation vers une page protégée sans aucun token en localStorage (bootstrap via cookie), logout confirmé comme révocation réelle (refresh échoue juste après, réussissait juste avant).
+- Socket.io/Redis : test décisif avec **deux process backend distincts** (ports 4000 et 4001) connectés au même Redis, message envoyé depuis l'instance :4000 reçu en temps réel par un utilisateur connecté sur l'instance :4001, statut du message confirmé `DELIVERED` en base.
+
+**Reste à faire (non traité, hors périmètre de cette session) :** zéro test automatisé sur le projet (comme sur tous les autres SaaS de Jaslin) ; credentials MonCash Digicel toujours en attente.
+
+---
+
+## 2026-07-03 (soir)
+
+### EduSpher : dashboards formateur/admin/étudiant complétés (navigation, messagerie, avis, streak)
+
+**Contexte :** Jaslin voulait "terminer" EduSpher. En creusant, le vrai problème n'était pas la migration Postgres/Vercel prévue en Phase 3d, mais une navigation cassée : dans `Sidebar.jsx`, une bonne moitié des items de menu (Étudiants, Revenus, Avis côté formateur ; Utilisateurs, Cours, Revenus côté admin ; Explorer, Messages côté étudiant) redirigeaient silencieusement vers le dashboard principal au lieu d'ouvrir une vraie page. Plus des widgets 100% mockés depuis le prototype d'origine (`lib/data.js`) : notifications, certificats, "Série de 7 jours" figée.
+
+**Découverte au passage :** du travail de la session précédente (Phase 3c complète + une feature d'upload vidéo/PDF déjà codée) était resté non commité dans l'arbre de travail. Commité séparément en premier (`2513788`) pour ne pas mélanger avec le nouveau travail.
+
+**Décisions prises avec Jaslin avant de coder :** construire la messagerie complète plutôt qu'une simple page "bientôt disponible" (choix : polling au lieu de Socket.io, absent des dépendances et moins compatible avec un futur déploiement Vercel serverless) ; construire un vrai suivi de série d'activité plutôt que de garder ou retirer le widget figé.
+
+**Livré :**
+- **Navigation** : `navigation.js` complété avec toutes les routes manquantes, `Sidebar.jsx` route directement sur la clé du menu au lieu de retomber sur le dashboard parent. Suppression du sélecteur "Changer de vue (démo)" du Topbar, reliquat du prototype incompatible avec l'auth réelle (changeait de route sans changer le rôle de session).
+- **Notifications & certificats réels** : API + branchement, génération automatique d'un certificat et d'une notification à 100% de progression d'un cours (modèle `Certificate` rendu unique par `(userId, courseId)`).
+- **Formateur** : pages Étudiants (API déjà existante, jamais branchée), Revenus (mensuel + par cours, même logique que le calcul déjà utilisé côté admin), Avis (liste + moyenne par cours).
+- **Admin** : pages Utilisateurs (changement de rôle), Cours (publier/dépublier), Revenus plateforme.
+- **Étudiant** : page Explorer (catalogue réel avec recherche/filtre catégorie, réutilise une API `/api/courses` déjà existante mais jamais consommée).
+- **Avis** : widget de soumission (étoiles + commentaire) sur la page cours, garde d'inscription requise, upsert.
+- **Messagerie 1:1 étudiant↔formateur construite de zéro** : modèles Prisma `Conversation`/`ConversationParticipant`/`Message`, 5 routes API, composant partagé `MessagesView` (liste conversations + fil de discussion, polling 4s/25s), bouton "Contacter le formateur" sur la page cours, bouton "Message" sur la page Étudiants formateur, badge non-lus dynamique dans la sidebar.
+- **Série d'activité réelle** : modèle `ActivityLog`, déclenchée uniquement par une vraie action d'apprentissage (compléter une leçon ou soumettre un quiz, pas une simple visite), route `/api/user/streak`, widget sidebar remplacé.
+
+**Bug pré-existant corrigé au passage** (sans rapport avec la demande initiale) : `SettingsPage.jsx` référençait une variable `user` inexistante — crash `ReferenceError` au chargement de `/student|teacher|admin/settings` pour les trois rôles, présent depuis le commit Phase 3c jamais testé en navigateur.
+
+**Vérification :** `next build` propre à chaque étape. Flux vérifié de bout en bout dans un vrai navigateur (Playwright installé à la volée, chromium déjà en cache local) : connexion successive des 3 comptes démo, chaque item de sidebar ouvre sa vraie page avec de vraies données ; avis soumis côté étudiant confirmé visible côté formateur (agrégation correcte) ; message envoyé étudiant→formateur reçu en temps quasi-réel avec badge non-lu à jour ; leçon marquée terminée déclenche bien la série d'activité (widget "Série de 1 jour" affiché). Environnement de test très chargé (4-5 serveurs de dev d'autres projets tournant en parallèle) : plusieurs faux positifs de chargement lents pendant les tests, tous confirmés comme non-bugs après re-vérification avec un délai plus long.
+
+**Suite immédiate, même soirée :** les 2 derniers mocks identifiés ont aussi été traités à la demande de Jaslin. Dashboard étudiant : les 3 StatCards restées en placeholder ("—") branchées sur les vraies données (certificats via `/api/certificates`, série via `/api/user/streak`), et le ring "Objectif de la semaine" recalculé depuis les vraies leçons complétées cette semaine (nouvelle route `/api/user/weekly-progress`, calcul du lundi de la semaine courante + parsing best-effort des durées vidéo `mm:ss` pour les heures) au lieu de la formule fictive `enrolled.length * 2`. Landing page : catalogue et carte hero branchés sur `/api/courses` (triés par popularité, note moyenne et nombre de leçons réels) au lieu du mock `lib/data.js`, désormais supprimé (plus aucune référence dans le code). **Plus aucune donnée mockée sur EduSpher.** Migration SQLite → PostgreSQL/Supabase et déploiement Vercel toujours en attente (Phase 3d), non prioritaires pour l'instant selon Jaslin.
+
+---
+
+## 2026-07-03 (suite)
+
+### BANKA : bilan comptable déséquilibré — root cause diagnostiquée et corrigée
+
+**Contexte :** après avoir clôturé GESCOM, Jaslin a laissé le choix du sujet suivant. Choix motivé par l'urgence signalée le 2026-07-02 (bug bloquant avant toute démo client) et l'absence de dépendance externe (contrairement à MonCash/Digicel sur LAKAY/KONEKTE, en attente de credentials).
+
+**Découverte en démarrant l'investigation :** un fix complet et cohérent existait déjà, non commité, dans l'arbre de travail (fichiers modifiés visibles dès le `git status` de début de session : `seed.ts`, `compta.service.ts`, `interet.service.ts`, `rh.service.ts`, plus 15 migrations supprimées et remplacées par une migration unique `20260703012057_init` datée du matin même). Vraisemblablement le travail d'une session Claude Code antérieure interrompue avant `/update`. Vérifié cohérent (`prisma migrate status` : schéma à jour) et validé mathématiquement avant de poursuivre.
+
+**Root cause cumulée (plusieurs bugs, tous corrigés) :**
+1. `compta.service.ts::getBilan()` — `Math.abs()` sur les soldes débit/crédit effaçait le signe nécessaire à l'identité comptable ; comptes 1000-1300 (Capital, Réserves, Report, Résultat) typés PASSIF au lieu de CAPITAUX ; le résultat de l'exercice (produits − charges) n'était jamais intégré au bilan, alors qu'il est structurellement nécessaire dès la première écriture de produit ou de charge ; `ensureComptesBase()` ne resynchronisait pas le type des comptes existants au démarrage.
+2. `seed.ts` — le plan comptable seedé (101000, 511000, …) était un doublon jamais référencé par aucune écriture automatique (qui utilise les numéros de `compta.service.ts::COMPTES_BASE`, ex. 5700, 1000). Aucune dotation initiale en capital : la caisse comptable partait de zéro sans jamais avoir été alimentée. Corrigé : plan comptable unifié sur `COMPTES_BASE` + écriture de dotation initiale idempotente (Débit 5700 Caisse / Crédit 1000 Capital social, 1 000 000 HTG).
+3. `interet.service.ts` — intérêts servis aux épargnants comptabilisés en PRODUIT (7100) au lieu de CHARGE (6100) pour la banque.
+4. `rh.service.ts` — remboursement de crédit sur salaire avec débit/crédit inversés ; écriture d'apurement des avances déduites en paie manquante ; `creerAvance()` ne posait l'écriture que si l'employé avait un compte interne (alors que l'argent sort de la caisse dans tous les cas) ; `annulerAvance()` sans contre-passation.
+5. **Trouvé et corrigé dans cette session** (`compte.service.ts::createCompte`, absent du fix préexistant) : ouvrir un compte avec un solde initial > 0 mettait à jour `compte.solde` directement sans jamais poser l'écriture Débit 5700 (Caisse) / Crédit 2600 (dépôts clients) que `POST /transactions` (DEPOT) pose normalement pour un dépôt classique. C'est la cause la plus susceptible de se reproduire en usage réel : chaque nouvelle ouverture de compte avec argent déséquilibrait silencieusement le bilan.
+
+**Vérification :** 0 erreur TypeScript. Testé via l'API réelle (curl, session admin) : état initial équilibré (Actif 1 000 000 = Capitaux 1 000 000) ; après création d'un compte COURANT avec solde initial 25 000 HTG, toujours équilibré (Actif 1 025 000 = Passif 25 000 + Capitaux 1 000 000).
+
+**GESCOM a la même root cause** (`Math.abs()` + résultat non intégré dans `getBilan()`). Pas touché : Jaslin corrigeait le même fichier en parallèle dans son IDE au moment de l'investigation (approche légèrement différente — révision via `getResultat()`, garde `Math.abs()` qui fonctionne dans le cas courant mais reste fragile si un compte a un solde de signe anormal).
+
+**Anomalie relevée en passant, non corrigée (hors périmètre) :** `client.service.ts::createClient` plante en 500 si `dateNaissance` est une simple date `'YYYY-MM-DD'` au lieu d'un datetime ISO complet — le schéma Zod accepte les deux formats mais le service ne convertit pas avant l'appel Prisma.
+
+**Reste à faire :** documentation `docs/` du 2026-07-02 (manuel utilisateur + doc technique) toujours non commitée ; reset de la base de dev recommandé avant démo (données de test créées pendant la vérification : client "Test Verif" + 2 comptes).
+
+---
+
+## 2026-07-03
+
+### GESCOM : module Rapports livré (Phase 6) — roadmap Ph0-6 entièrement clôturée
+
+**Contexte :** Jaslin a demandé de "finaliser GESCOM". Après clarification, trois chantiers retenus parmi ceux laissés ouverts en fin de session précédente : committer un fix CSS resté en attente, construire Rapports (Ph6, jamais scopé au-delà du nom), et faire la première vérification visuelle en navigateur du projet (jamais faite jusqu'ici faute d'outil).
+
+**Fix CSS committé :** `:where(.input)` sur GESCOM (même correctif de spécificité que BANKA le 2026-06-29), resté non commité depuis la session Comptabilité.
+
+**Scoping Rapports (validé avec Jaslin) :** 4 volets — ventes, stock, achats/fournisseurs, clients.
+
+**Backend (`rapport.service.ts`, nouveau) :** 4 fonctions d'agrégation Prisma pures (`groupBy`, buckets quotidiens, `Promise.all`), même style que `dashboard.service.ts` :
+- `getRapportVentes({from, to, emplacementId})` : CA, panier moyen, marge estimée (sur `prixAchatMoyen` courant, pas d'historique de coût stocké donc approximation assumée), évolution quotidienne, top 10 produits/clients, ventilation par mode de paiement.
+- `getRapportStock()` : valorisation par emplacement/catégorie, rotation sur 90 jours (meilleure rotation vs produits dormants), alertes de seuil.
+- `getRapportAchats({from, to})` : montant commandé/reçu, taux de réception, top fournisseurs, commandes en retard. Pas de délai de livraison réel calculable (aucune date de réception effective stockée en base, seulement `dateLivraisonPrevue`).
+- `getRapportClients()` : encours crédit total, ventilation PARTICULIER/GROSSISTE, top clients par solde dû et par montant acheté.
+
+RBAC `requireAdmin` (SUPER_ADMIN/GERANT) sur tout le module — vue transversale multi-domaines, même logique que le rapport BRH restreint sur BANKA.
+
+**Frontend :** page `/rapports` à onglets (Ventes, Stock, Achats, Clients), calquée sur le pattern `/compta` (store Zustand dédié `rapportStore.ts`, un composant par onglet dans `components/rapports/`, réutilisation à 100% des composants partagés StatCard/Badge/EmptyState/table-shell). Nouveau petit composant `PeriodeFilter` (sélecteur de dates) partagé entre l'onglet Ventes et l'onglet Achats.
+
+**Vérification :** 0 erreur TypeScript backend + frontend. 4 endpoints testés via l'API réelle (curl, cookies de session) avec les données de seed — résultats cohérents (CA, valorisation stock ~394K HTG, taux de réception 100%, etc.).
+
+**Première vérification visuelle en navigateur du projet GESCOM :** aucun outil de navigateur disponible dans l'environnement (ni `chromium-cli` ni Playwright préinstallés, contrairement à ce qui avait été utilisé pour les captures du manuel BANKA). Playwright + Chromium installés à la volée dans un dossier temporaire (`.tmp-playwright`, ~600 Mo, supprimé après usage, non commité). Script de pilotage : login réel, navigation vers les 4 onglets Rapports + Transferts + les 6 onglets Compta (jamais vérifiés visuellement non plus), capture d'écran de chaque page, écoute des erreurs console/réseau. Résultat : toutes les pages rendent correctement, aucune erreur bloquante (seule anomalie : une requête de police Next.js interrompue, sans impact). Design cohérent avec le reste de l'application.
+
+**Anomalies notées en passant (hors périmètre de cette session, non corrigées) :**
+- Bilan comptable toujours signalé déséquilibré (Actif 30 141,2 HTG ≠ Passif 27 616,2 HTG) — bug déjà connu depuis la session Compta, probablement l'absence d'écriture de capital initial dans le seed.
+- Nom d'un fournisseur de seed mal encodé en base ("Distributeur Cara?be" au lieu de "Caraïbe") — donnée préexistante, visible aussi sur la page Fournisseurs, sans lien avec le travail de cette session.
+
+**Ceci clôture définitivement la roadmap Ph0-6 de GESCOM.** Reste : tests automatisés (toujours zéro sur tout le projet), investigation du déséquilibre du bilan, correction de l'encodage du nom du fournisseur seed.
+
+---
+
+## 2026-07-02 (nuit)
+
+### GESCOM : module Comptabilité livré (Phase 5) + refonte design system frontend
+
+**Contexte :** suite directe de la Phase 4 (Transferts, session précédente). Pendant que je travaillais sur la Phase 5 via les outils, Jaslin a retravaillé en parallèle dans son IDE le design system frontend (nouveaux composants Badge/StatCard/PageToolbar/EmptyState, classe CSS `table-shell`, palette teal-émeraude) et avait déjà adapté mes pages Transferts et Compta à ce nouveau style au moment où j'ai voulu committer. Confirmé avec lui : tout committer, et aligner mes sous-composants Compta sur le nouveau design system.
+
+**Backend `compta.service.ts` :** plan comptable (lecture), journal avec saisie manuelle (`createEcriture`, validation débit≠crédit), grand livre par compte (solde cumulé ligne par ligne), bilan actif/passif (via `groupBy` Prisma, pas de chargement en mémoire), compte de résultat produits/charges avec marge, dashboard comptable (agrège bilan+résultat+alertes), réconciliation des écritures en échec (liste + résolution). RBAC `requireComptable` (SUPER_ADMIN/GERANT/COMPTABLE) sur tout le module.
+
+**Bug corrigé au passage :** `achat.service.ts` avait un commentaire prétendant tracer les écritures comptables échouées vers `EcritureEchec` lors de la réception d'une commande, mais le bloc `catch` était vide — les échecs étaient silencieusement perdus, rendant la réconciliation invisible pour ce flux. Corrigé sur le modèle de `vente.service.ts` qui le faisait déjà correctement.
+
+**Frontend :** page `/compta` à onglets (Dashboard, Journal, Grand livre, Bilan, Résultat, Réconciliation) plutôt que 6 routes séparées comme sur BANKA (pattern d'origine, adapté pour limiter le nombre de fichiers). Store Zustand `comptaStore`. Composants tabs réalignés sur le nouveau design system (StatCard, Badge, EmptyState, table-shell) après le refactor concurrent de Jaslin.
+
+**Refonte design system (Jaslin, en parallèle) :** nouveaux composants réutilisables `Badge` (tones success/danger/warning/info/violet/brand/neutral), `StatCard` (KPI compact/étendu avec tendance), `PageToolbar` (recherche + bouton d'action), `EmptyState`. Palette CSS étendue (`--color-primary` teal-émeraude distinct du vert succès, `--gradient-brand`, classes `.btn`/`.badge`/`.table-shell`). Appliqué à Login, Dashboard, Produits, Stock, Ventes, Clients, Achats, Fournisseurs, Transferts, Header, Modal.
+
+**Vérification :** 0 erreur TypeScript backend + frontend (avant et après le refactor design). Module Compta testé de bout en bout via l'API réelle (curl) : plan comptable (9 comptes SYSCOHADA réduits), écriture manuelle créée + rejet débit=crédit, grand livre avec solde cumulé cohérent, bilan et compte de résultat arithmétiquement corrects. **Bilan signalé non équilibré** (Actif ≠ Passif) — reflet honnête de données de seed/écritures pré-existantes non balancées (même symptôme observé indépendamment côté BANKA le même soir, voir entrée suivante), pas un bug du module. Réconciliation testée (404 sur écriture inexistante, liste vide). **UI React non vérifiée visuellement** (ni chromium-cli ni playwright disponibles dans cet environnement d'outils).
+
+**Commits distincts :** un pour la refonte design system (fichiers pré-existants + nouveaux composants ui/), un pour le module Comptabilité (backend + frontend, dépend des composants ui/ du premier commit).
+
+**Ceci clôt la roadmap Ph0-5 de GESCOM.** Reste : Rapports (Ph6, jamais scopé en détail au-delà du nom), tests automatisés (toujours zéro sur tout le projet), vérification visuelle en navigateur de tout le flux (Transferts + Compta), investiguer le déséquilibre du bilan (probablement l'absence d'écriture d'apport de capital initial dans le seed).
+
+---
+
+## 2026-07-02 (soir, suite)
+
+### BANKA : manuel d'utilisation + documentation technique livrés
+
+**Contexte :** demande client d'un manuel d'utilisation et d'une documentation pour BANKA. Deux livrables produits dans `livrables/applications/BANKA/docs/`.
+
+**Documentation technique (`DOCUMENTATION_TECHNIQUE.md`) :** rédigée à partir du code réel (routes, schéma Prisma, sidebar, .env). Couvre : présentation, architecture avec diagramme, stack, installation, 15 variables d'environnement + config en base (seed-config), structure du projet, modèle de données (modèles + enums clés), 19 préfixes d'API, 4 jobs planifiés, sécurité (JWT, 2FA, CAS, rate limiting), matrice RBAC complète 7 rôles x 17 écrans, comptabilité partie double, déploiement production, scripts npm.
+
+**Manuel utilisateur (2 formats : `MANUEL_UTILISATEUR.md` + `MANUEL_UTILISATEUR.html` stylé avec page de couverture, prêt à imprimer en PDF ou ouvrir dans Word) :** non technique, en français, destiné au personnel de banque. 7 sections : connexion/interface, rôles, module Bancaire écran par écran (clients KYC, comptes, caisse, transactions avec seuil de validation, prêts, épargne, taux de change, rapports, BRH, AML, audit, administration), Comptabilité, RH, FAQ dépannage.
+
+**Captures d'écran réelles :** BANKA lancé localement, navigation automatisée via Playwright (Chrome headless, connexion admin), 22 captures haute résolution dans `docs/images/`, 19 intégrées dans le manuel avec légendes. Rendu final vérifié en navigateur (0 image cassée).
+
+**⚠️ Bug découvert au passage :** le Bilan comptable affiche « Bilan déséquilibré » (Actif 112 000 HTG ≠ Passif 142 000 HTG, aucun compte capitaux). Problème dans les données de seed ou les écritures automatiques, à investiguer avant toute démo client. Capture écartée du manuel pour cette raison.
+
+**À faire éventuellement :** refaire la capture du login sans le bloc « comptes de démonstration » pour la version production du manuel ; corriger le déséquilibre du bilan.
+
+---
+
+## 2026-07-02 (soir)
+
+### GESCOM : module Transferts inter-sites livré (Phase 4)
+
+**Contexte :** suite de la roadmap GESCOM. D'abord commit des changements en attente (dashboard premium + fix race condition stock de la session du 2026-07-01), puis construction de la Phase 4 (modèle Prisma `Transfert`/`LigneTransfert` déjà présent dans le schéma mais aucune route/service/écran).
+
+**Backend (suit exactement les patterns d'Achats/Stock) :**
+- `transfert.service.ts` : `createTransfert` (décrément atomique CAS à la source via `updateMany({ where: { quantite: { gte } } })`, création `Transfert` + `LigneTransfert` + `MouvementStock` TRANSFERT_SORTIE dans une seule transaction), `recevoirTransfert` (incrément à la destination via upsert, `MouvementStock` TRANSFERT_ENTREE, statut → RECU avec CAS sur le statut pour empêcher une double réception concurrente), `annulerTransfert` (restitution du stock à la source, statut → ANNULE, même garde CAS)
+- Numérotation auto TRF-000001, RBAC `requireStock` (SUPER_ADMIN/GERANT/MAGASINIER)
+- Validation Zod : `emplacementSourceId !== emplacementDestId` refusé au niveau schéma
+
+**Frontend :**
+- Page `/transferts` (stats EN_TRANSIT/RECU/total, tableau, actions Réceptionner/Annuler), store Zustand `transfertStore`, modal `NouveauTransfertModal` (sélection source/destination, produits chargés depuis le stock réel de la source via `useStockStore`, quantité plafonnée au disponible)
+- Entrée sidebar "Transferts" activée (état "Bientôt" retiré)
+
+**Vérification :** 0 erreur TypeScript backend + frontend. Flux testé de bout en bout via l'API réelle (curl, cookies de session) faute de navigateur pilotable dans l'environnement (ni `chromium-cli` ni `playwright` disponibles) : création avec décrément stock source confirmé (118→108), stock insuffisant rejeté (400), source=destination rejeté, réception avec incrément destination confirmé (50→60) et statut RECU, annulation avec restitution confirmée (103→108), double-annulation bloquée. **UI React non vérifiée visuellement** — logique métier API validée uniquement.
+
+**À faire encore :** vérification visuelle du flux UI en navigateur, Comptabilité SYSCOHADA + Rapports (Ph5/6), tests automatisés (toujours zéro sur le projet).
+
+---
+
+## 2026-07-02 (après-midi)
+
+### EduSpher : Phase 3c livrée (éditeur de contenu, inscriptions, Stripe, admin réel, settings)
+
+**Contexte :** Finalisation d'EduSpher après analyse senior dev. 7 fichiers créés ou modifiés en une session pour rendre la plateforme production-ready sur les fonctionnalités coeur.
+
+**Éditeur de contenu formateur :**
+- 4 routes API créées : modules (GET/POST), module/:id (PUT/DELETE), lessons (POST), lesson/:id (PUT/DELETE). Ownership vérifié à chaque niveau (course.authorId via Prisma)
+- Page `/teacher/courses/[id]` : liste modules et leçons, inline editing titre, réordonnancement (swap d'order via 2 PUT parallèles), ajout/suppression, types leçons VIDEO/PDF/QUIZ/PROJECT
+- Bouton "Contenu" ajouté dans `/teacher/courses` avec navigation dynamique via `useRouter`
+
+**Flow d'inscription étudiant :**
+- `POST /api/user/enrollments` : cours gratuits créés directement, cours payants retournent 402 avec le prix
+- Page `/course` redessinée : gate d'accès (prévisualisation si non inscrit, player complet si inscrit), banner de confirmation après paiement avec bouton "Actualiser" (`activateEnrollment`)
+- Dashboard étudiant : navigation directe vers le cours depuis "Continuer" et les recommandations
+
+**Paiements Stripe :**
+- `POST /api/payments/checkout` : crée une Stripe Checkout Session avec `metadata: { courseId, userId }`, retourne `{ url }` pour redirect
+- `POST /api/payments/webhook` : vérifie la signature (`request.text()` pour raw body), crée l'enrollment via `upsert` sur `checkout.session.completed` + `payment_status === 'paid'`
+- Guard lazy init : retourne 503 si `STRIPE_SECRET_KEY` absent (évite le crash `new Stripe(undefined)`)
+
+**Dashboard admin réel :**
+- `GET /api/admin/stats` : 7 requêtes Prisma en parallèle. Revenus estimés (somme des prix). 12 requêtes count mensuelles pour le graphique (SQLite ne supporte pas DATE_TRUNC)
+- `admin/page.jsx` entièrement réécrit : KPI cards, graphique SVG inscriptions, tables users/cours, barres catégories, tous branchés sur l'API
+
+**Settings profil réel :**
+- `PATCH /api/user/profile` ajouté
+- `SettingsPage.jsx` : chargement profil réel + inputs contrôlés + bouton "Enregistrer" avec feedback visuel
+
+**À faire :** Phase 3d — upload fichiers (vidéos/PDF dans les leçons), migration SQLite → Supabase/PostgreSQL, déploiement Vercel.
+
+---
+
+## 2026-07-02
+
+### LAKAY : activation d'abonnement centralisée + paiement manuel MonCash/NatCash + job d'expiration
+
+**Contexte :** suite de la revue de la veille. Trois demandes de Jaslin : débloquer réellement l'édition des annonces actives côté frontend, mettre en place un paiement manuel (numéros MonCash/NatCash affichés + preuve envoyée par l'utilisateur, validée par l'admin) faute d'API disponibles, et compléter le cycle d'abonnement. Tout typé (tsc backend + frontend, 0 erreur). Non testé en navigateur.
+
+**Déblocage édition annonce (frontend) :** la page d'édition bloquait encore sur `status !== 'DRAFT'`. Aligné sur le backend : seuls SUSPENDED/RENTED/SOLD sont non éditables, bandeau d'avertissement "repassera en révision" quand l'annonce n'est pas en brouillon, badge de statut dynamique.
+
+**Service paiement centralisé (`payments.service.ts`, nouveau) :** point d'entrée UNIQUE `activateSubscription(paymentId, transactionId)` appelé par les webhooks MonCash/NatCash ET par la validation admin. Effets idempotents/atomiques : Payment→COMPLETED (compare-and-swap), Subscription upsert (+30j), et selon le plan : ENTERPRISE → `Agency.isVerified=true`. Choix d'ingénierie sur "compte vérifié selon le plan" (Jaslin a laissé trancher) : badge pro **dérivé du plan** (aucun champ dupliqué, jamais désynchronisé) + vérif agence pour ENTERPRISE ; `User.isVerified` (email) non touché. Helpers : `initiatePlanPayment`, `submitPaymentProof`, `getPaymentNumbers`, `rejectPayment`, `expireSubscriptions`, `verifyWebhookSecret`, `isProPlan`.
+
+**Paiement manuel (en attendant les API) :**
+- `GET /payments/methods` : numéros MonCash/NatCash, éditables via SystemConfig (`PAYMENT_MONCASH_NUMBER`/`_NAME`, `PAYMENT_NATCASH_*`), défaut placeholder `+509 0000-0000`.
+- `POST /payments/submit-proof` (multipart) : Payment PENDING marqué `awaitingVerification`, référence de transaction + capture Cloudinary optionnelle, garde-fou 1 preuve en attente/user.
+- Admin : `GET /admin/payments`, `POST /admin/payments/:id/approve` (→ activateSubscription), `/reject` (→ FAILED + notif), avec audit log.
+- NatCash ajouté en miroir de MonCash (routes initiate + callback, secret `NATCASH_WEBHOOK_SECRET`).
+- Frontend : modal pricing repensée (onglets MonCash/NatCash, numéro copiable, formulaire preuve, écran succès) ; page admin/payments transformée de placeholder en file de validation (onglets En attente/Validés/Rejetés, boutons Valider/Rejeter).
+
+**Job d'expiration (BullMQ) :** queue `maintenance` + `maintenance.worker.ts`, planifié toutes les heures (`scheduleMaintenanceJobs`, jobId fixe idempotent), branché server.ts + Bull Board. `expireSubscriptions()` : payants dépassés → FREE + retrait vérif agence (si ENTERPRISE) + notif (badge pro se corrige seul). `expireListings()` : annonces ACTIVE dépassées → EXPIRED (statut attendu par l'UI mais jamais posé jusqu'ici).
+
+**À configurer :** `.env` → `MONCASH_WEBHOOK_SECRET`, `NATCASH_WEBHOOK_SECRET`, `BULL_BOARD_USER`, `BULL_BOARD_PASSWORD` ; SystemConfig → numéros `PAYMENT_MONCASH_NUMBER`/`_NAME` + `PAYMENT_NATCASH_NUMBER`/`_NAME`.
+
+**Reste à faire :** intégration réelle API MonCash (Digicel) / NatCash (Natcom) avec vraie vérif de signature ; tests bout-en-bout navigateur (auth cookie httpOnly, upload multipart de preuve, validation admin, CSP sur pages Leaflet/Cloudinary).
+
+---
+
+## 2026-07-01 (soir)
+
+### LAKAY : audit senior dev complet + correctifs sécurité, scalabilité et durcissement
+
+**Contexte :** revue de code approfondie de LAKAY (posture senior dev) sur demande de Jaslin : identifier ce qui est bon, ce qui manque, ce qui mérite d'être amélioré. Diagnostic puis correction de bout en bout (backend Express/Prisma + frontend Next.js), le tout typé (tsc exit 0) et migration appliquée.
+
+**Verdict d'ensemble :** architecture solide et pro (modules/services/controllers/routes, Zod partout, RBAC hiérarchique, refresh token rotatif, transactions Prisma, cache Redis fault-tolerant, workers BullMQ). Mais 2 failles critiques + 1 problème de scalabilité majeur avant prod.
+
+**🔴 Critiques corrigés :**
+- **Bypass de paiement MonCash** (`payments.routes.ts`) : le webhook `/moncash/callback` était derrière `router.use(requireAuth)` → inaccessible aux serveurs MonCash, et surtout exploitable (tout user connecté pouvait s'auto-créditer un abonnement en POSTant `success:true`). Fix : webhook sorti de l'auth, authentifié par secret partagé `MONCASH_WEBHOOK_SECRET` (header `x-moncash-signature`, `timingSafeEqual`), idempotent (compare-and-swap sur PENDING), fail-closed sans secret (503).
+- **IDOR détail d'annonce** (`listings.service.ts:getListingById`) : `GET /listings/:id` en `optionalAuth` sans garde de statut → n'importe qui pouvait lire les DRAFT/PENDING/REJECTED d'autrui (motif de rejet, tel, WhatsApp). Fix : statuts non publics visibles uniquement par propriétaire/admin (sinon 404), + `viewCount` non incrémenté pour le propriétaire ni les annonces non publiques.
+
+**🟠 Importants corrigés :**
+- **Zéro index en base** (`schema.prisma`) : ajout d'index composites sur `Listing` (status+dept+type, status+price, status+createdAt, tri sponsorisé, expiresAt) + FK chaudes (`Message(conversationId,createdAt)`, `Favorite.listingId`, `Notification(userId,isRead,createdAt)`, `RefreshToken.userId`, `VisitRequest`, `Payment`). Migration `20260701232949_add_indexes_and_security`.
+- **Filtre géo cassé** (`search.service.ts`) : Haversine appliqué APRÈS pagination → total faux, pages incomplètes. Fix : bounding box dans le `where` (pagination/total corrects) + raffinage Haversine sur la page + champ `distanceKm`.
+- **Fuite Cloudinary** (`deleteListing`) : suppression d'annonce ne purgeait pas les images Cloudinary → assets orphelins. Fix : purge best-effort `Promise.allSettled`.
+- **Collision clé de cache recherche** : `base64.slice(0,80)` remplacé par hash SHA-1 complet.
+
+**🟡 Corrigés :**
+- N+1 `getUnreadCount` (1 count par conversation, toutes les 30s) → 2 requêtes fixes (un `count` avec OR par conversation).
+- Bull Board inaccessible (`requireAdmin` sans `requireAuth`) → Basic Auth `BULL_BOARD_USER`/`BULL_BOARD_PASSWORD`, fail-closed.
+
+**Décisions produit (validées par Jaslin) + implémentées :**
+- **Édition annonce ACTIVE** → toute édition la renvoie en `PENDING_REVIEW` (+ strip des champs protégés côté serveur).
+- **Avis** → réservés aux utilisateurs ayant une visite `CONFIRMED`/`COMPLETED` (marqués `isVerified`).
+- **Durcissement front** → refresh token migré en **cookie httpOnly** (`path=/api/auth`, secure+sameSite=none en prod), front en `withCredentials`, plus aucun refresh token en localStorage (`setTokens`→`setAccessToken`), CSP + en-têtes sécurité posés dans `next.config.ts` (connect-src dérivé API/Socket, img Cloudinary/OSM/unpkg, frame-ancestors none). Limite connue : Next impose `unsafe-inline`.
+
+**À faire côté Jaslin :** définir `MONCASH_WEBHOOK_SECRET`, `BULL_BOARD_USER`, `BULL_BOARD_PASSWORD` dans le `.env` backend ; tester en navigateur le nouveau flux d'auth par cookie (login/refresh/logout) et vérifier que la CSP ne bloque rien (Leaflet, Cloudinary) ; en prod, HTTPS obligatoire des deux côtés pour le cookie sameSite=none.
+
+---
+
 ## 2026-07-01
+
+### GESCOM : analyse senior dev + dashboard premium + fix sécurité stock
+
+**Contexte :** Analyse du projet GESCOM demandée en mode senior dev. Constat que la mémoire/contexte était partiellement dépassé : Achats/Fournisseurs (Phase 3) était en réalité déjà livré (backend + frontend fonctionnels), pas seulement planifié.
+
+**Analyse senior dev — points relevés :**
+- Race condition (TOCTOU) sur le décrément de stock dans `vente.service.ts` (createVente) et `stock.service.ts` (ajusterStock) : vérification du stock disponible séparée du décrément, sans garde atomique — même bug que celui corrigé sur BANKA en Semaine 2. Risque réel vu que GESCOM est déjà utilisé par le client.
+- Modules manquants vs roadmap : Transferts inter-sites (modèle Prisma présent, aucune route/service/écran), Comptabilité (seules les écritures automatiques existent, pas de saisie manuelle ni de bilan/résultat/grand livre), Rapports (absent).
+- Zéro test automatisé sur tout le projet (backend + frontend).
+- 0 erreur TypeScript sur les deux côtés, RBAC et audit log appliqués de façon cohérente sur toutes les routes.
+
+**Dashboard premium (livré) :**
+- Backend `dashboard.service.ts` enrichi : tendance ventes jour vs veille (%), historique ventes 7 derniers jours (buckets quotidiens), top 5 produits vendus (7j), top 5 clients à risque par solde dû + encours crédit total, détection automatique des commandes fournisseur en retard (dateLivraisonPrevue dépassée), liste des alertes stock (pas juste un compteur)
+- Frontend dashboard entièrement redessiné : hero avec actions rapides gérées par rôle (Nouvelle vente / Ajuster le stock / Nouvelle commande — mêmes groupes de rôles que le RBAC backend requireVente/requireStock), 5 KPI avec badge de tendance, graphique ventes 7 jours (barres CSS, sans dépendance externe), widgets top produits/clients à risque/commandes en retard, bannière de succès locale remplaçant tout `alert()`/`confirm()` natif
+- Nouveau composant `QuickAjustementModal` : picker produit+emplacement réutilisant l'`AjustementForm` existant, permet d'ajuster le stock sans quitter le dashboard
+- Vérifié en navigateur de bout en bout : login, KPI, graphique, ajustement de stock réel (0 → 15, alerte résolue automatiquement), modal nouvelle vente
+
+**Fix sécurité (bonus, pendant la retouche des mêmes fichiers) :**
+- `createVente` et `ajusterStock` : remplacement du pattern check-puis-update par un compare-and-swap atomique (`updateMany` avec `where: { quantite: { gte } }`) dans la transaction Prisma, empêchant la survente/stock négatif en cas d'opérations concurrentes sur le même produit
+
+**À faire encore :** Transferts inter-sites (Ph4), Comptabilité SYSCOHADA + Rapports (Ph5/6), tests automatisés.
+
+---
 
 ### LAKAY : session de polissage UI/UX + corrections bugs critiques
 
