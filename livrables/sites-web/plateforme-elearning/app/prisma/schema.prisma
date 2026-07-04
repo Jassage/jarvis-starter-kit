@@ -17,6 +17,7 @@ enum Role {
 
 enum CourseStatus {
   DRAFT
+  PENDING_REVIEW
   PUBLISHED
 }
 
@@ -106,6 +107,7 @@ model Course {
   hours       Float        @default(0)
   color       String       @default("brand")
   status      CourseStatus @default(DRAFT)
+  submittedAt DateTime?
 
   tenantId String?
 

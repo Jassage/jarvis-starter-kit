@@ -38,6 +38,10 @@ export async function PUT(request, { params }) {
 
   const { title, description, category, level, price, hours, status } = await request.json();
 
+  if (status && !['DRAFT', 'PENDING_REVIEW'].includes(status)) {
+    return NextResponse.json({ error: 'Un formateur ne peut pas publier directement, soumets le cours pour validation' }, { status: 400 });
+  }
+
   const updated = await prisma.course.update({
     where: { id: params.id },
     data: {
@@ -47,7 +51,7 @@ export async function PUT(request, { params }) {
       ...(level && { level }),
       ...(price !== undefined && { price: parseFloat(price) }),
       ...(hours !== undefined && { hours: parseFloat(hours) }),
-      ...(status && { status }),
+      ...(status && { status, submittedAt: status === 'PENDING_REVIEW' ? new Date() : owned.submittedAt }),
     },
   });
 

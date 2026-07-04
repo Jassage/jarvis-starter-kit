@@ -56,8 +56,7 @@ export default function TeacherCoursesPage() {
     setSaving(false);
   };
 
-  const togglePublish = async (c) => {
-    const newStatus = c.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED';
+  const changeStatus = async (c, newStatus) => {
     await fetch(`/api/teacher/courses/${c.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -173,9 +172,11 @@ export default function TeacherCoursesPage() {
                         <span className="tiny muted">{c.level}</span>
                       </div>
                     </div>
-                    <span className={'badge ' + (c.status === 'PUBLISHED' ? 'badge-green badge-dot' : '')}
-                      style={c.status !== 'PUBLISHED' ? { background: 'var(--bg-2)', color: 'var(--ink-3)' } : undefined}>
-                      {c.status === 'PUBLISHED' ? 'Publié' : 'Brouillon'}
+                    <span className={
+                        'badge ' + (c.status === 'PUBLISHED' ? 'badge-green badge-dot' : c.status === 'PENDING_REVIEW' ? 'badge-amber badge-dot' : '')
+                      }
+                      style={c.status === 'DRAFT' ? { background: 'var(--bg-2)', color: 'var(--ink-3)' } : undefined}>
+                      {c.status === 'PUBLISHED' ? 'Publié' : c.status === 'PENDING_REVIEW' ? 'En validation' : 'Brouillon'}
                     </span>
                   </div>
 
@@ -202,11 +203,15 @@ export default function TeacherCoursesPage() {
                   <button className="btn btn-outline btn-sm" onClick={() => openEdit(c)}>
                     <Icon name="settings" size={15} />Modifier
                   </button>
-                  <button
-                    className={'btn btn-sm ' + (c.status === 'PUBLISHED' ? 'btn-soft' : 'btn-primary')}
-                    onClick={() => togglePublish(c)}>
-                    {c.status === 'PUBLISHED' ? 'Dépublier' : 'Publier'}
-                  </button>
+                  {c.status === 'PUBLISHED' && (
+                    <button className="btn btn-soft btn-sm" onClick={() => changeStatus(c, 'DRAFT')}>Dépublier</button>
+                  )}
+                  {c.status === 'DRAFT' && (
+                    <button className="btn btn-primary btn-sm" onClick={() => changeStatus(c, 'PENDING_REVIEW')}>Soumettre pour validation</button>
+                  )}
+                  {c.status === 'PENDING_REVIEW' && (
+                    <button className="btn btn-outline btn-sm" onClick={() => changeStatus(c, 'DRAFT')}>Annuler la soumission</button>
+                  )}
                   <button className="btn btn-ghost btn-icon btn-sm" onClick={() => deleteCourse(c.id)}
                     style={{ color: 'var(--rose)' }} title="Supprimer">
                     <Icon name="close" size={16} />

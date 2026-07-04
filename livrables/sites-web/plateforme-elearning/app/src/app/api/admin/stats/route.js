@@ -8,7 +8,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
   }
 
-  const [totalUsers, publishedCourses, totalEnrollments, users, courses, allCourses, paidEnrollments] =
+  const [totalUsers, publishedCourses, totalEnrollments, users, courses, allCourses, paidEnrollments, pendingCourses] =
     await Promise.all([
       prisma.user.count(),
       prisma.course.count({ where: { status: 'PUBLISHED' } }),
@@ -32,6 +32,11 @@ export async function GET() {
       }),
       prisma.course.findMany({ where: { status: 'PUBLISHED' }, select: { category: true } }),
       prisma.enrollment.findMany({ include: { course: { select: { price: true } } } }),
+      prisma.course.findMany({
+        where: { status: 'PENDING_REVIEW' },
+        orderBy: { submittedAt: 'asc' },
+        include: { author: { select: { name: true } } },
+      }),
     ]);
 
   const totalRevenue = paidEnrollments.reduce((s, e) => s + (e.course?.price || 0), 0);
@@ -71,5 +76,11 @@ export async function GET() {
     courses,
     categoryDistribution,
     monthlyEnrollments,
+    pendingCourses: pendingCourses.map(c => ({
+      id: c.id,
+      title: c.title,
+      author: c.author?.name,
+      submittedAt: c.submittedAt,
+    })),
   });
 }

@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Icon from '@/components/Icon';
 import AppShell from '@/components/AppShell';
 import Stars from '@/components/Stars';
 import StatCard from '@/components/StatCard';
 import { ROLE_LABEL, ROLE_AVATAR, getInitials } from '@/lib/nav-config';
 import { useGo } from '@/lib/navigation';
+import { timeAgo } from '@/lib/time';
 
 const CAT_COLORS = ['brand', 'violet', 'teal', 'amber', 'green', 'rose'];
 
@@ -17,16 +19,34 @@ function fmt(n) {
 
 export default function AdminPanel() {
   const go = useGo();
+  const router = useRouter();
   const [tab, setTab] = useState('users');
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [actingId, setActingId] = useState(null);
 
-  useEffect(() => {
+  const loadStats = () => {
     fetch('/api/admin/stats')
       .then(r => r.json())
       .then(data => { setStats(data); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { loadStats(); }, []);
+
+  async function runAction(id, action) {
+    setActingId(id);
+    try {
+      await fetch(`/api/admin/courses/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      loadStats();
+    } finally {
+      setActingId(null);
+    }
+  }
 
   // SVG chart
   const chartData = stats?.monthlyEnrollments ?? Array(12).fill(0);
@@ -36,11 +56,7 @@ export default function AdminPanel() {
   const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
   const area = `${line} L${W},${H} L0,${H} Z`;
 
-  const queue = [
-    { t: 'Rust pour les systèmes embarqués', a: 'Lucas Fontaine', when: 'il y a 2 h' },
-    { t: 'Figma avancé : auto-layout', a: 'Marc Dubois', when: 'il y a 5 h' },
-    { t: 'Growth hacking B2B', a: 'Thomas Roy', when: 'hier' },
-  ];
+  const queue = stats?.pendingCourses ?? [];
 
   const kpis = stats?.kpis;
   const users = stats?.users ?? [];
@@ -184,20 +200,36 @@ export default function AdminPanel() {
             <div className="card card-pad">
               <div className="row between" style={{ marginBottom: 10 }}>
                 <h3 className="h4">À valider</h3>
-                <span className="badge badge-amber">{queue.length}</span>
+                {queue.length > 0 && <span className="badge badge-amber">{queue.length}</span>}
               </div>
-              <div className="col gap-12">
-                {queue.map((q, i) => (
-                  <div key={i} className="col gap-8" style={{ paddingBottom: 12, borderBottom: i < queue.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                    <span style={{ fontWeight: 650, fontSize: 13.5, lineHeight: 1.3 }}>{q.t}</span>
-                    <span className="tiny muted">{q.a} · {q.when}</span>
-                    <div className="row gap-8">
-                      <button className="btn btn-primary btn-sm" style={{ height: 30, flex: 1 }}><Icon name="check" size={15} />Valider</button>
-                      <button className="btn btn-outline btn-sm" style={{ height: 30 }}>Voir</button>
+              {loading ? (
+                <div className="small muted">Chargement…</div>
+              ) : queue.length === 0 ? (
+                <div className="small muted">Aucun cours en attente de validation.</div>
+              ) : (
+                <div className="col gap-12">
+                  {queue.map((q, i) => (
+                    <div key={q.id} className="col gap-8" style={{ paddingBottom: 12, borderBottom: i < queue.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <span style={{ fontWeight: 650, fontSize: 13.5, lineHeight: 1.3 }}>{q.title}</span>
+                      <span className="tiny muted">{q.author} · {timeAgo(q.submittedAt)}</span>
+                      <div className="row gap-8">
+                        <button className="btn btn-primary btn-sm" style={{ height: 30, flex: 1 }} disabled={actingId === q.id}
+                          onClick={() => runAction(q.id, 'approve')}>
+                          <Icon name="check" size={15} />Valider
+                        </button>
+                        <button className="btn btn-outline btn-sm" style={{ height: 30 }} disabled={actingId === q.id}
+                          onClick={() => runAction(q.id, 'reject')}>
+                          Rejeter
+                        </button>
+                        <button className="btn btn-outline btn-sm" style={{ height: 30 }}
+                          onClick={() => router.push(`/course?id=${q.id}`)}>
+                          Voir
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Categories */}

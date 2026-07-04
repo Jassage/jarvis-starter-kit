@@ -19,8 +19,7 @@ export default function AdminCoursesPage() {
     }).catch(() => setLoading(false));
   }, []);
 
-  async function toggleStatus(id, currentStatus) {
-    const nextStatus = currentStatus === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED';
+  async function runAction(id, action, nextStatus) {
     setSavingId(id);
     const prev = courses;
     setCourses(cs => cs.map(c => c.id === id ? { ...c, status: nextStatus } : c));
@@ -28,7 +27,7 @@ export default function AdminCoursesPage() {
       const r = await fetch(`/api/admin/courses/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({ action }),
       });
       if (!r.ok) setCourses(prev);
     } catch {
@@ -39,7 +38,7 @@ export default function AdminCoursesPage() {
   }
 
   const published = courses.filter(c => c.status === 'PUBLISHED').length;
-  const drafts = courses.filter(c => c.status === 'DRAFT').length;
+  const pending = courses.filter(c => c.status === 'PENDING_REVIEW').length;
   const totalEnrollments = courses.reduce((s, c) => s + (c._count?.enrollments || 0), 0);
 
   return (
@@ -49,7 +48,7 @@ export default function AdminCoursesPage() {
         <div className="edu-grid edu-grid-4" style={{ marginBottom: 22 }}>
           <StatCard icon="layers" color="brand" label="Total" value={String(courses.length)} />
           <StatCard icon="checkCircle" color="green" label="Publiés" value={String(published)} />
-          <StatCard icon="edit" color="amber" label="Brouillons" value={String(drafts)} />
+          <StatCard icon="flag" color="amber" label="En attente de validation" value={String(pending)} />
           <StatCard icon="users" color="violet" label="Inscriptions" value={String(totalEnrollments)} />
         </div>
 
@@ -85,15 +84,27 @@ export default function AdminCoursesPage() {
                       <td className="tnum">{c._count?.enrollments ?? 0}</td>
                       <td className="tnum">{c._count?.reviews ?? 0}</td>
                       <td>
-                        <span className={'badge ' + (c.status === 'PUBLISHED' ? 'badge-green badge-dot' : 'badge-amber badge-dot')}>
-                          {c.status === 'PUBLISHED' ? 'Publié' : 'Brouillon'}
+                        <span className={'badge ' + (c.status === 'PUBLISHED' ? 'badge-green badge-dot' : c.status === 'PENDING_REVIEW' ? 'badge-amber badge-dot' : '')}
+                          style={c.status === 'DRAFT' ? { background: 'var(--bg-2)', color: 'var(--ink-3)' } : undefined}>
+                          {c.status === 'PUBLISHED' ? 'Publié' : c.status === 'PENDING_REVIEW' ? 'En validation' : 'Brouillon'}
                         </span>
                       </td>
                       <td>
-                        <button className="btn btn-outline btn-sm" disabled={savingId === c.id}
-                          onClick={() => toggleStatus(c.id, c.status)}>
-                          {c.status === 'PUBLISHED' ? 'Dépublier' : 'Publier'}
-                        </button>
+                        <div className="row gap-8">
+                          {c.status === 'PUBLISHED' && (
+                            <button className="btn btn-outline btn-sm" disabled={savingId === c.id}
+                              onClick={() => runAction(c.id, 'unpublish', 'DRAFT')}>Dépublier</button>
+                          )}
+                          {c.status === 'PENDING_REVIEW' && (
+                            <>
+                              <button className="btn btn-primary btn-sm" disabled={savingId === c.id}
+                                onClick={() => runAction(c.id, 'approve', 'PUBLISHED')}>Valider</button>
+                              <button className="btn btn-outline btn-sm" disabled={savingId === c.id}
+                                onClick={() => runAction(c.id, 'reject', 'DRAFT')}>Rejeter</button>
+                            </>
+                          )}
+                          {c.status === 'DRAFT' && <span className="tiny muted">En attente du formateur</span>}
+                        </div>
                       </td>
                     </tr>
                   ))}
