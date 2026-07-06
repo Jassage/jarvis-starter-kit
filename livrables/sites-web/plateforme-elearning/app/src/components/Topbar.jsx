@@ -1,15 +1,23 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import Icon from './Icon';
-import { ROLE_USER } from '@/lib/nav-config';
+import { ROLE_USER, ROLE_AVATAR, getInitials } from '@/lib/nav-config';
 import { timeAgo } from '@/lib/time';
 
 export default function Topbar({ role, go, title, subtitle, search = true, onMenu }) {
+  const { data: session } = useSession();
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const user = ROLE_USER[role] || ROLE_USER.student;
+  const fallback = ROLE_USER[role] || ROLE_USER.student;
+  const avatar = ROLE_AVATAR[session?.user?.role] || fallback;
+  const user = {
+    initials: session?.user?.name ? getInitials(session.user.name) : fallback.initials,
+    avColor: avatar.avColor,
+    avInk: avatar.avInk,
+  };
   const ref = useRef(null);
   useEffect(() => {
     const h = (e) => { if (ref.current && !ref.current.contains(e.target)) { setNotifOpen(false); }};

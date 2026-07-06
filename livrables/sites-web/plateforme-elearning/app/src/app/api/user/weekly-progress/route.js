@@ -27,15 +27,22 @@ export async function GET() {
 
   const since = startOfWeek(new Date());
 
-  const progress = await prisma.lessonProgress.findMany({
-    where: { userId: session.user.id, completed: true, completedAt: { gte: since } },
-    include: { lesson: { select: { type: true, duration: true } } },
-  });
+  const [progress, user] = await Promise.all([
+    prisma.lessonProgress.findMany({
+      where: { userId: session.user.id, completed: true, completedAt: { gte: since } },
+      include: { lesson: { select: { type: true, duration: true } } },
+    }),
+    prisma.user.findUnique({ where: { id: session.user.id }, select: { weeklyGoal: true } }),
+  ]);
 
   const lessonsCompleted = progress.length;
   const minutes = progress
     .filter(p => p.lesson.type === 'VIDEO')
     .reduce((s, p) => s + parseDurationMinutes(p.lesson.duration), 0);
 
-  return NextResponse.json({ lessonsCompleted, hours: Math.round((minutes / 60) * 10) / 10 });
+  return NextResponse.json({
+    lessonsCompleted,
+    hours: Math.round((minutes / 60) * 10) / 10,
+    goal: user?.weeklyGoal ?? 7,
+  });
 }

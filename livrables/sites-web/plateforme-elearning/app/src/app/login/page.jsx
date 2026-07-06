@@ -123,13 +123,6 @@ export default function Auth() {
             </div>
           )}
 
-          <button className="btn btn-outline btn-block btn-lg" style={{ marginTop: 22 }} onClick={() => go(role === 'teacher' ? 'teacher' : 'student')}>
-            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M21.6 12.2c0-.7-.06-1.3-.18-1.9H12v3.6h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.2z"/><path fill="#34A853" d="M12 22c2.7 0 5-1 6.6-2.6l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.7-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 13.8a6 6 0 0 1 0-3.6V7.6H3.1a10 10 0 0 0 0 8.8z"/><path fill="#EA4335" d="M12 6.3c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.6l3.3 2.6C7.2 8 9.4 6.3 12 6.3z"/></svg>
-            Continuer avec Google
-          </button>
-
-          <div className="auth-divider"><span>ou avec ton email</span></div>
-
           <form className="col gap-16" onSubmit={submit}>
             {isSignup && (
               <div className="field">

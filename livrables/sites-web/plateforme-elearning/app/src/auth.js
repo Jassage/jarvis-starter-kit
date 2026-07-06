@@ -23,6 +23,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const valid = await bcrypt.compare(password, user.passwordHash);
         if (!valid) return null;
 
+        if (user.role !== 'ADMIN') {
+          const settings = await prisma.platformSettings.findUnique({ where: { id: 'singleton' } });
+          if (settings?.maintenanceMode) return null;
+        }
+
         return { id: user.id, name: user.name, email: user.email, role: user.role, image: user.image };
       },
     }),

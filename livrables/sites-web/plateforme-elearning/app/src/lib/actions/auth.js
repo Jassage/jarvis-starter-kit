@@ -2,6 +2,7 @@
 
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
+import { getPlatformSettings } from '@/lib/platform-settings';
 
 export async function registerUser({ name, email, password, role }) {
   if (!name || !email || !password) {
@@ -9,6 +10,11 @@ export async function registerUser({ name, email, password, role }) {
   }
   if (password.length < 8) {
     return { error: 'Le mot de passe doit contenir au moins 8 caractères.' };
+  }
+
+  const settings = await getPlatformSettings();
+  if (!settings.openSignups) {
+    return { error: 'Les inscriptions sont temporairement fermées. Réessaie plus tard.' };
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });

@@ -39,6 +39,15 @@ model User {
   image         String?
   role          Role      @default(STUDENT)
 
+  // Etudiant : objectif hebdomadaire (widget "Objectif de la semaine")
+  weeklyGoal Int @default(7)
+
+  // Formateur : informations de versement + profil public (saisie manuelle, pas de payout automatise)
+  bio             String?
+  portfolioUrl    String?
+  iban            String?
+  payoutCurrency  String? @default("HTG")
+
   // Reserve pour une future migration multi-tenant
   tenantId String?
 
@@ -308,6 +317,16 @@ model Message {
   sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+}
+
+// ============ PARAMETRES PLATEFORME (admin) ============
+
+model PlatformSettings {
+  id              String  @id @default("singleton")
+  maintenanceMode Boolean @default(false)
+  openSignups     Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
 }
 
 // ============ ACTIVITE / SERIE ============

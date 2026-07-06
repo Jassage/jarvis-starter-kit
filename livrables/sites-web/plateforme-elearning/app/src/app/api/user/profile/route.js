@@ -17,6 +17,11 @@ export async function GET() {
       role: true,
       image: true,
       createdAt: true,
+      weeklyGoal: true,
+      bio: true,
+      portfolioUrl: true,
+      iban: true,
+      payoutCurrency: true,
       _count: {
         select: {
           enrollments: true,
@@ -39,13 +44,36 @@ export async function PATCH(request) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
   }
 
-  const { name } = await request.json();
-  if (!name?.trim()) return NextResponse.json({ error: 'Nom requis' }, { status: 400 });
+  const body = await request.json();
+  const data = {};
+
+  if (body.name !== undefined) {
+    if (!body.name?.trim()) return NextResponse.json({ error: 'Nom requis' }, { status: 400 });
+    data.name = body.name.trim();
+  }
+  if (body.weeklyGoal !== undefined) {
+    const goal = Number(body.weeklyGoal);
+    if (!Number.isFinite(goal) || goal < 1 || goal > 50) {
+      return NextResponse.json({ error: 'Objectif hebdomadaire invalide (1 à 50)' }, { status: 400 });
+    }
+    data.weeklyGoal = Math.round(goal);
+  }
+  if (body.bio !== undefined) data.bio = body.bio?.trim() || null;
+  if (body.portfolioUrl !== undefined) data.portfolioUrl = body.portfolioUrl?.trim() || null;
+  if (body.iban !== undefined) data.iban = body.iban?.trim() || null;
+  if (body.payoutCurrency !== undefined) data.payoutCurrency = body.payoutCurrency || null;
+
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: 'Aucune donnée à mettre à jour' }, { status: 400 });
+  }
 
   const user = await prisma.user.update({
     where: { id: session.user.id },
-    data: { name: name.trim() },
-    select: { id: true, name: true, email: true, role: true },
+    data,
+    select: {
+      id: true, name: true, email: true, role: true,
+      weeklyGoal: true, bio: true, portfolioUrl: true, iban: true, payoutCurrency: true,
+    },
   });
 
   return NextResponse.json(user);

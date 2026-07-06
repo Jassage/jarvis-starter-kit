@@ -19,7 +19,7 @@ export default function StudentDashboard() {
   const [allCourses, setAllCourses] = useState([]);
   const [certCount, setCertCount] = useState(0);
   const [streak, setStreak] = useState(0);
-  const [weekly, setWeekly] = useState({ lessonsCompleted: 0, hours: 0 });
+  const [weekly, setWeekly] = useState({ lessonsCompleted: 0, hours: 0, goal: 7 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function StudentDashboard() {
       setAllCourses(Array.isArray(coursesData) ? coursesData : []);
       setCertCount(Array.isArray(certs) ? certs.length : 0);
       setStreak(streakData?.current ?? 0);
-      setWeekly(weeklyData?.lessonsCompleted != null ? weeklyData : { lessonsCompleted: 0, hours: 0 });
+      setWeekly(weeklyData?.lessonsCompleted != null ? weeklyData : { lessonsCompleted: 0, hours: 0, goal: 7 });
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -44,8 +44,8 @@ export default function StudentDashboard() {
   const enrolledIds = new Set(enrollments.map(e => e.courseId));
   const recs = allCourses.filter(c => !enrolledIds.has(c.id)).slice(0, 3);
 
-  const weeklyDone = Math.min(weekly.lessonsCompleted, 7);
-  const weeklyGoal = 7;
+  const weeklyGoal = weekly.goal || 7;
+  const weeklyDone = Math.min(weekly.lessonsCompleted, weeklyGoal);
 
   if (loading) {
     return (
