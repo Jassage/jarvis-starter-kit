@@ -1,0 +1,276 @@
+/* Manuel React — feuille de style pour l'export HTML/PDF */
+
+@page {
+  margin: 2.2cm 2cm;
+}
+
+:root {
+  --color-text: #1f2430;
+  --color-muted: #5b6472;
+  --color-bg: #ffffff;
+  --color-brand: #146ef5;
+  --color-brand-dark: #0b4fb8;
+  --color-code-bg: #0d1117;
+  --color-code-text: #e6edf3;
+  --color-warn-bg: #fff4e5;
+  --color-warn-border: #f0a93a;
+  --color-tip-bg: #e8f6ee;
+  --color-tip-border: #2fa860;
+  --color-exo-bg: #eef1ff;
+  --color-exo-border: #5b6ee1;
+  --font-body: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", "SFMono-Regular", Menlo, monospace;
+}
+
+html, body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 12.5pt;
+  line-height: 1.55;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+h1, h2, h3, h4 {
+  color: #10131a;
+  font-weight: 700;
+  line-height: 1.25;
+  page-break-after: avoid;
+}
+
+h1 {
+  font-size: 2rem;
+  border-bottom: 3px solid var(--color-brand);
+  padding-bottom: 0.4rem;
+  margin-top: 3rem;
+}
+
+h2 {
+  font-size: 1.4rem;
+  color: var(--color-brand-dark);
+  margin-top: 2.4rem;
+  border-left: 5px solid var(--color-brand);
+  padding-left: 0.6rem;
+}
+
+h3 {
+  font-size: 1.15rem;
+  margin-top: 1.8rem;
+}
+
+p { margin: 0.8rem 0; }
+
+a { color: var(--color-brand-dark); }
+
+.chapitre-titre-num {
+  display: inline-block;
+  background: var(--color-brand);
+  color: white;
+  border-radius: 6px;
+  padding: 0.15rem 0.7rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.6rem;
+}
+
+/* Blocs de code style terminal */
+pre {
+  background: var(--color-code-bg);
+  color: var(--color-code-text);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  page-break-inside: avoid;
+}
+
+code {
+  font-family: var(--font-mono);
+  background: rgba(20, 110, 245, 0.09);
+  color: #0b4fb8;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* Coloration simplifiée type terminal (spans injectés manuellement) */
+.tok-comment { color: #8b949e; font-style: italic; }
+.tok-keyword { color: #ff7b72; }
+.tok-string  { color: #a5d6ff; }
+.tok-func    { color: #d2a8ff; }
+.tok-const   { color: #79c0ff; }
+.tok-prompt  { color: #3fb950; font-weight: 600; }
+.tok-tag     { color: #7ee787; }
+.tok-attr    { color: #ffa657; }
+
+/* Encadrés pédagogiques */
+.encadre {
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+  margin: 1.4rem 0;
+  page-break-inside: avoid;
+}
+
+.encadre-titre {
+  font-weight: 700;
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.astuce { background: var(--color-tip-bg); border: 1px solid var(--color-tip-border); }
+.astuce .encadre-titre { color: #1f7a45; }
+
+.attention { background: var(--color-warn-bg); border: 1px solid var(--color-warn-border); }
+.attention .encadre-titre { color: #a15c00; }
+
+.exercice { background: var(--color-exo-bg); border: 1px solid var(--color-exo-border); }
+.exercice .encadre-titre { color: #3846a8; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.2rem 0;
+  font-size: 0.92rem;
+}
+
+th, td {
+  border: 1px solid #d7dce3;
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+}
+
+th {
+  background: #f2f5fa;
+  color: #10131a;
+}
+
+blockquote {
+  border-left: 4px solid var(--color-muted);
+  margin: 1rem 0;
+  padding: 0.3rem 1rem;
+  color: var(--color-muted);
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #e2e6ec;
+  margin: 2.5rem 0;
+}
+
+.page-de-garde {
+  text-align: center;
+  margin: 6vh 0 3rem;
+  padding: 4rem 2.5rem 3rem;
+  border-radius: 20px;
+  background: radial-gradient(circle at 30% 0%, #163a5c 0%, #0d1826 45%, #0a0e14 100%);
+  color: #eef2f7;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+.page-de-garde::before {
+  content: "";
+  position: absolute;
+  top: -40%;
+  right: -20%;
+  width: 70%;
+  height: 70%;
+  background: radial-gradient(circle, rgba(20,110,245,0.25) 0%, transparent 70%);
+}
+
+.page-de-garde .icone-couverture {
+  font-size: 3.6rem;
+  line-height: 1;
+  margin-bottom: 1rem;
+  position: relative;
+}
+
+.page-de-garde .kicker {
+  color: #61dafb;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  margin-bottom: 0.8rem;
+  position: relative;
+}
+
+.page-de-garde h1 {
+  border: none;
+  font-size: 2.7rem;
+  color: #ffffff;
+  margin: 0.3rem 0 0.6rem;
+  position: relative;
+}
+
+.page-de-garde .sous-titre {
+  color: #aebdcf;
+  font-size: 1.15rem;
+  max-width: 640px;
+  margin: 0 auto 1.6rem;
+  position: relative;
+}
+
+.page-de-garde .tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.6rem auto 0;
+  max-width: 620px;
+  position: relative;
+}
+
+.page-de-garde .tag {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: #cdd8e6;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.page-de-garde .auteur-bloc {
+  margin-top: 2.6rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid rgba(255,255,255,0.14);
+  position: relative;
+}
+
+.page-de-garde .auteur-nom {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.page-de-garde .auteur-role {
+  color: #8a9bb0;
+  font-size: 0.9rem;
+  margin-top: 0.2rem;
+}
+
+.page-de-garde p {
+  color: var(--color-muted);
+  font-size: 1.1rem;
+}
+
+@media print {
+  body { max-width: 100%; padding: 0; }
+  /* Le saut de page se fait AVANT le badge "CHAPITRE X", pas avant le h1 lui-meme,
+     pour que le badge et son titre restent toujours colles ensemble sur la nouvelle page. */
+  .chapitre-titre-num { page-break-before: always; page-break-after: avoid; }
+  h1 { page-break-before: avoid; page-break-after: avoid; }
+  .page-de-garde h1 { page-break-before: avoid; }
+}
