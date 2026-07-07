@@ -54,3 +54,19 @@ export async function getMe(req: AuthRequest, res: Response) {
   const user = await authService.getMe(req.user!.userId);
   sendSuccess(res, { user });
 }
+
+export async function verifyEmail(req: AuthRequest, res: Response) {
+  await authService.verifyEmail(req.body.token);
+  sendSuccess(res, null, 'Email vérifié avec succès');
+}
+
+export async function forgotPassword(req: AuthRequest, res: Response) {
+  await authService.forgotPassword(req.body.email);
+  sendSuccess(res, null, 'Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.');
+}
+
+export async function resetPassword(req: AuthRequest, res: Response) {
+  const userId = await authService.resetPassword(req.body.token, req.body.password);
+  await logAudit({ req, userId, action: 'MOT_DE_PASSE_REINITIALISE', entite: 'User', entiteId: userId });
+  sendSuccess(res, null, 'Mot de passe réinitialisé avec succès');
+}

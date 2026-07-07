@@ -1,10 +1,14 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../../config/database';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../utils/jwt';
+import { generateOpaqueToken, hashOpaqueToken } from '../../utils/hash';
+import { sendEmail, emailVerificationTemplate, passwordResetTemplate } from '../../utils/email';
 import { AppError } from '../../types';
 import { slugify, uniqueBoutiqueSlug } from '../boutiques/boutiques.service';
 
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 export async function register(input: {
   email: string;
@@ -48,6 +52,8 @@ export async function register(input: {
     });
     return { user, boutique };
   });
+
+  await sendVerificationEmail(user.id, user.email, user.firstName);
 
   return issueSession(user.id, user.email, user.role, user.boutiqueId, {
     id: boutique.id,
@@ -117,6 +123,63 @@ export async function logout(refreshToken: string): Promise<string | null> {
     await prisma.refreshToken.update({ where: { token: refreshToken }, data: { revoked: true } });
   }
   return stored?.userId ?? null;
+}
+
+export async function sendVerificationEmail(userId: string, email: string, firstName: string): Promise<void> {
+  const token = generateOpaqueToken();
+  await prisma.emailVerificationToken.upsert({
+    where: { userId },
+    create: { tokenHash: hashOpaqueToken(token), userId, expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS) },
+    update: { tokenHash: hashOpaqueToken(token), expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS) },
+  });
+  await sendEmail({ to: email, subject: 'Vérifiez votre email — SHOPAY', html: emailVerificationTemplate(firstName, token) });
+}
+
+export async function verifyEmail(token: string): Promise<void> {
+  const tokenHash = hashOpaqueToken(token);
+  const record = await prisma.emailVerificationToken.findUnique({ where: { tokenHash } });
+  if (!record || record.expiresAt < new Date()) {
+    throw new AppError('Lien de vérification invalide ou expiré', 400);
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: record.userId }, data: { isVerified: true } }),
+    prisma.emailVerificationToken.delete({ where: { tokenHash } }),
+  ]);
+}
+
+// Ne révèle jamais si l'email existe (évite l'énumération de comptes) : retourne toujours sans erreur.
+export async function forgotPassword(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.isActive) return;
+
+  const token = generateOpaqueToken();
+  await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+  await prisma.passwordResetToken.create({
+    data: { tokenHash: hashOpaqueToken(token), userId: user.id, expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) },
+  });
+
+  await sendEmail({ to: user.email, subject: 'Réinitialisation de votre mot de passe — SHOPAY', html: passwordResetTemplate(user.firstName, token) });
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<string> {
+  const tokenHash = hashOpaqueToken(token);
+  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+  if (!record || record.usedAt || record.expiresAt < new Date()) {
+    throw new AppError('Lien de réinitialisation invalide ou expiré', 400);
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: record.userId }, data: { password: passwordHash } }),
+    prisma.passwordResetToken.update({ where: { tokenHash }, data: { usedAt: new Date() } }),
+    // Le changement de mot de passe révoque toutes les sessions actives, y compris celle
+    // d'un éventuel attaquant qui aurait volé l'ancien mot de passe.
+    prisma.refreshToken.deleteMany({ where: { userId: record.userId } }),
+  ]);
+
+  return record.userId;
 }
 
 export async function getMe(userId: string) {

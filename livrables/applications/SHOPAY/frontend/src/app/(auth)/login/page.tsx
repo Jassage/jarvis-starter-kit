@@ -79,7 +79,10 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold mb-1.5">Mot de passe</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold">Mot de passe</label>
+                <Link href="/forgot-password" className="text-xs font-semibold" style={{ color: 'var(--color-primary-2)' }}>Mot de passe oublié ?</Link>
+              </div>
               <div className="relative">
                 <input
                   type={showPwd ? 'text' : 'password'}
