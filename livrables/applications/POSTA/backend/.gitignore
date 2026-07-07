@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+*.tsbuildinfo
+
+# Clés privées DKIM générées localement, jamais commitées
+storage/dkim/

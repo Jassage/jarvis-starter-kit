@@ -7,6 +7,34 @@
 
 ---
 
+## 2026-07-07
+
+### POSTA : découverte du projet et complétion de bout en bout (mail views, dashboard, utilisateurs, audit, emails transactionnels, facturation, landing page)
+
+**Contexte :** en `/prime`, git status a révélé un dossier `livrables/applications/POSTA/` jamais documenté ni mentionné en mémoire ou en contexte : un projet déjà entamé (backend Express/Prisma/PostgreSQL + frontend Next.js, migration datée du 2026-07-06). Après exploration, confirmé avec Jaslin : POSTA est une plateforme permettant de créer des adresses email personnalisées sur son propre nom de domaine (façon Migadu/Google Workspace en plus petit). Session longue, entièrement consacrée à faire passer ce projet de "panel squelette" à "quasi prêt pour un premier client".
+
+**Backend, état initial vérifié en conditions réelles (API réelle, pas juste lecture de code) :** auth (login/refresh/logout/me, cookies httpOnly), domaines (création + génération clé DKIM + vérification DNS MX/SPF/DKIM/DMARC), boîtes mail et alias (nested sous `/api/domains/:id/...`, correctement câblés — un doute initial sur un routing manquant s'est avéré infondé après vérification). Aucun bug trouvé sur ce périmètre.
+
+**Vues SQL Postfix/Dovecot (chantier jugé le plus bloquant) :** le schéma Prisma mentionnait des vues jamais créées. Migration manuelle ajoutée (`mail_views`) : trois vues en lecture seule (`mail_domains`, `mail_mailboxes`, `mail_aliases`, un domaine n'étant éligible au mail qu'une fois son statut `VERIFIE`) + deux rôles Postgres à privilèges minimaux (`postfix_ro` sans accès à la colonne mot de passe via GRANT column-level, `dovecot_ro` avec). Vérifié avec `SET ROLE` : `postfix_ro` confirmé bloqué sur la colonne password, `dovecot_ro` confirmé autorisé. Documentation complète `docs/MAIL_SERVER_SETUP.md` rédigée pour la configuration Postfix/Dovecot/OpenDKIM réelle sur un VPS (aucun VPS encore provisionné, chantier hors périmètre de cette session, feuille de route donnée à Jaslin en fin de session).
+
+**Dashboard frontend construit de zéro** (le frontend n'avait qu'une page de login) : layout authentifié (sidebar, déconnexion), page Domaines (création, statuts, indicateurs MX/SPF/DKIM/DMARC), page détail domaine (vérification DNS avec instructions copiables, CRUD boîtes mail et alias). Client API avec intercepteur de refresh automatique, middleware Next.js de protection des routes.
+
+**Gestion des utilisateurs :** SUPER_ADMIN peut créer des comptes CLIENT_ADMIN, les désactiver (révocation immédiate des sessions). Décision prise en cours de route : l'admin ne choisit plus le mot de passe du client à la création (sécurité), un email d'invitation avec lien à usage unique le fait choisir lui-même.
+
+**Emails transactionnels :** utilitaire mailer (nodemailer, no-op gracieux si SMTP non configuré, contenu loggé en dev faute de SMTP réel dans l'environnement). Mot de passe oublié (jeton opaque à usage unique, 1h, hash SHA-256) et email d'invitation branchés sur le même mécanisme. Vérifiés en navigateur avec extraction du jeton depuis les logs.
+
+**Journal d'audit :** le modèle `AuditLog` existait dans le schéma mais n'était écrit nulle part. Branché sur toutes les actions sensibles (connexion/déconnexion, CRUD domaines/boîtes mail/alias, activation/désactivation compte, validation paiement), page dédiée SUPER_ADMIN.
+
+**Plans, quotas et facturation :** structure de plans (FREE/STARTER/PRO/BUSINESS, prix HTG et limites domaines/boîtes/stockage) validée avec Jaslin avant codage. Quotas réellement appliqués à la création de domaine/boîte mail (pas juste affichés), SUPER_ADMIN exempté. Paiement MonCash manuel (preuve + validation admin, comme LAKAY) et Stripe Checkout + webhook idempotent (clés réelles indisponibles dans l'environnement, jamais testé contrairement au reste). **Bug trouvé et corrigé pendant la vérification navigateur** : les nouvelles boîtes mail recevaient le quota par défaut du schéma Prisma (1024 Mo) au lieu du quota du plan actif (ex. 500 Mo pour Starter) quand aucune valeur n'était fournie explicitement — corrigé, le quota est désormais toujours résolu depuis le plan.
+
+**Landing page publique :** suite à la question de Jaslin ("est-ce qu'il ne devrait pas y avoir une page web ?"), choix fait ensemble (page vitrine + CTA "nous contacter", onboarding manuel assumé plutôt qu'auto-inscription) car le VPS mail n'existe pas encore et ouvrir l'auto-inscription donnerait une fausse impression de service fonctionnel. Restructuration du routage : dashboard authentifié déplacé de `/` vers `/app`, racine devenue la landing publique avec tarifs réels (tirés de l'API, rendue publique) et middleware simplifié.
+
+**Vérifications :** tout vérifié en navigateur à chaque étape (Playwright réinstallé à la volée dans le scratchpad à plusieurs reprises, browser Chromium déjà en cache). Quelques faux départs sans lien avec le code applicatif : processus backend zombie sur le port 4004 après un `Stop-Process` incomplet (répété deux fois), sélecteur Playwright ambigu (`:has-text` insensible à la casse ayant matché le mauvais lien), jeton de reset à usage unique déjà consommé lors d'un rejeu de script.
+
+**Reste à faire :** provisionner un vrai VPS mail (le seul vrai bloquant), tester Stripe avec de vraies clés, credentials MonCash Digicel toujours en attente (comme LAKAY/KONEKTE), aucun test automatisé.
+
+---
+
 ## 2026-07-03 (nuit)
 
 ### KONEKTE : audit senior dev + durcissement sécurité complet (RBAC, paiements, auth par cookie, scaling Socket.io)

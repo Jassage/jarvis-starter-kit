@@ -1,0 +1,222 @@
+// POSTA — Plateforme de mail personnalisé avec nom de domaine
+// Prisma Schema — PostgreSQL
+//
+// Postfix et Dovecot ne lisent jamais ces tables directement : la migration SQL manuelle
+// prisma/migrations/20260707161331_mail_views crée des VUES en lecture seule par-dessus
+// (mail_domains, mail_mailboxes, mail_aliases), accessibles via des rôles Postgres dédiés
+// (postfix_ro/dovecot_ro, GRANT SELECT uniquement — voir docs/MAIL_SERVER_SETUP.md).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// Identité & accès (panel de contrôle)
+// ─────────────────────────────────────────
+
+enum RoleUtilisateur {
+  SUPER_ADMIN  // opérateur de la plateforme
+  CLIENT_ADMIN // propriétaire d'un ou plusieurs domaines
+}
+
+model Utilisateur {
+  id         String          @id @default(cuid())
+  email      String          @unique
+  motDePasse String
+  nom        String
+  prenom     String
+  role       RoleUtilisateur
+  actif      Boolean         @default(true)
+
+  domaines            Domain[]
+  refreshTokens       RefreshToken[]
+  auditLogs           AuditLog[]
+  passwordResetTokens PasswordResetToken[]
+  subscription        Subscription?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("utilisateurs")
+}
+
+model PasswordResetToken {
+  id         String      @id @default(cuid())
+  tokenHash  String      @unique
+  userId     String
+  user       Utilisateur @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime    @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model RefreshToken {
+  id        String      @id @default(cuid())
+  token     String      @unique
+  userId    String
+  user      Utilisateur @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime    @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id        String       @id @default(cuid())
+  userId    String?
+  user      Utilisateur? @relation(fields: [userId], references: [id])
+  action    String
+  entite    String
+  entiteId  String?
+  changes   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime     @default(now())
+
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────
+// Domaines & DKIM
+// ─────────────────────────────────────────
+
+enum StatutDomaine {
+  EN_ATTENTE
+  VERIFIE
+  ECHEC
+  SUSPENDU
+}
+
+model Domain {
+  id         String        @id @default(cuid())
+  nomDomaine String        @unique
+  ownerId    String
+  owner      Utilisateur   @relation(fields: [ownerId], references: [id])
+  statut     StatutDomaine @default(EN_ATTENTE)
+
+  dkimSelector  String
+  dkimPublicKey String // clé publique uniquement ; la clé privée reste sur disque VPS (jamais en base)
+  dkimTxtValue  String
+
+  mxOk          Boolean   @default(false)
+  spfOk         Boolean   @default(false)
+  dkimOk        Boolean   @default(false)
+  dmarcOk       Boolean   @default(false)
+  lastCheckedAt DateTime?
+  lastError     String?
+  verifiedAt    DateTime?
+
+  mailboxes Mailbox[]
+  aliases   Alias[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([statut])
+  @@map("domains")
+}
+
+model Mailbox {
+  id           String   @id @default(cuid())
+  domainId     String
+  domain       Domain   @relation(fields: [domainId], references: [id])
+  localPart    String
+  email        String   @unique // dénormalisé : lu directement par Dovecot/Postfix via les vues SQL
+  passwordHash String // {SHA512-CRYPT}$6$... généré via `doveadm pw`, jamais bcrypt
+  quotaMb      Int      @default(1024)
+  actif        Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([domainId, localPart])
+  @@index([domainId])
+  @@map("mailboxes")
+}
+
+model Alias {
+  id          String  @id @default(cuid())
+  domainId    String
+  domain      Domain  @relation(fields: [domainId], references: [id])
+  source      String  @unique
+  destination String
+  actif       Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([domainId])
+  @@map("aliases")
+}
+
+// ─────────────────────────────────────────
+// Facturation & plans
+// ─────────────────────────────────────────
+
+enum PlanType {
+  FREE
+  STARTER
+  PRO
+  BUSINESS
+}
+
+enum MethodePaiement {
+  MONCASH
+  STRIPE
+}
+
+enum StatutPaiement {
+  EN_ATTENTE
+  VALIDE
+  REJETE
+}
+
+model Subscription {
+  id        String    @id @default(cuid())
+  userId    String    @unique
+  user      Utilisateur @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan      PlanType  @default(FREE)
+  // null pour FREE (n'expire jamais) ; pour un plan payant, date jusqu'à laquelle il reste actif
+  expiresAt DateTime?
+
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id             String          @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription    @relation(fields: [subscriptionId], references: [id])
+  plan           PlanType
+  montantHtg     Int
+  methode        MethodePaiement
+  statut         StatutPaiement  @default(EN_ATTENTE)
+
+  // MonCash (paiement manuel en attendant les credentials Digicel Business, comme LAKAY/KONEKTE)
+  referenceTransaction String?
+
+  // Stripe
+  stripeSessionId String? @unique
+
+  valideParId String?
+  valideAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([subscriptionId])
+  @@index([statut])
+  @@map("payments")
+}
