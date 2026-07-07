@@ -7,6 +7,32 @@
 
 ---
 
+## 2026-07-07 (suite)
+
+### SHOPAY : découverte d'un projet non documenté (SaaS e-commerce multi-tenant)
+
+**Contexte :** en `/prime`, git status a révélé deux dossiers jamais documentés : `livrables/applications/SHOPAY/` et `livrables/reseau/`. Jaslin a demandé d'abord de documenter SHOPAY (reseau laissé en attente, nature à clarifier avec lui).
+
+**Ce qui a été trouvé (lecture seule, aucun code touché) :** SHOPAY est une plateforme SaaS e-commerce multi-tenant (store builder pour marchands haïtiens), jamais commitée en git (`git log` vide sur le dossier). Backend Express/TypeScript/Prisma/PostgreSQL (port 4005) déjà structuré en 9 modules (auth, boutiques, catalog, cart, orders, payments Stripe+MonCash, billing/quotas, storefront public, admin plateforme, notifications), frontend Next.js (port 3006) avec zone marchand, zone admin et vitrine publique `/store/[slug]`. Modèle multi-tenant classique du portefeuille (boutiqueId posé + indexé sur les tables scopées, isolation garantie côté middleware via le JWT et jamais un paramètre client). Migration Prisma datée du jour même — vraisemblablement le travail d'une session Claude Code antérieure interrompue avant `/update`, comme cela s'est déjà produit pour BANKA et POSTA.
+
+**Non fait dans cette session :** aucune vérification API/navigateur, aucun audit de sécurité ou de complétude — seule une lecture du code pour documenter son existence. `context/CONTEXT.md` mis à jour avec une entrée SHOPAY.
+
+**Audit de complétude effectué immédiatement après (même session), délégué à un agent Explore en lecture seule** : RBAC, rate limiting, idempotence des paiements, signature webhook Stripe, audit log et quota produits déjà corrects (meilleur que prévu pour un projet interrompu). Failles confirmées : pas d'email de vérification/mot de passe oublié, MonCash non intégré (placeholder avec TODO explicite), et surtout **aucune vérification de stock au checkout** — une commande pouvait être créée sans aucun contrôle de disponibilité, le stock n'étant décrémenté qu'à l'activation du paiement, sans garde contre la survente.
+
+**Correctif appliqué et vérifié en conditions réelles (sur demande de Jaslin, "VAS Y") :** deux changements ciblés, alignés sur le pattern compare-and-swap déjà utilisé ailleurs dans le portefeuille (BANKA/GESCOM) :
+1. `orders.service.ts::checkout()` : vérification du stock disponible (produit ou variante) pour chaque article du panier avant de créer la commande, rejet 409 avec message explicite si insuffisant.
+2. `payments.service.ts::activateOrder()` : le décrément de stock à l'activation du paiement passe d'un `update` inconditionnel à un `updateMany` compare-and-swap (`stockQty: { gte: quantity }`) ; si la garde échoue, toute la transaction (y compris le passage du paiement à COMPLETED) est annulée — le paiement reste PENDING, rejouable, plutôt que de valider une commande dont le stock a disparu entretemps.
+
+**Vérification en API réelle** (backend lancé localement contre la vraie base Postgres `shopay`, seed rechargé) : commande avec quantité (500) dépassant le stock (48) → 409 avec message clair ; commande dans les clous → 201 normal ; stock réduit artificiellement à 1 après création d'une commande de 2, tentative d'approbation du paiement → rejetée proprement, stock resté à 1 (jamais négatif), paiement resté PENDING. Données de test nettoyées après coup (commande, paiement, panier de test supprimés, stock restauré).
+
+**Découverte annexe pendant la vérification :** un serveur backend ET un serveur frontend (port 3006) de SHOPAY tournaient déjà en arrière-plan avant même le début de cette session — zombies d'une session antérieure jamais arrêtée (même symptôme déjà documenté sur POSTA). Seule l'instance backend lancée pour cette vérification a été arrêtée après coup ; les processus pré-existants n'ont pas été touchés (pas certain que Jaslin ne les utilise pas activement).
+
+**Reste à faire sur SHOPAY :** email de vérification/mot de passe oublié, intégration MonCash réelle, câblage des notifications `ORDER_PLACED`/`LOW_STOCK`/`PAYMENT_PROOF_SUBMITTED` (modélisées mais jamais déclenchées), quota au-delà du nombre de produits, coupons/remboursements/avis absents, taux de change HTG→USD codé en dur, zéro test automatisé, jamais commité en git.
+
+**`livrables/reseau/` clarifié dans la foulée :** confirmé par Jaslin, il s'agit d'un document de formation pour un réseau (informatique), pas un projet logiciel. Ajouté à `context/CONTEXT.md` sous l'activité d'enseignement.
+
+---
+
 ## 2026-07-07
 
 ### POSTA : découverte du projet et complétion de bout en bout (mail views, dashboard, utilisateurs, audit, emails transactionnels, facturation, landing page)
