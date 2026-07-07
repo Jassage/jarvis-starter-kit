@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { LogOut, User } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
+import NotificationBell from './NotificationBell';
 
 export default function Header() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function Header() {
       <div className="lg:hidden font-extrabold tracking-tight">SHOPAY</div>
       <div className="flex-1" />
       <div className="flex items-center gap-3">
+        <NotificationBell />
         <div className="flex items-center gap-2">
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center"
