@@ -5,10 +5,10 @@ import * as moncashService from '../payments/moncash.service';
 import * as paymentsService from '../payments/payments.service';
 import { sendSuccess } from '../../utils/response';
 import { AuthRequest } from '../../types';
-import { PLAN_LIMITS } from '../../config/plans';
+import { serializeAllPlanLimits } from '../../config/plans';
 
 export async function getPlans(_req: AuthRequest, res: Response) {
-  sendSuccess(res, { plans: PLAN_LIMITS });
+  sendSuccess(res, { plans: serializeAllPlanLimits() });
 }
 
 export async function getSubscription(req: AuthRequest, res: Response) {

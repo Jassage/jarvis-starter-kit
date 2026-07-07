@@ -4,7 +4,7 @@ import { Check } from 'lucide-react';
 import api from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 
-interface PlanLimits { label: string; maxProducts: number; priceHtg: number; priceUsd: number }
+interface PlanLimits { label: string; maxProducts: number | null; priceHtg: number; priceUsd: number }
 interface Overview { plan: string; expiresAt: string | null; limits: PlanLimits; usage: { products: number } }
 
 export default function BillingPage() {
@@ -50,7 +50,7 @@ export default function BillingPage() {
         <h1 className="text-2xl font-extrabold tracking-tight">Abonnement</h1>
         {overview && (
           <p className="text-sm mt-1" style={{ color: 'var(--color-ink-3)' }}>
-            Plan actuel : <strong>{overview.plan}</strong> · {overview.usage.products}/{overview.limits.maxProducts === Infinity ? '∞' : overview.limits.maxProducts} produits utilisés
+            Plan actuel : <strong>{overview.plan}</strong> · {overview.usage.products}/{overview.limits.maxProducts == null ? '∞' : overview.limits.maxProducts} produits utilisés
             {overview.expiresAt && ` · Expire le ${new Date(overview.expiresAt).toLocaleDateString('fr-FR')}`}
           </p>
         )}
@@ -65,7 +65,7 @@ export default function BillingPage() {
             <p className="text-2xl font-extrabold mb-4">{p.priceHtg === 0 ? 'Gratuit' : formatMoney(p.priceHtg)}<span className="text-sm font-medium" style={{ color: 'var(--color-ink-3)' }}> /mois</span></p>
             <div className="flex items-center gap-2 text-sm mb-6" style={{ color: 'var(--color-ink-2)' }}>
               <Check className="w-4 h-4" style={{ color: 'var(--color-success)' }} />
-              {p.maxProducts === Infinity ? 'Produits illimités' : `Jusqu'à ${p.maxProducts} produits`}
+              {p.maxProducts == null ? 'Produits illimités' : `Jusqu'à ${p.maxProducts} produits`}
             </div>
             {key !== 'FREE' && overview?.plan !== key && (
               <div className="space-y-2">

@@ -22,7 +22,7 @@ export default function DashboardHomePage() {
   const { boutique } = useAuthStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [productCount, setProductCount] = useState(0);
-  const [plan, setPlan] = useState<{ plan: string; usage: { products: number }; limits: { maxProducts: number } } | null>(null);
+  const [plan, setPlan] = useState<{ plan: string; usage: { products: number }; limits: { maxProducts: number | null } } | null>(null);
 
   useEffect(() => {
     api.get('/orders').then((r) => setOrders(r.data.data.orders));
@@ -45,7 +45,7 @@ export default function DashboardHomePage() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Commandes" value={orders.length} icon={ShoppingBag} />
         <StatCard label="Revenu (commandes payées)" value={formatMoney(revenue)} icon={Wallet} />
-        <StatCard label="Produits" value={productCount} icon={Package} hint={plan ? `Plan ${plan.plan} · ${plan.usage.products}/${plan.limits.maxProducts === Infinity ? '∞' : plan.limits.maxProducts}` : undefined} />
+        <StatCard label="Produits" value={productCount} icon={Package} hint={plan ? `Plan ${plan.plan} · ${plan.usage.products}/${plan.limits.maxProducts == null ? '∞' : plan.limits.maxProducts}` : undefined} />
         <StatCard label="Plan actuel" value={plan?.plan ?? '—'} icon={TrendingUp} />
       </div>
 

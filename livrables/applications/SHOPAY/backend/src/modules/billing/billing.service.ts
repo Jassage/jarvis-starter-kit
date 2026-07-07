@@ -1,5 +1,5 @@
 import prisma from '../../config/database';
-import { PLAN_LIMITS } from '../../config/plans';
+import { PLAN_LIMITS, serializePlanLimits } from '../../config/plans';
 import { getEffectivePlan } from './quota';
 
 export async function getSubscriptionOverview(boutiqueId: string) {
@@ -10,7 +10,7 @@ export async function getSubscriptionOverview(boutiqueId: string) {
   return {
     plan,
     expiresAt: subscription?.expiresAt ?? null,
-    limits: PLAN_LIMITS[plan],
+    limits: serializePlanLimits(PLAN_LIMITS[plan]),
     usage: { products: productCount },
   };
 }
