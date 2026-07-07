@@ -7,6 +7,22 @@
 
 ---
 
+## 2026-07-07 (soir, session distincte)
+
+### SHOPAY : demande initiale "plateforme SaaS e-commerce complète" + vérification navigateur + fix affichage plan illimité
+
+**Contexte :** Jaslin a demandé une "plateforme SAAS e-commerce complète" en partant de zéro dans une session dédiée. Clarifié avec lui via questions ciblées avant de coder : store builder multi-tenant (pas marketplace ni boutique unique), base partagée avec `boutiqueId`, paiements Stripe+MonCash+preuve manuelle, même stack que le reste du portefeuille (Next.js+Express+Prisma+PostgreSQL). Plan validé (EnterPlanMode) après exploration des conventions GESCOM/LAKAY/POSTA, nom retenu **SHOPAY** (Shop+Ayiti), ports 4005/3006.
+
+**Découverte en cours de session :** une deuxième session Claude Code travaillait en parallèle sur le même dossier `livrables/applications/SHOPAY/` (voir entrée suivante ci-dessous, écrite par cette autre session qui a découvert le projet via `/prime` en le croyant "non documenté" et l'a documenté à sa façon). Les deux sessions ont progressé sans se marcher dessus grâce à des commits successifs cohérents : build initial + fix survente checkout, ajout marketplace cross-boutiques, vérification email/mot de passe oublié.
+
+**Vérification en navigateur réel (Playwright via l'outil preview) faite dans cette session :** inscription marchand → boutique créée directement `ACTIVE` (bug corrigé : le premier jet renvoyait un statut manquant dans la réponse d'inscription, affichant "Boutique non publiée" à tort) → création produit → boutique publique `/store/[slug]` → ajout panier → checkout invité avec champs Haïti (département/commune/point de repère) → refus correct si stock insuffisant (409) → preuve de paiement manuelle → validation admin → commande passée en `PAID` avec décrément de stock confirmé → transition de statut marchand (Payée → En préparation) → flux mot de passe oublié/reset testé (token invalide correctement rejeté, token valide bien créé en base).
+
+**Bug trouvé et corrigé dans cette session :** page Abonnement affichait "Jusqu'à null produits" pour le plan Pro au lieu de "Produits illimités" — `JSON.stringify(Infinity)` produit silencieusement `null`, cassant la comparaison `=== Infinity` côté frontend après un aller-retour API. Fix : `serializePlanLimits()`/`serializeAllPlanLimits()` dans `config/plans.ts` convertissant explicitement `Infinity` en `null` avant sérialisation, frontend adapté pour interpréter `null` comme illimité.
+
+**Reste à faire (identifié par les deux sessions) :** intégration MonCash réelle (credentials Digicel toujours en attente, comme sur tous les autres projets du portefeuille), notifications `ORDER_PLACED`/`LOW_STOCK` jamais déclenchées malgré leur modélisation, pas d'édition inline stock/prix sur un produit existant (seule la création et le statut sont éditables depuis le dashboard), tests automatisés absents.
+
+---
+
 ## 2026-07-07 (suite)
 
 ### SHOPAY : découverte d'un projet non documenté (SaaS e-commerce multi-tenant)
