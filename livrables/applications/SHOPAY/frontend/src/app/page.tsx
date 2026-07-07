@@ -21,6 +21,7 @@ export default function HomePage() {
           <span className="font-extrabold text-lg tracking-tight">SHOPAY</span>
         </div>
         <div className="flex items-center gap-3">
+          <Link href="/marketplace" className="btn btn-secondary">Découvrir les boutiques</Link>
           <Link href="/login" className="btn btn-secondary">Connexion</Link>
           <Link href="/register" className="btn btn-primary">Créer ma boutique</Link>
         </div>
