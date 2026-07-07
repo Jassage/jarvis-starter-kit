@@ -1,5 +1,6 @@
 import prisma from '../../config/database';
 import { AppError } from '../../types';
+import * as notificationsService from '../notifications/notifications.service';
 
 async function resolveActiveBoutique(slug: string) {
   const boutique = await prisma.boutique.findUnique({ where: { slug }, select: { id: true, status: true } });
@@ -93,6 +94,13 @@ export async function checkout(slug: string, sessionId: string, input: CheckoutI
       include: { items: true },
     });
     await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+    await notificationsService.createNotification(tx, {
+      boutiqueId: boutique.id,
+      type: 'ORDER_PLACED',
+      title: 'Nouvelle commande',
+      message: `Nouvelle commande ${created.orderNumber} (${created.total} ${created.currency}) en attente de paiement.`,
+      data: { orderId: created.id },
+    });
     return created;
   });
 

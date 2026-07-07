@@ -4,6 +4,7 @@ import { AppError } from '../../types';
 import { PLAN_LIMITS, SUBSCRIPTION_DURATION_MS } from '../../config/plans';
 import { uploadToCloudinary } from '../../config/cloudinary';
 import { MerchantPlan, PaymentMethod, PaymentPurpose } from '@prisma/client';
+import * as notificationsService from '../notifications/notifications.service';
 
 /** Vérifie un secret de webhook en temps constant (anti timing attack). Fail-closed si non configuré. */
 export function verifyWebhookSecret(provided: string, expected?: string): boolean {
@@ -78,10 +79,14 @@ export async function activatePayment(paymentId: string, transactionId?: string)
   });
 }
 
+// Seuil fixe (pas encore configurable par marchand/produit) : suffisant pour alerter sans
+// exiger un champ de plus dans le formulaire produit tant qu'aucun marchand réel n'en a besoin.
+const LOW_STOCK_THRESHOLD = 5;
+
 async function activateOrder(tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0], orderId: string) {
   const order = await tx.order.findUniqueOrThrow({
     where: { id: orderId },
-    include: { items: { include: { product: true } } },
+    include: { items: { include: { product: true, variant: true } } },
   });
 
   for (const item of order.items) {
@@ -91,6 +96,7 @@ async function activateOrder(tx: Parameters<Parameters<typeof prisma.$transactio
     // Si la garde échoue, toute la transaction (y compris l'activation du paiement) est annulée :
     // le paiement reste PENDING et peut être rejoué/traité manuellement plutôt que de valider
     // une commande dont le stock n'existe plus.
+    const previousQty = item.variantId ? (item.variant?.stockQty ?? 0) : item.product.stockQty;
     if (item.variantId) {
       const swap = await tx.productVariant.updateMany({
         where: { id: item.variantId, stockQty: { gte: item.quantity } },
@@ -108,17 +114,28 @@ async function activateOrder(tx: Parameters<Parameters<typeof prisma.$transactio
         throw new AppError(`Stock insuffisant pour finaliser la commande ${order.orderNumber}`, 409);
       }
     }
+
+    // Notifié uniquement au franchissement du seuil (pas à chaque commande une fois déjà bas),
+    // pour ne pas spammer le marchand de notifications répétées sur un même produit épuisé.
+    const remaining = previousQty - item.quantity;
+    if (remaining <= LOW_STOCK_THRESHOLD && previousQty > LOW_STOCK_THRESHOLD) {
+      await notificationsService.createNotification(tx, {
+        boutiqueId: order.boutiqueId,
+        type: 'LOW_STOCK',
+        title: 'Stock faible',
+        message: `Il ne reste que ${remaining} unité(s) de "${item.productNameSnapshot}".`,
+        data: { productId: item.productId, variantId: item.variantId, remaining },
+      });
+    }
   }
 
   await tx.order.update({ where: { id: orderId }, data: { status: 'PAID' } });
-  await tx.notification.create({
-    data: {
-      boutiqueId: order.boutiqueId,
-      type: 'ORDER_PAID',
-      title: 'Nouvelle commande payée',
-      message: `La commande ${order.orderNumber} (${order.total} ${order.currency}) vient d'être payée.`,
-      data: { orderId: order.id },
-    },
+  await notificationsService.createNotification(tx, {
+    boutiqueId: order.boutiqueId,
+    type: 'ORDER_PAID',
+    title: 'Nouvelle commande payée',
+    message: `La commande ${order.orderNumber} (${order.total} ${order.currency}) vient d'être payée.`,
+    data: { orderId: order.id },
   });
 }
 
@@ -135,14 +152,12 @@ async function activateSubscription(
     data: { plan, isActive: true, expiresAt: new Date(Date.now() + SUBSCRIPTION_DURATION_MS) },
   });
 
-  await tx.notification.create({
-    data: {
-      boutiqueId: subscription.boutiqueId,
-      type: 'PLAN_UPGRADED',
-      title: 'Abonnement mis à niveau',
-      message: `Votre boutique est passée au plan ${PLAN_LIMITS[plan].label}.`,
-      data: { plan },
-    },
+  await notificationsService.createNotification(tx, {
+    boutiqueId: subscription.boutiqueId,
+    type: 'PLAN_UPGRADED',
+    title: 'Abonnement mis à niveau',
+    message: `Votre boutique est passée au plan ${PLAN_LIMITS[plan].label}.`,
+    data: { plan },
   });
 }
 
@@ -162,15 +177,13 @@ export async function rejectPayment(paymentId: string, reason?: string) {
   });
   if (result.count === 0) throw new AppError('Paiement introuvable ou déjà traité', 404);
 
-  if (payment.purpose === 'ORDER' && payment.orderId) {
-    await prisma.notification.create({
-      data: {
-        boutiqueId: payment.boutiqueId,
-        type: 'PAYMENT_FAILED',
-        title: 'Paiement rejeté',
-        message: reason ? `Preuve de paiement rejetée : ${reason}` : 'Preuve de paiement rejetée.',
-        data: { orderId: payment.orderId },
-      },
+  if (payment.purpose === 'ORDER' && payment.orderId && payment.boutiqueId) {
+    await notificationsService.createNotification(prisma, {
+      boutiqueId: payment.boutiqueId,
+      type: 'PAYMENT_FAILED',
+      title: 'Paiement rejeté',
+      message: reason ? `Preuve de paiement rejetée : ${reason}` : 'Preuve de paiement rejetée.',
+      data: { orderId: payment.orderId },
     });
   }
 
@@ -203,7 +216,7 @@ export async function submitOrderProof(orderId: string, input: ProofInput) {
     proofImageUrl = uploaded.url;
   }
 
-  return prisma.payment.update({
+  const updated = await prisma.payment.update({
     where: { id: payment.id },
     data: {
       method: 'MANUAL_PROOF',
@@ -220,6 +233,19 @@ export async function submitOrderProof(orderId: string, input: ProofInput) {
       },
     },
   });
+
+  if (updated.boutiqueId) {
+    const order = await prisma.order.findUnique({ where: { id: orderId }, select: { orderNumber: true } });
+    await notificationsService.createNotification(prisma, {
+      boutiqueId: updated.boutiqueId,
+      type: 'PAYMENT_PROOF_SUBMITTED',
+      title: 'Preuve de paiement reçue',
+      message: `Une preuve de paiement a été soumise pour la commande ${order?.orderNumber ?? orderId}, en attente de vérification.`,
+      data: { orderId, paymentId: updated.id },
+    });
+  }
+
+  return updated;
 }
 
 export async function submitSubscriptionProof(boutiqueId: string, plan: MerchantPlan, input: ProofInput) {
