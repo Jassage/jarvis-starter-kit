@@ -1,0 +1,200 @@
+@import "tailwindcss";
+
+/* Thème sombre "régie TV" — navy profond, cyan électrique, or. Aucun autre
+   projet du portefeuille n'a de dashboard entièrement dark mode (seul le login
+   de BANKA l'est) : ce jeu de tokens est spécifique à ANTENN. */
+@theme {
+  --color-bg: #050b1a;
+  --color-surface: #0b1733;
+  --color-surface-2: #10203f;
+  --color-ink: #e8edf7;
+  --color-ink-2: #93a1c0;
+  --color-ink-3: #5d6b8a;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-2: rgba(255, 255, 255, 0.05);
+
+  --color-primary: #22d3ee;
+  --color-primary-2: #06b6d4;
+  --color-primary-3: #0e7490;
+  --color-primary-soft: rgba(34, 211, 238, 0.12);
+
+  --color-accent: #c8941c;
+  --color-accent-soft: rgba(200, 148, 28, 0.12);
+
+  --color-success: #22c55e;
+  --color-success-soft: rgba(34, 197, 94, 0.12);
+  --color-danger: #ef4444;
+  --color-danger-soft: rgba(239, 68, 68, 0.12);
+  --color-warning: #f59e0b;
+  --color-warning-soft: rgba(245, 158, 11, 0.12);
+  --color-info: #3b82f6;
+  --color-info-soft: rgba(59, 130, 246, 0.12);
+  --color-violet: #a78bfa;
+  --color-violet-soft: rgba(167, 139, 250, 0.12);
+  --color-rose: #fb7185;
+  --color-rose-soft: rgba(251, 113, 133, 0.12);
+
+  /* Direct / EN DIRECT */
+  --color-live: #ef4444;
+  --color-live-soft: rgba(239, 68, 68, 0.15);
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-card-hover: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6);
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  --font-inter: var(--font-inter);
+}
+
+:root {
+  --gradient-brand: linear-gradient(135deg, #0e7490, #22d3ee);
+  --gradient-brand-deep: linear-gradient(135deg, #050b1a 0%, #0b1733 55%, #0e7490 100%);
+  --gradient-gold: linear-gradient(135deg, #a3730f, #c8941c);
+  --gradient-blue: linear-gradient(135deg, #3b82f6, #2563eb);
+  --gradient-amber: linear-gradient(135deg, #f59e0b, #d97706);
+  --gradient-violet: linear-gradient(135deg, #a78bfa, #7c3aed);
+  --gradient-rose: linear-gradient(135deg, #fb7185, #e11d48);
+  --gradient-live: linear-gradient(135deg, #f43f5e, #ef4444);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.card-hover:hover { box-shadow: var(--shadow-card-hover); }
+
+.card-accent-green  { border-left: 3px solid var(--color-primary-2); }
+.card-accent-amber  { border-left: 3px solid var(--color-warning); }
+.card-accent-blue   { border-left: 3px solid var(--color-info); }
+.card-accent-violet { border-left: 3px solid var(--color-violet); }
+.card-accent-rose   { border-left: 3px solid var(--color-rose); }
+.card-accent-gold   { border-left: 3px solid var(--color-accent); }
+.card-accent-live   { border-left: 3px solid var(--color-live); }
+
+:where(.input) {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-ink);
+  font-size: 0.875rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.input::placeholder { color: var(--color-ink-3); }
+.input:focus {
+  outline: none;
+  border-color: var(--color-primary-2);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+  background: rgba(255, 255, 255, 0.05);
+}
+.input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border-radius: var(--radius);
+  padding: 0.65rem 1.1rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary {
+  background: var(--gradient-brand);
+  color: #001018;
+  box-shadow: 0 1px 2px rgba(34, 211, 238, 0.15), 0 4px 16px rgba(34, 211, 238, 0.22);
+}
+.btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(34, 211, 238, 0.32); }
+.btn-secondary {
+  background: var(--color-surface-2);
+  color: var(--color-ink-2);
+  border: 1px solid var(--color-line);
+}
+.btn-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); }
+.btn-danger {
+  background: var(--gradient-live);
+  color: white;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.25);
+}
+.btn-danger:hover:not(:disabled) { transform: translateY(-1px); }
+.btn-gold {
+  background: var(--gradient-gold);
+  color: white;
+  box-shadow: 0 4px 16px rgba(200, 148, 28, 0.25);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.badge-live {
+  animation: pulse-live 1.6s ease-in-out infinite;
+}
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.table-shell thead tr { background: var(--color-surface-2); }
+.table-shell th {
+  text-align: left;
+  padding: 0.8rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+  white-space: nowrap;
+}
+.table-shell td {
+  padding: 0.85rem 1rem;
+  border-top: 1px solid var(--color-line-2);
+  font-size: 0.875rem;
+  color: var(--color-ink-2);
+}
+.table-shell tbody tr { transition: background-color 0.12s ease; }
+.table-shell tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+
+/* Export "PDF simple" du rapport sponsors : impression du navigateur (Ctrl+P /
+   window.print()) plutôt qu'une dépendance PDF dédiée — suffisant pour justifier
+   une facturation sponsor. N'affiche que le bloc #rapport-imprimable. */
+@media print {
+  body * { visibility: hidden; }
+  #rapport-imprimable, #rapport-imprimable * { visibility: visible; }
+  #rapport-imprimable { position: absolute; left: 0; top: 0; width: 100%; color: #000; background: #fff; }
+  #rapport-imprimable .table-shell th, #rapport-imprimable .table-shell td { color: #000; border-color: #ccc; }
+}

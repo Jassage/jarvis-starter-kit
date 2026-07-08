@@ -1,0 +1,19 @@
+import { Router } from 'express';
+import { asyncHandler } from '../../utils/asyncHandler';
+import * as ctrl from './auth.controller';
+import { validate } from '../../middlewares/validate.middleware';
+import { requireAuth } from '../../middlewares/auth.middleware';
+import { authLimiter } from '../../middlewares/rateLimiter.middleware';
+import { loginSchema, updateMeSchema, changePasswordSchema } from './auth.schemas';
+
+const router = Router();
+
+router.post('/login', authLimiter, validate(loginSchema), asyncHandler(ctrl.login));
+router.post('/refresh', asyncHandler(ctrl.refresh));
+router.post('/logout', asyncHandler(ctrl.logout));
+
+router.get('/me', requireAuth, asyncHandler(ctrl.getMe));
+router.patch('/me', requireAuth, validate(updateMeSchema), asyncHandler(ctrl.updateMe));
+router.patch('/change-password', requireAuth, validate(changePasswordSchema), asyncHandler(ctrl.changePassword));
+
+export default router;

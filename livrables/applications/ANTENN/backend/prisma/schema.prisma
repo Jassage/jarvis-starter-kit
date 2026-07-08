@@ -1,0 +1,240 @@
+// ANTENN — Régie TV pour chaîne de streaming FAST (Haitech Solutions)
+// Prisma Schema — PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum Role {
+  ADMINISTRATEUR
+  OPERATEUR_REGIE
+}
+
+enum TypeContenu {
+  VIDEO_BOUCLE
+  SPOT_PUBLICITAIRE
+  HABILLAGE_LOGO
+}
+
+enum TypeCreneau {
+  PROGRAMME
+  MATCH_DIRECT
+  PUB
+}
+
+enum StatutDiffusionMatch {
+  PLANIFIE
+  EN_COURS
+  TERMINE
+}
+
+enum TypePackageSponsor {
+  TITRE_MATCH
+  BANDEAU
+  HABILLAGE_PERMANENT
+}
+
+// Distingue une grille encore en cours d'édition (BROUILLON) de ce qui a été
+// répercuté vers ErsatzTV (SYNCHRONISE) — cf. src/integrations/ersatztv.ts.
+enum SyncStatus {
+  BROUILLON
+  SYNCHRONISE
+}
+
+enum PositionOverlay {
+  HAUT_GAUCHE
+  HAUT_DROITE
+  BAS_GAUCHE
+  BAS_DROITE
+}
+
+// ─────────────────────────────────────────
+// AUTH
+// ─────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  nom       String
+  role      Role     @default(OPERATEUR_REGIE)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────
+// SPONSORS
+// ─────────────────────────────────────────
+
+model Sponsor {
+  id                String              @id @default(cuid())
+  nomSponsor        String
+  logoUrl           String?
+  typePackage       TypePackageSponsor
+  contactNom        String?
+  contactTelephone  String?
+  dateDebutContrat  DateTime
+  dateFinContrat    DateTime
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  contenus         Contenu[]
+  matchsTitre      Match[]
+  incrustations    IncrustationLogo[]
+
+  @@map("sponsors")
+}
+
+// ─────────────────────────────────────────
+// CONTENUS
+// ─────────────────────────────────────────
+
+model Contenu {
+  id             String      @id @default(cuid())
+  titre          String
+  typeContenu    TypeContenu
+  urlFichier     String
+  dureeSecondes  Int
+  sponsorId      String?
+  sponsor        Sponsor?    @relation(fields: [sponsorId], references: [id], onDelete: SetNull)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  creneaux CreneauGrille[]
+
+  @@map("contenus")
+}
+
+// ─────────────────────────────────────────
+// MATCHS
+// ─────────────────────────────────────────
+
+model Match {
+  id                  String                @id @default(cuid())
+  nomEvenement        String
+  equipes             String
+  dateHeurePrevue     DateTime
+  statutDiffusion     StatutDiffusionMatch  @default(PLANIFIE)
+  ingestUrlRtmp       String?
+  sponsorPrincipalId  String?
+  sponsorPrincipal    Sponsor?              @relation(fields: [sponsorPrincipalId], references: [id], onDelete: SetNull)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  creneaux         CreneauGrille[]
+  incrustations    IncrustationLogo[]
+  bandeaux         BandeauSponsor[]
+  diffusionLogs    DiffusionLog[]
+
+  @@map("matchs")
+}
+
+// ─────────────────────────────────────────
+// GRILLE
+// ─────────────────────────────────────────
+
+model CreneauGrille {
+  id              String       @id @default(cuid())
+  dateHeureDebut  DateTime
+  dateHeureFin    DateTime
+  typeCreneau     TypeCreneau
+  contenuId       String?
+  contenu         Contenu?     @relation(fields: [contenuId], references: [id], onDelete: SetNull)
+  matchId         String?
+  match           Match?       @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  syncStatus      SyncStatus   @default(BROUILLON)
+  syncedAt        DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  incrustations  IncrustationLogo[]
+  bandeaux       BandeauSponsor[]
+  diffusionLogs  DiffusionLog[]
+
+  @@index([dateHeureDebut])
+  @@index([dateHeureFin])
+  @@map("creneaux_grille")
+}
+
+// ─────────────────────────────────────────
+// HABILLAGE PUBLICITAIRE
+// ─────────────────────────────────────────
+
+model IncrustationLogo {
+  id          String           @id @default(cuid())
+  creneauId   String?
+  creneau     CreneauGrille?   @relation(fields: [creneauId], references: [id], onDelete: Cascade)
+  matchId     String?
+  match       Match?           @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sponsorId   String
+  sponsor     Sponsor          @relation(fields: [sponsorId], references: [id], onDelete: Cascade)
+  logoUrl     String
+  position    PositionOverlay  @default(BAS_DROITE)
+  opacite     Float            @default(0.85)
+  actif       Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+
+  @@map("incrustations_logo")
+}
+
+model BandeauSponsor {
+  id                  String          @id @default(cuid())
+  creneauId           String?
+  creneau             CreneauGrille?  @relation(fields: [creneauId], references: [id], onDelete: Cascade)
+  matchId             String?
+  match               Match?          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  // [{ texte, logoUrl?, sponsorId }] — liste hétérogène, JSON plus simple qu'une
+  // table de jointure pour un simple bandeau défilant sans besoin de requêtage fin.
+  items               Json
+  vitesseDefilement   Int             @default(60)
+  actif               Boolean         @default(true)
+  createdAt           DateTime        @default(now())
+
+  @@map("bandeaux_sponsor")
+}
+
+// ─────────────────────────────────────────
+// RAPPORTS DE DIFFUSION
+// ─────────────────────────────────────────
+
+model DiffusionLog {
+  id                       String          @id @default(cuid())
+  creneauId                String?
+  creneau                  CreneauGrille?  @relation(fields: [creneauId], references: [id], onDelete: SetNull)
+  matchId                  String?
+  match                    Match?          @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  dateHeureReelle          DateTime
+  dureeVisionneeEstimee    Int
+  nombreVuesEstimees       Int
+  createdAt                DateTime        @default(now())
+
+  @@index([creneauId])
+  @@index([matchId])
+  @@map("diffusion_logs")
+}

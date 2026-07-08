@@ -7,6 +7,51 @@
 
 ---
 
+## 2026-07-08 (suite)
+
+### ANTENN : nouveau projet construit de zéro — régie TV pour chaîne de streaming FAST (Haitech Solutions)
+
+**Contexte :** Jaslin a fourni un prompt de spécification détaillé pour un nouveau projet, client de Haitech Solutions : le système d'administration et le player web d'une chaîne de streaming linéaire (FAST). Le moteur de playout (ErsatzTV, open source) et l'ingest RTMP terrain étaient explicitement désignés comme des briques externes existantes à ne pas recoder — seul le backend d'administration ("régie") et le player web étaient à construire, avec les points d'intégration externes (API ErsatzTV, RTMP, CDN HLS) à documenter sans les coder. Ordre de construction imposé par le brief : modèle de données + grille, puis sponsors, puis player web avec EPG — respecté.
+
+**Recherche de conventions avant de coder :** deux agents Explore lancés en parallèle sur le reste du portefeuille (LAKAY pour les conventions backend — structure modules/RBAC/JWT/Prisma ; GESCOM+BANKA pour le frontend — design system, composants ui/, pattern de login dark two-panel). Plan validé avec Jaslin (EnterPlanMode) avant le codage : nom de code **ANTENN** (créole pour "antenne"), ports 4006/4007→3007 (suite logique du portefeuille), stack identique au reste (Express+Prisma+PostgreSQL / Next.js).
+
+**Livré :**
+- Schéma Prisma complet (User/RefreshToken, Sponsor, Contenu, Match, CreneauGrille, IncrustationLogo, BandeauSponsor, DiffusionLog) avec `SyncStatus` (BROUILLON/SYNCHRONISE) sur `CreneauGrille` — exigence explicite du client de ne jamais confondre visuellement une grille en cours d'édition et ce qui est réellement à l'antenne.
+- RBAC 2 rôles (ADMINISTRATEUR complet / OPERATEUR_REGIE restreint — ne peut pas toucher aux contrats sponsors), immutabilité de l'historique codée en service (créneau déjà diffusé → 409 sur modification/suppression, pas juste une restriction UI).
+- 8 modules backend (auth, grille, matchs, contenus, sponsors avec upload logo local + alerte contrat à 30j, habillage, rapports agrégés par sponsor, EPG public sans auth).
+- Frontend : premier dashboard du portefeuille entièrement dark mode (nouveau thème navy/cyan/or — tous les autres projets n'ont du dark mode que sur l'écran de login). Grille avec timeline horaire visuelle + liste, bandeau persistant brouillon/synchronisé. Player public `/regarder` avec hls.js, EPG, badge EN DIRECT, overlay logo/bandeau (les deux options — overlay HTML vs incrustation brûlée côté playout — documentées avec leurs compromis en commentaire dans le code), indicateur qualité réseau.
+- `src/integrations/ersatztv.ts` : point d'intégration ErsatzTV documenté en détail mais non branché (pas d'accès à une instance réelle dans cet environnement) — statuts (créneau synchronisé, match en direct) pilotés manuellement par l'opérateur en attendant, pour ne fabriquer aucun comportement automatique inexistant.
+
+**Durci de manière préventive :** le correctif de race condition sur le rafraîchissement de token découvert sur LAKAY plus tôt dans la journée (verrou partagé entre le hydrate() du layout et l'intercepteur Axios) a été appliqué directement dès la construction d'ANTENN plutôt que découvert après coup.
+
+**Vérifié en conditions réelles :** API (curl — guard 409 créneau passé, RBAC 403 sur écriture sponsor pour un opérateur, duplication de créneau, alerte contrat), navigateur (connexion admin et opérateur, RBAC visuel différencié par rôle confirmé, création de créneau via le vrai formulaire de bout en bout, les 7 pages du dashboard + le player). Lecture HLS réellement testée avec un flux de démonstration public (Apple bipbop, retiré de la config après coup — aucun CDN client réel disponible dans cet environnement). `tsc --noEmit` propre côté backend et frontend. Base de données remise à un état de seed propre après la session de vérification (`prisma migrate reset`), configuration `prisma.seed` ajoutée au `package.json` pour que ça marche automatiquement à l'avenir.
+
+**Reste à faire (documenté, pas codé, hors périmètre du brief) :** intégration API ErsatzTV réelle, provisioning d'un compte CDN HLS (Bunny Stream/Cloudflare Stream), génération d'URL RTMP par le serveur de streaming — ces trois points nécessitent des comptes/accès externes appartenant au client, pas quelque chose que Claude peut provisionner. Tests automatisés absents (cohérent avec le reste du portefeuille). Projet jamais commité en git à ce stade.
+
+---
+
+## 2026-07-08
+
+### LAKAY : audit senior dev + 4 correctifs, refresh token enfin migré en cookie httpOnly (root cause de l'échec précédent trouvée)
+
+**Contexte :** Jaslin a demandé une analyse "senior dev" de LAKAY (failles à corriger, manques, ce qui peut être ajouté). Audit délégué à un agent Explore en lecture seule, avec pour consigne explicite de ne pas re-signaler les 9 correctifs déjà connus de l'audit du 2026-07-01 (webhook MonCash, IDOR listing, index Prisma, géo-recherche, fuite Cloudinary, cache collision, N+1, Bull Board, CSP) — seulement l'état actuel et les régressions/nouveautés depuis. Sur "VAS Y", les 4 problèmes retenus ont été corrigés, typés (tsc backend+frontend, 0 erreur) et vérifiés.
+
+**1. Refresh token migré en cookie httpOnly — cette fois avec succès.** La mémoire du projet notait qu'une tentative précédente (début juillet) avait été **rollback** en localStorage car elle cassait l'auth en dev. `auth.controller.ts` pose désormais le cookie (`lakay_refresh_token`, `httpOnly`, path `/api/auth`, `sameSite=lax` en dev / `none`+`secure` en prod) au lieu de le renvoyer en JSON ; `/refresh` et `/logout` le lisent depuis `req.cookies`. Frontend : `accessToken` gardé en mémoire uniquement (Zustand), plus aucun token en `localStorage`, `hydrate()` au démarrage de l'app échange le cookie contre un token frais.
+
+**Vérification par `curl` d'abord jugée suffisante à tort** (login/refresh/logout fonctionnaient parfaitement) — mais la mémoire du projet, relue avant d'écrire cette entrée, signalait explicitement que la tentative précédente avait échoué en navigateur réel avec le même genre de symptôme ("boucle de redirection vers /login"). C'est cette note qui a déclenché une vérification Playwright complète plutôt que de s'arrêter à `curl` (qui ne reproduit pas les règles SameSite d'un navigateur). **Le test navigateur a effectivement reproduit l'échec** : la session ne survivait pas à un rechargement de page (401 en boucle, redirection /login), exactement le symptôme historique. **Root cause trouvée** : ce n'était pas un problème de cookie cross-origin comme supposé à l'époque, mais une **race condition** — `hydrate()` au bootstrap de l'app et l'intercepteur Axios (refresh automatique sur 401 d'une requête tierce, ex. compteurs de notifications) appelaient chacun `/auth/refresh` indépendamment ; le refresh token étant à usage unique (rotation en base à chaque appel), le second appel concurrent avec le même cookie échouait systématiquement. **Fix : verrou partagé unique** (`refreshAccessToken()` dans `api.ts`, une seule promesse de refresh en vol à la fois, réutilisée par `hydrate()` et par l'intercepteur). **Re-testé en navigateur réel (Playwright, serveurs relancés localement contre la vraie base Postgres)** : login → cookie confirmé `httpOnly=true`/`sameSite=Lax`, aucun JWT en `localStorage` ; **rechargement de page → session survit** (point qui échouait avant) ; logout → cookie supprimé, refresh révoqué. Environnement de test nettoyé après coup (serveurs arrêtés, dossier Playwright temporaire supprimé).
+
+**2. `favoriteCount` pouvait devenir négatif** : `favorites.routes.ts` décrémentait le compteur sans vérifier qu'une ligne avait réellement été supprimée — un appel répété sur un favori jamais ajouté le faisait dériver. Corrigé, vérifié via API réelle (3 DELETE répétés, compteur resté stable).
+
+**3. Paiement PENDING orphelin bloquait tout paiement futur** : un checkout Stripe/MonCash/NatCash initié puis abandonné empêchait indéfiniment `submitPaymentProof` (409 systématique), aucun job ne nettoyait jamais les `Payment` (contrairement aux `Subscription`/`Listing`). Nouveau job horaire `expireStalePendingPayments` (délai de grâce 2h, épargne les vraies preuves manuelles `awaitingVerification` en attente d'admin).
+
+**4. Workflow visites cassé, bloquait de fait les avis vérifiés** : le statut `COMPLETED` de `VisitRequest` n'était jamais atteint (aucune UI ne le pose), alors que le système d'avis l'accepte en alternative à `CONFIRMED`. Nouveau `visits.service.ts::completeElapsedVisits()` (bascule automatique une fois `proposedDate` dépassée), câblé dans le job de maintenance horaire déjà existant — qui couvre donc désormais 4 balayages (abonnements, annonces, paiements orphelins, visites élapsées).
+
+**Découverte annexe en cours de session :** Jaslin travaillait en parallèle dans son IDE sur BANKA (refactor des schémas de validation en fichiers séparés) pendant cette session — signalé, fichiers disjoints, aucun conflit.
+
+**Reste à faire :** intégration réelle API MonCash/NatCash, tests automatisés quasi inexistants sur les chemins critiques (le dossier `__tests__` existe mais ne couvre que des calculs purs), checkout Stripe réel non testable (pas de clé de test dans l'environnement).
+
+---
+
 ## 2026-07-07 (soir, session distincte)
 
 ### SHOPAY : demande initiale "plateforme SaaS e-commerce complète" + vérification navigateur + fix affichage plan illimité

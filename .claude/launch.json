@@ -81,6 +81,34 @@
       "runtimeArgs": ["--prefix", "livrables/applications/LAKAY/frontend", "run", "dev"],
       "port": 3004,
       "autoPort": false
+    },
+    {
+      "name": "shopay-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/SHOPAY/backend", "run", "dev"],
+      "port": 4005,
+      "autoPort": false
+    },
+    {
+      "name": "shopay-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/SHOPAY/frontend", "run", "dev"],
+      "port": 3006,
+      "autoPort": false
+    },
+    {
+      "name": "antenn-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/ANTENN/backend", "run", "dev"],
+      "port": 4006,
+      "autoPort": false
+    },
+    {
+      "name": "antenn-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/ANTENN/frontend", "run", "dev"],
+      "port": 3007,
+      "autoPort": false
     }
   ]
 }
