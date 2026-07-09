@@ -8,6 +8,8 @@ import AuthStack from "./AuthStack";
 import AppTabs from "./AppTabs";
 import OnboardingScreen from "../screens/onboarding/OnboardingScreen";
 import SplashLogoScreen from "../screens/SplashLogoScreen";
+import { navigationRef } from "./navigationRef";
+import { registerForPushNotifications } from "../notifications";
 
 // Durée minimale d'affichage du logo pour éviter un flash trop bref sur
 // les connexions rapides (bootstrap() résolu quasi instantanément en local).
@@ -34,6 +36,7 @@ export default function RootNavigator() {
   useEffect(() => {
     if (user && token) {
       connectSocket(token);
+      registerForPushNotifications();
     } else {
       disconnectSocket();
     }
@@ -63,5 +66,7 @@ export default function RootNavigator() {
     return <OnboardingScreen />;
   }
 
-  return <NavigationContainer>{user ? <AppTabs /> : <AuthStack />}</NavigationContainer>;
+  return (
+    <NavigationContainer ref={navigationRef}>{user ? <AppTabs /> : <AuthStack />}</NavigationContainer>
+  );
 }

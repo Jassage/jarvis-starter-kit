@@ -9,6 +9,7 @@ interface User {
   firstName: string;
   isEmailVerified: boolean;
   subscriptionPlan: string;
+  boostsRemaining: number;
   mainPhoto?: string | null;
 }
 
@@ -107,6 +108,7 @@ export const useAuthStore = create<AuthState>()(
               firstName: u.profile?.firstName ?? "",
               isEmailVerified: u.isEmailVerified,
               subscriptionPlan: u.subscriptionPlan,
+              boostsRemaining: u.boostsRemaining ?? 0,
               mainPhoto: u.photos?.find((p: { isMain: boolean }) => p.isMain)?.url ?? null,
             },
           });

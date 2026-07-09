@@ -36,7 +36,14 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-foreground.png",
+          "color": "#E11D74"
+        }
+      ]
     ],
     "extra": {
       "eas": {

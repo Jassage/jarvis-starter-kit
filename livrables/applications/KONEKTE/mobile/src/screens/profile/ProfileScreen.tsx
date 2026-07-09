@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -18,6 +19,7 @@ import { useAuthStore } from "../../store/auth.store";
 import { useSocketStore } from "../../store/socket.store";
 import { fetchMyProfile } from "../../api/profiles.api";
 import { uploadPhoto } from "../../api/photos.api";
+import { activateBoost } from "../../api/swipes.api";
 import { MyProfile } from "../../types";
 import type { ProfileStackParamList } from "../../navigation/ProfileStack";
 
@@ -25,26 +27,42 @@ type Props = NativeStackScreenProps<ProfileStackParamList, "ProfileHome">;
 
 export default function ProfileScreen({ navigation }: Props) {
   const logout = useAuthStore((s) => s.logout);
+  const refreshUser = useAuthStore((s) => s.refreshUser);
+  const boostsRemaining = useAuthStore((s) => s.user?.boostsRemaining ?? 0);
   const disconnectSocket = useSocketStore((s) => s.disconnect);
   const [profile, setProfile] = useState<MyProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [boosting, setBoosting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await fetchMyProfile();
+      const [result] = await Promise.all([fetchMyProfile(), refreshUser()]);
       setProfile(result);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshUser]);
 
   useFocusEffect(
     useCallback(() => {
       load();
     }, [load])
   );
+
+  const onBoost = async () => {
+    setBoosting(true);
+    try {
+      await activateBoost();
+      await refreshUser();
+      Alert.alert("Profil boosté !", "Tu es mis en avant dans le discover pendant 30 minutes.");
+    } catch (err: any) {
+      Alert.alert("Erreur", err?.response?.data?.error ?? "Impossible d'activer le boost.");
+    } finally {
+      setBoosting(false);
+    }
+  };
 
   const onLogout = async () => {
     disconnectSocket();
@@ -97,9 +115,25 @@ export default function ProfileScreen({ navigation }: Props) {
             {profile?.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
 
             {profile?.subscriptionPlan === "PREMIUM" ? (
-              <View style={styles.premiumBadge}>
-                <Ionicons name="sparkles" size={14} color="#fff" />
-                <Text style={styles.premiumBadgeText}>Premium</Text>
+              <View style={styles.premiumRow}>
+                <View style={styles.premiumBadge}>
+                  <Ionicons name="sparkles" size={14} color="#fff" />
+                  <Text style={styles.premiumBadgeText}>Premium</Text>
+                </View>
+                <Pressable
+                  style={[styles.boostButton, boostsRemaining === 0 && styles.boostButtonDisabled]}
+                  onPress={onBoost}
+                  disabled={boosting || boostsRemaining === 0}
+                >
+                  {boosting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="flash" size={14} color="#fff" />
+                      <Text style={styles.boostButtonText}>Booster ({boostsRemaining})</Text>
+                    </>
+                  )}
+                </Pressable>
               </View>
             ) : (
               <Pressable style={styles.upgradeButton} onPress={() => navigation.navigate("Premium")}>
@@ -181,6 +215,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   premiumBadgeText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  premiumRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
+  boostButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#7c3aed",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  boostButtonDisabled: { backgroundColor: "#c4b5fd" },
+  boostButtonText: { color: "#fff", fontSize: 12, fontWeight: "700" },
   completeRow: { width: "100%", marginTop: 16 },
   completeTrack: { height: 8, borderRadius: 4, backgroundColor: "#eee", overflow: "hidden" },
   completeFill: { height: 8, backgroundColor: "#E11D74" },

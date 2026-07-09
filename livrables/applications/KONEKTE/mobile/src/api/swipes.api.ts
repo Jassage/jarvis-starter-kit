@@ -32,3 +32,8 @@ export const fetchSuperLikesRemaining = async () => {
   );
   return data.data;
 };
+
+export const activateBoost = async () => {
+  const { data } = await api.post<{ success: boolean; data: { boostedUntil: string } }>("/swipes/boost");
+  return data.data;
+};
