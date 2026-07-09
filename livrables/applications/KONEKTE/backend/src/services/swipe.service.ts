@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma";
 import { SwipeAction } from "@prisma/client";
 import { v2 as cloudinary } from "cloudinary";
+import { sendPushNotification } from "./push.service";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -68,28 +69,54 @@ export const swipeService = async (
         },
       });
 
+      const senderBody = `Vous avez matché avec ${match.userB.profile?.firstName ?? "quelqu'un"}`;
+      const receiverBody = `Vous avez matché avec ${match.userA.profile?.firstName ?? "quelqu'un"}`;
+
       await prisma.notification.createMany({
         data: [
           {
             userId: senderId,
             type: "NEW_MATCH",
             title: "Nouveau match !",
-            body: `Vous avez matché avec ${match.userB.profile?.firstName ?? "quelqu'un"}`,
+            body: senderBody,
             data: { matchId: match.id, userId: receiverId },
           },
           {
             userId: receiverId,
             type: "NEW_MATCH",
             title: "Nouveau match !",
-            body: `Vous avez matché avec ${match.userA.profile?.firstName ?? "quelqu'un"}`,
+            body: receiverBody,
             data: { matchId: match.id, userId: senderId },
           },
         ],
       });
+
+      sendPushNotification(senderId, "Nouveau match !", senderBody, { type: "NEW_MATCH", matchId: match.id });
+      sendPushNotification(receiverId, "Nouveau match !", receiverBody, { type: "NEW_MATCH", matchId: match.id });
     }
   }
 
   return { action, isMatch: !!match, match };
+};
+
+const BOOST_DURATION_MS = 30 * 60 * 1000;
+
+export const activateBoostService = async (userId: string) => {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { boostsRemaining: true } });
+  if (!user || user.boostsRemaining <= 0) throw new Error("Aucun boost disponible");
+
+  const boostedUntil = new Date(Date.now() + BOOST_DURATION_MS);
+
+  // Compare-and-swap : évite qu'un double-tap ne consomme deux crédits pour
+  // un seul boost (même pattern que le reste du portefeuille sur les
+  // opérations qui décrémentent un compteur partagé).
+  const claimed = await prisma.user.updateMany({
+    where: { id: userId, boostsRemaining: { gt: 0 } },
+    data: { boostsRemaining: { decrement: 1 }, isBoosted: true, boostedUntil },
+  });
+  if (claimed.count === 0) throw new Error("Aucun boost disponible");
+
+  return { boostedUntil };
 };
 
 export const undoLastSwipeService = async (userId: string) => {

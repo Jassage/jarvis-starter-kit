@@ -11,6 +11,13 @@ export const discoverService = async (userId: string, query: DiscoverQuery) => {
   });
   if (!currentUser?.profile) throw new Error("Profil incomplet");
 
+  // Pas de job planifié sur ce projet pour désactiver les boosts expirés :
+  // nettoyage paresseux à chaque lecture du discover (idempotent, peu coûteux).
+  await prisma.user.updateMany({
+    where: { isBoosted: true, boostedUntil: { lt: new Date() } },
+    data: { isBoosted: false },
+  });
+
   const alreadySwiped = await prisma.swipe.findMany({
     where: { senderId: userId },
     select: { receiverId: true },

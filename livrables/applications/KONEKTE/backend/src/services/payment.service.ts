@@ -199,8 +199,14 @@ export async function activatePremium(userId: string, planId: string) {
   const expiry = new Date(base);
   expiry.setMonth(expiry.getMonth() + plan.months);
 
+  // "Boost mensuel" (avantage annoncé du Premium) : un crédit de boost par
+  // mois payé, cumulable avec les crédits déjà en réserve.
   await prisma.user.update({
     where: { id: userId },
-    data: { subscriptionPlan: "PREMIUM", subscriptionExpiry: expiry },
+    data: {
+      subscriptionPlan: "PREMIUM",
+      subscriptionExpiry: expiry,
+      boostsRemaining: { increment: plan.months },
+    },
   });
 }

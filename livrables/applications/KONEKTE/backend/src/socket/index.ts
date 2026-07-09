@@ -6,8 +6,9 @@ import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma";
 import { JwtPayload } from "../types";
 import { sendMessageService } from "../services/message.service";
+import { sendPushNotification } from "../services/push.service";
 
-const userRoom = (userId: string) => `user:${userId}`;
+export const userRoom = (userId: string) => `user:${userId}`;
 
 let _io: SocketServer | null = null;
 
@@ -121,11 +122,22 @@ export const initSocket = (httpServer: HttpServer) => {
 
           io.to(`conv:${data.conversationId}`).emit("message:new", finalMessage);
 
+          const senderName =
+            (await prisma.profile.findUnique({ where: { userId }, select: { firstName: true } }))?.firstName ??
+            "Quelqu'un";
+
           if (isReceiverOnline) {
             io.to(userRoom(message.receiverId)).emit("notification:new", {
               type: "NEW_MESSAGE",
               conversationId: data.conversationId,
-              senderName: (await prisma.profile.findUnique({ where: { userId }, select: { firstName: true } }))?.firstName ?? "Quelqu'un",
+              senderName,
+            });
+          } else {
+            // Hors ligne (app fermée/arrière-plan) : seul le push peut le prévenir,
+            // le socket ne le touchera pas tant qu'il ne se reconnecte pas.
+            sendPushNotification(message.receiverId, senderName, message.content, {
+              type: "NEW_MESSAGE",
+              conversationId: data.conversationId,
             });
           }
         } catch (err) {

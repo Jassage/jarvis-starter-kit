@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { requireAuth } from "../middlewares/auth.middleware";
 import { AuthRequest } from "../types";
-import { swipeService, getMatchesService, undoLastSwipeService, unmatchService, getLikesReceivedService, getSuperLikeRemainingService } from "../services/swipe.service";
+import { swipeService, getMatchesService, undoLastSwipeService, unmatchService, getLikesReceivedService, getSuperLikeRemainingService, activateBoostService } from "../services/swipe.service";
 
 const router = Router();
 
@@ -57,6 +57,16 @@ router.get("/super-likes-remaining", requireAuth, async (req: AuthRequest, res: 
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Erreur serveur";
     res.status(500).json({ success: false, error: message });
+  }
+});
+
+router.post("/boost", requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const result = await activateBoostService(req.userId!);
+    res.json({ success: true, data: result });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Erreur serveur";
+    res.status(400).json({ success: false, error: message });
   }
 });
 
