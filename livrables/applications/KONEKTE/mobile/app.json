@@ -3,6 +3,7 @@
     "name": "KONEKTE",
     "slug": "konekte-mobile",
     "version": "1.0.0",
+    "scheme": "konekte",
     "orientation": "portrait",
     "newArchEnabled": true,
     "icon": "./assets/icon.png",
@@ -34,7 +35,8 @@
           "resizeMode": "contain"
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {

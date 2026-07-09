@@ -4,13 +4,13 @@ import { Ionicons } from "@expo/vector-icons";
 import DiscoverStack, { DiscoverStackParamList } from "./DiscoverStack";
 import MatchesScreen from "../screens/matches/MatchesScreen";
 import ChatStack, { ChatStackParamList } from "./ChatStack";
-import ProfileScreen from "../screens/profile/ProfileScreen";
+import ProfileStack, { ProfileStackParamList } from "./ProfileStack";
 
 export type AppTabsParamList = {
   Discover: NavigatorScreenParams<DiscoverStackParamList>;
   Matches: undefined;
   Chat: NavigatorScreenParams<ChatStackParamList>;
-  Profile: undefined;
+  Profile: NavigatorScreenParams<ProfileStackParamList>;
 };
 
 const Tab = createBottomTabNavigator<AppTabsParamList>();
@@ -36,7 +36,7 @@ export default function AppTabs() {
       <Tab.Screen name="Discover" component={DiscoverStack} options={{ title: "Découverte" }} />
       <Tab.Screen name="Matches" component={MatchesScreen} options={{ title: "Matchs" }} />
       <Tab.Screen name="Chat" component={ChatStack} options={{ title: "Messages" }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: "Profil" }} />
+      <Tab.Screen name="Profile" component={ProfileStack} options={{ title: "Profil" }} />
     </Tab.Navigator>
   );
 }

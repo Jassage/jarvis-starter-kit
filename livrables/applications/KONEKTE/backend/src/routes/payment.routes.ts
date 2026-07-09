@@ -10,12 +10,15 @@ import {
 
 const router = Router();
 
+const isMobileClient = (req: Request): boolean =>
+  req.headers["x-client-type"] === "mobile";
+
 // ─── Stripe ───────────────────────────────────────────────────────────────────
 
 router.post("/stripe/create-checkout", requireAuth, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { planId } = req.body;
-    const result = await createStripeSession(req.userId!, planId);
+    const result = await createStripeSession(req.userId!, planId, isMobileClient(req));
     res.json({ success: true, data: result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Erreur serveur";

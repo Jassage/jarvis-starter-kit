@@ -10,6 +10,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -18,8 +19,11 @@ import { useSocketStore } from "../../store/socket.store";
 import { fetchMyProfile } from "../../api/profiles.api";
 import { uploadPhoto } from "../../api/photos.api";
 import { MyProfile } from "../../types";
+import type { ProfileStackParamList } from "../../navigation/ProfileStack";
 
-export default function ProfileScreen() {
+type Props = NativeStackScreenProps<ProfileStackParamList, "ProfileHome">;
+
+export default function ProfileScreen({ navigation }: Props) {
   const logout = useAuthStore((s) => s.logout);
   const disconnectSocket = useSocketStore((s) => s.disconnect);
   const [profile, setProfile] = useState<MyProfile | null>(null);
@@ -91,7 +95,18 @@ export default function ProfileScreen() {
             {profile?.city ? <Text style={styles.meta}>{profile.city}</Text> : null}
             {profile?.occupation ? <Text style={styles.meta}>{profile.occupation}</Text> : null}
             {profile?.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
-            <Text style={styles.plan}>Plan : {profile?.subscriptionPlan}</Text>
+
+            {profile?.subscriptionPlan === "PREMIUM" ? (
+              <View style={styles.premiumBadge}>
+                <Ionicons name="sparkles" size={14} color="#fff" />
+                <Text style={styles.premiumBadgeText}>Premium</Text>
+              </View>
+            ) : (
+              <Pressable style={styles.upgradeButton} onPress={() => navigation.navigate("Premium")}>
+                <Ionicons name="sparkles" size={16} color="#fff" />
+                <Text style={styles.upgradeButtonText}>Passer Premium</Text>
+              </Pressable>
+            )}
 
             <View style={styles.completeRow}>
               <View style={styles.completeTrack}>
@@ -144,7 +159,28 @@ const styles = StyleSheet.create({
   name: { fontSize: 24, fontWeight: "700" },
   meta: { fontSize: 14, color: "#666", marginTop: 2 },
   bio: { fontSize: 14, color: "#333", marginTop: 10, textAlign: "center" },
-  plan: { fontSize: 13, color: "#999", marginTop: 8 },
+  upgradeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#D4537E",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 10,
+  },
+  upgradeButtonText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  premiumBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#f59e0b",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    marginTop: 10,
+  },
+  premiumBadgeText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   completeRow: { width: "100%", marginTop: 16 },
   completeTrack: { height: 8, borderRadius: 4, backgroundColor: "#eee", overflow: "hidden" },
   completeFill: { height: 8, backgroundColor: "#E11D74" },

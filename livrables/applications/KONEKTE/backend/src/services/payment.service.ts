@@ -17,11 +17,18 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder"
   apiVersion: "2026-05-27.dahlia",
 });
 
-export async function createStripeSession(userId: string, planId: string) {
+export async function createStripeSession(userId: string, planId: string, mobile = false) {
   const plan = PLANS[planId];
   if (!plan) throw new Error("Plan invalide");
 
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3001";
+  // L'app mobile n'a pas de page web /premium — Stripe doit rediriger vers
+  // un deep link (scheme "konekte") que WebBrowser.openAuthSessionAsync
+  // intercepte pour fermer l'onglet et revenir dans l'app.
+  const successUrl = mobile
+    ? "konekte://premium/success?session_id={CHECKOUT_SESSION_ID}"
+    : `${frontendUrl}/premium/success?session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl = mobile ? "konekte://premium/cancel" : `${frontendUrl}/premium?cancelled=1`;
 
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ["card"],
@@ -37,8 +44,8 @@ export async function createStripeSession(userId: string, planId: string) {
       },
     ],
     metadata: { userId, planId },
-    success_url: `${frontendUrl}/premium/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${frontendUrl}/premium?cancelled=1`,
+    success_url: successUrl,
+    cancel_url: cancelUrl,
   });
 
   return { url: session.url, sessionId: session.id };
