@@ -11,7 +11,23 @@
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:5000/api/auth/me)",
       "Bash(curl -s -m 5 http://localhost:5000/)",
       "Bash(powershell -NoProfile -Command \"Get-Process -Id 6708 -ErrorAction SilentlyContinue | Select-Object Id,ProcessName,StartTime\")",
-      "Bash(curl -s -o /dev/null -w \"HTTP:%{http_code}\\\\n\" \"http://localhost:5000/uploads/attachments/photos/attachment-1782843932856-691955019.png\")"
+      "Bash(curl -s -o /dev/null -w \"HTTP:%{http_code}\\\\n\" \"http://localhost:5000/uploads/attachments/photos/attachment-1782843932856-691955019.png\")",
+      "Bash(npm ls *)",
+      "Read(//c/Program Files/Google/Chrome/Application/**)",
+      "Read(//c/Program Files \\(x86\\)/Microsoft/Edge/Application/**)",
+      "Read(//c/Program Files/Microsoft/Edge/Application/**)",
+      "Bash(timeout 60 bash -c 'until curl -sf http://localhost:4001/health >/dev/null 2>&1; do sleep 2; done')",
+      "Bash(timeout 90 bash -c 'until curl -sf http://localhost:3001 >/dev/null 2>&1; do sleep 2; done')",
+      "Bash(node capture.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:4002/api/transferts)",
+      "Bash(rm -f gescom_cookies.txt)",
+      "Bash(curl -s -c gescom_cookies.txt -X POST http://localhost:4002/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@gescom.ht\",\"motDePasse\":\"Admin@123\"}')",
+      "Bash(curl -s -b gescom_cookies.txt http://localhost:4002/api/emplacements)",
+      "Bash(curl -s -b gescom_cookies.txt http://localhost:4002/api/stock)",
+      "Bash(netstat -ano)",
+      "Bash(git commit -m 'GESCOM : module Rapports \\(Phase 6\\) - ventes, stock, achats, clients *)",
+      "Bash(node verify3.js)",
+      "Bash(node verify-login.js)"
     ]
   }
 }
