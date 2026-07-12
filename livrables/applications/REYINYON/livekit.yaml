@@ -1,0 +1,34 @@
+# REYINYON — configuration LiveKit self-hébergé (dev local).
+#
+# TURN embarqué activé (turn.enabled) plutôt qu'un coturn en conteneur séparé
+# suggéré par le brief initial — fonctionnellement équivalent pour un
+# participant derrière un NAT/pare-feu restrictif, et évite de synchroniser un
+# secret partagé entre deux services distincts. En dev, seul le TURN UDP non-TLS
+# est activé (pas de tls_port/domain) car TURNS exigerait un certificat réel sur
+# un nom de domaine public — à activer en production sur un vrai domaine.
+port: 7880
+rtc:
+  tcp_port: 7881
+  # 50000-50159 est réservé par Windows (Hyper-V NAT, cf. `netsh interface ipv4
+  # show excludedportrange`) et fait échouer le bind UDP de Docker Desktop —
+  # décalé sur une plage libre.
+  port_range_start: 52000
+  port_range_end: 52100
+  # false + node_ip explicite plutôt que use_external_ip:true : ce dernier fait
+  # découvrir à LiveKit son IP PUBLIQUE via STUN, alors que le navigateur de
+  # test et le conteneur Docker sont sur la MÊME machine (localhost) — le
+  # candidat ICE annoncé (IP publique) n'est alors pas joignable en boucle
+  # locale depuis le navigateur (hairpin NAT non supporté par la box/routeur),
+  # d'où "could not establish pc connection" reproduit même en test solo.
+  # 127.0.0.1 est correct pour du dev sur la même machine (Docker Desktop
+  # republie les ports UDP sur 0.0.0.0, donc joignable via loopback) ; à
+  # remplacer par l'IP LAN de la machine si un participant doit rejoindre
+  # depuis un autre appareil du même réseau, et par une vraie IP publique/
+  # domaine en production.
+  use_external_ip: false
+  node_ip: 127.0.0.1
+redis:
+  address: redis:6379
+turn:
+  enabled: true
+  udp_port: 3478

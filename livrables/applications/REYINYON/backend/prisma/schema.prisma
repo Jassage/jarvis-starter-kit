@@ -1,0 +1,177 @@
+// REYINYON — visioconférence WebRTC résiliente (marché haïtien/Caraïbes)
+// Prisma Schema — PostgreSQL
+// Phase 1 (cette session) : réunions, participants (avec/sans compte), chat,
+// contrôles hôte, salle d'attente, reprise de session. Le modèle Enregistrement
+// est posé mais non câblé à un pipeline LiveKit Egress réel (cf. Hors périmètre
+// dans le plan de session — nécessite un worker Egress + stockage objet).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StatutReunion {
+  PLANIFIEE
+  EN_COURS
+  TERMINEE
+}
+
+// Mode de connexion par défaut suggéré à la jointe — n'est pas imposé de force
+// (un participant peut toujours activer sa caméra même si la réunion suggère
+// AUDIO_SEUL), cf. reunions.service.ts.
+enum ModeConnexion {
+  VIDEO
+  AUDIO_SEUL
+  DIAL_IN
+}
+
+enum ModeConnexionParticipant {
+  VIDEO
+  AUDIO_SEUL
+  DIAL_IN_TELEPHONE
+}
+
+enum StatutAttente {
+  EN_ATTENTE
+  ADMIS
+  REJETE
+}
+
+enum StatutEnregistrement {
+  NON_DEMARRE
+  EN_COURS
+  DISPONIBLE
+}
+
+enum TypeMessage {
+  TEXTE
+  PHOTO
+  AUDIO
+}
+
+model User {
+  id             String   @id @default(cuid())
+  nom            String
+  email          String   @unique
+  motDePasseHash String
+  telephone      String?
+  createdAt      DateTime @default(now())
+
+  refreshTokens RefreshToken[]
+  reunions      Reunion[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Reunion {
+  id                    String        @id @default(cuid())
+  hoteId                String
+  hote                  User          @relation(fields: [hoteId], references: [id])
+  titre                 String
+  dateHeurePrevue       DateTime?
+  statut                StatutReunion @default(PLANIFIEE)
+  // Slug court utilisé dans /rejoindre/:codeReunion — distinct de codeAcces (un
+  // PIN additionnel optionnel), jamais régénéré une fois la réunion créée.
+  codeReunion           String        @unique
+  codeAcces             String?
+  // Code numérique court (6 chiffres) distinct de codeReunion — un clavier
+  // téléphonique ne saisit pas bien des lettres. Utilisé par l'IVR dial-in
+  // (integrations/telephony.ts) pour identifier la réunion depuis un appel.
+  // Nullable pour ne pas casser les réunions déjà créées avant l'ajout de ce
+  // champ ; toujours généré pour les nouvelles réunions (reunions.service.ts).
+  codeTelephone         String?       @unique
+  salleAttenteActive    Boolean       @default(false)
+  verrouillee           Boolean       @default(false)
+  modeConnexionMinimale ModeConnexion @default(VIDEO)
+  livekitRoomName       String        @unique
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  participants    Participant[]
+  messages        MessageChat[]
+  enregistrements Enregistrement[]
+
+  @@index([hoteId])
+  @@map("reunions")
+}
+
+model Participant {
+  id            String                   @id @default(cuid())
+  reunionId     String
+  reunion       Reunion                  @relation(fields: [reunionId], references: [id], onDelete: Cascade)
+  // Null pour un invité sans compte (participation par lien, cf. brief) —
+  // renseigné seulement si l'appelant était authentifié au moment de rejoindre.
+  utilisateurId String?
+  nomAffiche    String
+  modeConnexion ModeConnexionParticipant @default(VIDEO)
+  statutAttente StatutAttente            @default(ADMIS)
+  dateHeureEntree DateTime?
+  dateHeureSortie DateTime?
+  // Identité LiveKit (participant.identity) — générée serveur, jamais choisie
+  // par le client, pour que mute/remove côté hôte ciblent la bonne connexion.
+  livekitIdentity    String @unique
+  // Reprise de session (brief : "rejoindre en un clic... sans redemander
+  // l'autorisation si la salle d'attente était déjà passée") : seul le hash
+  // SHA-256 du reconnectToken opaque est stocké, jamais le token en clair
+  // (même pattern que les tokens de reset mot de passe POSTA/LAKAY/SHOPAY).
+  reconnectTokenHash String @unique
+  createdAt          DateTime @default(now())
+
+  messages MessageChat[]
+
+  @@index([reunionId])
+  @@map("participants")
+}
+
+model MessageChat {
+  id            String      @id @default(cuid())
+  reunionId     String
+  reunion       Reunion     @relation(fields: [reunionId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  type          TypeMessage @default(TEXTE)
+  // Texte du message si TEXTE ; légende optionnelle si PHOTO/AUDIO.
+  contenu       String?
+  // Chemin du fichier uploadé (photo/audio), servi via /uploads — null pour TEXTE.
+  urlFichier    String?
+  envoyeA       DateTime    @default(now())
+
+  @@index([reunionId, envoyeA])
+  @@map("messages_chat")
+}
+
+// Enregistrement serveur réel via LiveKit Egress, sortie fichier local (pas
+// besoin de stockage objet S3/GCS pour du self-host — cf. docker-compose.yml
+// service `egress`, volume ./recordings).
+model Enregistrement {
+  id            String               @id @default(cuid())
+  reunionId     String
+  reunion       Reunion              @relation(fields: [reunionId], references: [id], onDelete: Cascade)
+  // Identifiant Egress LiveKit — nécessaire pour arrêter un enregistrement en
+  // cours (egressClient.stopEgress). Null une fois l'enregistrement terminé.
+  egressId      String?              @unique
+  urlFichier    String?
+  dureeSecondes Int?
+  tailleFichier Int?
+  statut        StatutEnregistrement @default(NON_DEMARRE)
+  createdAt     DateTime             @default(now())
+
+  @@index([reunionId])
+  @@map("enregistrements")
+}

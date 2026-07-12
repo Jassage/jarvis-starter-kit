@@ -1,0 +1,68 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Port hôte distinct de 6379 par précaution (un autre projet du portefeuille
+    # utilise déjà un Redis système sur la machine) — le port interne au réseau
+    # docker (utilisé par LiveKit via redis:6379) est inchangé.
+    ports:
+      - "6380:6379"
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    environment:
+      # Clé/secret injectés depuis .env (jamais commité) plutôt qu'en dur dans
+      # livekit.yaml — même principe que backend/.env pour JWT_SECRET.
+      LIVEKIT_KEYS: "devkey: ${LIVEKIT_API_SECRET}"
+    ports:
+      - "7880:7880"                     # HTTP/WebSocket — signalisation (LIVEKIT_URL / NEXT_PUBLIC_LIVEKIT_WS_URL)
+      - "7881:7881"                     # Fallback TCP WebRTC (clients derrière un pare-feu bloquant l'UDP)
+      - "3478:3478/udp"                 # TURN embarqué (turn.enabled dans livekit.yaml) — cf. Contexte du plan
+      - "52000-52100:52000-52100/udp"   # Plage RTP WebRTC (décalée hors des ports UDP exclus par Windows/Hyper-V, cf. livekit.yaml)
+    depends_on:
+      - redis
+
+  # Enregistrement serveur réel (contrairement au brief initial qui supposait
+  # S3/GCS nécessaire) : Egress écrit directement sur un volume local monté,
+  # aucun stockage objet externe requis pour du dev/self-host.
+  #
+  # `network_mode: service:livekit` — recommandation officielle LiveKit pour
+  # un self-host colocalisé : livekit.yaml utilise `node_ip: 127.0.0.1` pour
+  # que le NAVIGATEUR de Jaslin (même machine que Docker) reçoive des candidats
+  # ICE joignables, mais ce même 127.0.0.1 est inutilisable par un AUTRE
+  # conteneur (egress) pour joindre livekit — chaque conteneur a son propre
+  # loopback. En partageant directement le netns de livekit, le 127.0.0.1
+  # d'egress devient celui de livekit : egress peut alors réellement rejoindre
+  # le flux WebRTC de la room, pas seulement la signalisation (bug réel trouvé
+  # en vérification : Egress démarrait puis avortait avec "Start signal not
+  # received", symptôme de ce même problème ICE déjà rencontré ailleurs dans
+  # cette session, mais côté conteneur cette fois plutôt que côté navigateur).
+  egress:
+    image: livekit/egress:latest
+    restart: unless-stopped
+    network_mode: "service:livekit"
+    environment:
+      EGRESS_CONFIG_BODY: |
+        log_level: info
+        api_key: devkey
+        api_secret: ${LIVEKIT_API_SECRET}
+        ws_url: ws://127.0.0.1:7880
+        redis:
+          address: redis:6379
+        insecure: true
+    volumes:
+      - ./recordings:/out
+    # Chrome (rendu du layout composite) a besoin de /dev/shm et de
+    # CAP_SYS_ADMIN pour son sandbox — recommandation officielle LiveKit Egress.
+    cap_add:
+      - CAP_SYS_ADMIN
+    # 1 Go s'est avéré insuffisant en pratique (Chrome hangait/plantait sans
+    # erreur claire) — 2 Go est la recommandation officielle LiveKit Egress.
+    shm_size: "2gb"
+    depends_on:
+      - redis
+      - livekit

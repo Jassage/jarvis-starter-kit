@@ -1,0 +1,244 @@
+@import "tailwindcss";
+
+/* REYINYON — refonte glassmorphism (2026-07-11) : toute l'appli (dashboard
+   inclus, resté en thème clair plat jusqu'ici) passe sur un même fond navy
+   profond avec des halos animés, et les cartes/panneaux/champs deviennent du
+   verre dépoli (fond translucide + backdrop-blur + liseré clair en haut,
+   comme un reflet). Un seul jeu de tokens (--color-surface, --color-ink...)
+   pilote tout : composants partagés (Badge/StatCard/Modal/.card/.input),
+   dashboard ET salle de réunion en héritent automatiquement, plus besoin de
+   dupliquer un thème clair et un thème sombre. Le vert menthe reste le fil
+   rouge visuel pour tout ce qui touche à la qualité de connexion. */
+@theme {
+  --color-bg: #060c1a;
+  --color-surface: rgba(255, 255, 255, 0.055);
+  --color-surface-2: rgba(255, 255, 255, 0.09);
+  --color-ink: #f3f6fa;
+  --color-ink-2: rgba(243, 246, 250, 0.68);
+  --color-ink-3: rgba(243, 246, 250, 0.42);
+  --color-line: rgba(255, 255, 255, 0.11);
+  --color-line-2: rgba(255, 255, 255, 0.07);
+
+  --color-primary: #0b1733;
+  --color-primary-2: #2f5fa8;
+  --color-primary-3: #5b9cf0;
+  --color-primary-soft: rgba(91, 156, 240, 0.16);
+
+  --color-accent: #22d3ac;
+  --color-accent-soft: rgba(34, 211, 172, 0.14);
+
+  --color-success: #34d399;
+  --color-success-soft: rgba(52, 211, 153, 0.14);
+  --color-danger: #fb7185;
+  --color-danger-soft: rgba(251, 113, 133, 0.14);
+  --color-warning: #fbbf5e;
+  --color-warning-soft: rgba(251, 191, 94, 0.14);
+  --color-info: #60a5fa;
+  --color-info-soft: rgba(96, 165, 250, 0.14);
+  --color-violet: #a78bfa;
+  --color-violet-soft: rgba(167, 139, 250, 0.16);
+  --color-rose: #fb7185;
+  --color-rose-soft: rgba(251, 113, 133, 0.14);
+  --color-neutral-soft: rgba(255, 255, 255, 0.08);
+
+  /* Qualité de connexion — toujours visible sur chaque tuile participant,
+     jamais caché dans un menu (exigence explicite du brief). */
+  --color-quality-excellente: #34d399;
+  --color-quality-bonne: #fbbf5e;
+  --color-quality-faible: #fb7185;
+  --color-audio-seul: #a78bfa;
+  --color-audio-seul-soft: rgba(167, 139, 250, 0.16);
+
+  --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.15), 0 8px 30px rgba(0, 0, 0, 0.25);
+  --shadow-card-hover: 0 1px 1px rgba(0, 0, 0, 0.18), 0 16px 44px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 30px 70px rgba(0, 0, 0, 0.5);
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+
+  --font-inter: var(--font-inter);
+}
+
+:root {
+  --gradient-brand: linear-gradient(135deg, #12245a, #2f5fa8);
+  --gradient-brand-deep: radial-gradient(120% 120% at 15% -10%, #14265c 0%, #0a1330 45%, #060c1a 100%);
+  --gradient-mint: linear-gradient(135deg, #0d9d78, #22d3ac);
+  --gradient-blue: linear-gradient(135deg, #3b82f6, #2563eb);
+  --gradient-amber: linear-gradient(135deg, #f59e0b, #d97706);
+  --gradient-violet: linear-gradient(135deg, #a78bfa, #7c3aed);
+  --gradient-rose: linear-gradient(135deg, #fb7185, #e11d48);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  background-color: var(--color-bg);
+  background-image: var(--gradient-brand-deep);
+  background-attachment: fixed;
+  color: var(--color-ink);
+  font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.26); }
+
+/* ── Halos ambiants ────────────────────────────────────────────────────
+   Décor purement visuel : à poser en position:fixed/absolute derrière le
+   contenu (z-index négatif), jamais interactif (pointer-events: none). */
+.blob-field {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+}
+.blob {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(90px);
+  opacity: 0.35;
+  animation: blob-float 22s ease-in-out infinite;
+}
+.blob-mint { background: #17b892; }
+.blob-blue { background: #2f5fa8; }
+.blob-violet { background: #7c3aed; opacity: 0.22; }
+
+@keyframes blob-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(4%, 6%) scale(1.08); }
+  66% { transform: translate(-3%, -4%) scale(0.96); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blob { animation: none; }
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Verre dépoli ─────────────────────────────────────────────────────
+   .card (donc StatCard/EmptyState/table-shell/HostControlsPanel/le header
+   dashboard/les cartes du landing… tout ce qui utilise className="card") —
+   inset box-shadow pour simuler un reflet net en haut, cohérent avec le
+   style déjà utilisé sur les cartes de login. */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  transition: box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
+}
+.card-hover:hover { box-shadow: var(--shadow-card-hover); background: var(--color-surface-2); transform: translateY(-1px); }
+
+.card-accent-blue   { border-left: 3px solid var(--color-primary-3); }
+.card-accent-mint   { border-left: 3px solid var(--color-accent); }
+.card-accent-green  { border-left: 3px solid var(--color-success); }
+.card-accent-amber  { border-left: 3px solid var(--color-warning); }
+.card-accent-violet { border-left: 3px solid var(--color-violet); }
+.card-accent-rose   { border-left: 3px solid var(--color-rose); }
+
+:where(.input) {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-line);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  color: var(--color-ink);
+  font-size: 0.875rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.input::placeholder { color: var(--color-ink-3); }
+.input:focus {
+  outline: none;
+  border-color: var(--color-primary-3);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+.input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border-radius: var(--radius);
+  padding: 0.65rem 1.1rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary {
+  background: var(--gradient-brand);
+  color: white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 24px rgba(47, 95, 168, 0.35);
+}
+.btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(47, 95, 168, 0.45); }
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(10px);
+  color: var(--color-ink-2);
+  border: 1px solid var(--color-line);
+}
+.btn-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.11); color: var(--color-ink); }
+.btn-danger {
+  background: var(--gradient-rose);
+  color: white;
+  box-shadow: 0 8px 24px rgba(225, 29, 72, 0.3);
+}
+.btn-danger:hover:not(:disabled) { transform: translateY(-1px); }
+.btn-mint {
+  background: var(--gradient-mint);
+  color: #04241c;
+  box-shadow: 0 8px 24px rgba(34, 211, 172, 0.3);
+}
+.btn-mint:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 30px rgba(34, 211, 172, 0.4); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.table-shell thead tr { background: var(--color-surface-2); }
+.table-shell th {
+  text-align: left;
+  padding: 0.8rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+  white-space: nowrap;
+}
+.table-shell td {
+  padding: 0.85rem 1rem;
+  border-top: 1px solid var(--color-line-2);
+  font-size: 0.875rem;
+  color: var(--color-ink-2);
+}
+.table-shell tbody tr { transition: background-color 0.12s ease; }
+.table-shell tbody tr:hover { background: var(--color-surface-2); }
