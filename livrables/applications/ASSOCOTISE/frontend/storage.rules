@@ -1,0 +1,38 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function utilisateurConnecte() {
+      return request.auth != null;
+    }
+
+    function profil() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function estActif() {
+      return utilisateurConnecte() && profil().actif == true;
+    }
+
+    function role() {
+      return profil().role;
+    }
+
+    // Justificatifs de dépenses : upload réservé au responsable finances, lecture ouverte au bureau
+    match /justificatifs/{fileName} {
+      allow read: if estActif();
+      allow write: if estActif() && role() == 'responsable_finances'
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*|application/pdf');
+    }
+
+    // Photos de membres : upload par tout le bureau
+    match /membres/{fileName} {
+      allow read: if estActif();
+      allow write: if estActif()
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "contributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberId", "order": "ASCENDING" },
+        { "fieldPath": "mois", "order": "ASCENDING" },
+        { "fieldPath": "saisiLe", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "contributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "mois", "order": "ASCENDING" },
+        { "fieldPath": "saisiLe", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tontinePayments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cycleId", "order": "ASCENDING" },
+        { "fieldPath": "periode", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tontineParticipants",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cycleId", "order": "ASCENDING" },
+        { "fieldPath": "position", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

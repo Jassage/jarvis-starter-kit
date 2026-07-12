@@ -1,0 +1,85 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function utilisateurConnecte() {
+      return request.auth != null;
+    }
+
+    function profil() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function estActif() {
+      return utilisateurConnecte() && profil().actif == true;
+    }
+
+    function role() {
+      return profil().role;
+    }
+
+    function estSecretaire() {
+      return estActif() && role() == 'secretaire';
+    }
+
+    function estResponsableFinances() {
+      return estActif() && role() == 'responsable_finances';
+    }
+
+    function estMembreDuBureau() {
+      return estSecretaire() || estResponsableFinances();
+    }
+
+    // Comptes internes du bureau (secretaire / responsable_finances)
+    match /users/{uid} {
+      allow read: if utilisateurConnecte() && (request.auth.uid == uid || estMembreDuBureau());
+      allow create: if estResponsableFinances();
+      allow update: if estResponsableFinances()
+                    && !('role' in request.resource.data.diff(resource.data).affectedKeys() && uid == request.auth.uid);
+      allow delete: if false;
+    }
+
+    // Membres cotisants
+    match /members/{memberId} {
+      allow read: if estMembreDuBureau();
+      allow create, update: if estMembreDuBureau();
+      allow delete: if false; // désactivation via champ statut, jamais de suppression définitive
+    }
+
+    // Cotisations : append-only, aucune correction n'écrase un document existant
+    match /contributions/{contribId} {
+      allow read: if estMembreDuBureau();
+      allow create: if estMembreDuBureau()
+                    && request.resource.data.saisiPar == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Dépenses : réservées au responsable finances
+    match /expenses/{expenseId} {
+      allow read: if estMembreDuBureau();
+      allow create, update: if estResponsableFinances();
+      allow delete: if false;
+    }
+
+    // Cycles de tontine : création/modification réservées au responsable finances
+    match /tontineCycles/{cycleId} {
+      allow read: if estMembreDuBureau();
+      allow create, update: if estResponsableFinances();
+      allow delete: if false;
+    }
+
+    match /tontineParticipants/{participantId} {
+      allow read: if estMembreDuBureau();
+      allow create, update: if estResponsableFinances();
+      allow delete: if false;
+    }
+
+    // Paiements de tontine : les deux rôles peuvent saisir
+    match /tontinePayments/{paymentId} {
+      allow read: if estMembreDuBureau();
+      allow create, update: if estMembreDuBureau();
+      allow delete: if false;
+    }
+  }
+}

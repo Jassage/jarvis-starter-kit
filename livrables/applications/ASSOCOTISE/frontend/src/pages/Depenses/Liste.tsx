@@ -1,0 +1,109 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Receipt, FileText } from 'lucide-react';
+import { PageToolbar } from '../../components/ui/PageToolbar';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Table, Th, Td, Tr } from '../../components/ui/Table';
+import { Card } from '../../components/ui/Card';
+import { Select } from '../../components/ui/Field';
+import { DepenseModal } from '../../components/depenses/DepenseModal';
+import { ecouterDepenses } from '../../services/depenses.service';
+import { formatDate, formatMontant } from '../../lib/format';
+import type { CategorieDepense, Depense } from '../../types';
+
+const labelCategorie: Record<CategorieDepense, string> = {
+  materiel: 'Matériel',
+  logistique: 'Logistique',
+  administratif: 'Administratif',
+  projet_business: 'Projet business',
+  autre: 'Autre',
+};
+
+export function DepensesListe() {
+  const [depenses, setDepenses] = useState<Depense[]>([]);
+  const [filtreCategorie, setFiltreCategorie] = useState<'toutes' | CategorieDepense>('toutes');
+  const [modalOuverte, setModalOuverte] = useState(false);
+
+  useEffect(() => ecouterDepenses(setDepenses), []);
+
+  const depensesFiltrees = useMemo(
+    () => depenses.filter((d) => filtreCategorie === 'toutes' || d.categorie === filtreCategorie),
+    [depenses, filtreCategorie]
+  );
+
+  const totalMois = useMemo(() => {
+    const moisCourant = new Date().toISOString().slice(0, 7);
+    return depenses
+      .filter((d) => d.date.startsWith(moisCourant))
+      .reduce((sum, d) => sum + d.montant, 0);
+  }, [depenses]);
+
+  return (
+    <div className="space-y-4">
+      <PageToolbar
+        actionLabel="Nouvelle dépense"
+        onAction={() => setModalOuverte(true)}
+        extra={
+          <Select
+            value={filtreCategorie}
+            onChange={(e) => setFiltreCategorie(e.target.value as typeof filtreCategorie)}
+            className="max-w-xs"
+          >
+            <option value="toutes">Toutes les catégories</option>
+            {Object.entries(labelCategorie).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        }
+      />
+
+      <Card className="p-4">
+        <p className="text-xs text-[var(--color-muted)]">Dépenses ce mois-ci</p>
+        <p className="text-lg font-semibold text-[var(--color-danger)]">{formatMontant(totalMois)}</p>
+      </Card>
+
+      {depensesFiltrees.length === 0 ? (
+        <EmptyState icon={<Receipt size={32} />} title="Aucune dépense enregistrée" />
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <Th>Description</Th>
+              <Th>Catégorie</Th>
+              <Th>Date</Th>
+              <Th>Montant</Th>
+              <Th>Justificatif</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {depensesFiltrees.map((d) => (
+              <Tr key={d.id}>
+                <Td className="font-medium text-[var(--color-ink)]">{d.description}</Td>
+                <Td>{labelCategorie[d.categorie]}</Td>
+                <Td>{formatDate(d.date)}</Td>
+                <Td>{formatMontant(d.montant)}</Td>
+                <Td>
+                  {d.justificatifUrl ? (
+                    <a
+                      href={d.justificatifUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-xs text-[var(--color-brand)] hover:underline"
+                    >
+                      <FileText size={14} /> Voir
+                    </a>
+                  ) : (
+                    <span className="text-xs text-[var(--color-muted)]">—</span>
+                  )}
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+
+      <DepenseModal open={modalOuverte} onClose={() => setModalOuverte(false)} />
+    </div>
+  );
+}
