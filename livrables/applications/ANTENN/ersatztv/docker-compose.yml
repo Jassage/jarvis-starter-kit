@@ -1,0 +1,23 @@
+services:
+  ersatztv:
+    image: jasongdove/ersatztv:latest
+    container_name: antenn-ersatztv
+    restart: unless-stopped
+    ports:
+      - "8409:8409"
+    volumes:
+      - ./config:/root/.local/share/ErsatzTV
+      - ./medias:/media
+
+  # Bunny (et la plupart des CDN) ne fait que du "HLS re-streaming" : il cache et
+  # distribue un flux HLS qui doit déjà exister ailleurs, il ne transforme pas du
+  # RTMP en HLS lui-même. MediaMTX est ce maillon manquant : il reçoit le push RTMP
+  # d'OBS/Larix et le ressort en HLS. C'est CETTE url HLS locale que le Pull Zone
+  # Bunny doit utiliser comme origin en production.
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: antenn-mediamtx
+    restart: unless-stopped
+    ports:
+      - "1935:1935"  # ingest RTMP (rtmp://<host>:1935/<stream-key>)
+      - "8888:8888"  # sortie HLS   (http://<host>:8888/<stream-key>/index.m3u8)

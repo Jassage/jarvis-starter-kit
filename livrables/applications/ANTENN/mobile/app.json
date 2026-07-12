@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "ANTENN",
+    "slug": "antenn-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "newArchEnabled": true,
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#050b1a",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.jassages.antenn",
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-video"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_ME_APRES_EAS_INIT"
+      }
+    },
+    "owner": "jassages-team"
+  }
+}
