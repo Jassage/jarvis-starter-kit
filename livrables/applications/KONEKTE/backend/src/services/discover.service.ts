@@ -104,6 +104,41 @@ export const discoverService = async (userId: string, query: DiscoverQuery) => {
   });
 };
 
+export const searchProfilesService = async (userId: string, query: string) => {
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+
+  const blockedRelations = await prisma.block.findMany({
+    where: { OR: [{ blockerId: userId }, { blockedId: userId }] },
+    select: { blockerId: true, blockedId: true },
+  });
+  const excludedIds = [
+    userId,
+    ...blockedRelations.map((b) => (b.blockerId === userId ? b.blockedId : b.blockerId)),
+  ];
+
+  const profiles = await prisma.profile.findMany({
+    where: {
+      userId: { notIn: excludedIds },
+      firstName: { contains: trimmed },
+      user: { isActive: true, isBanned: false },
+    },
+    include: {
+      user: { include: { photos: { where: { isMain: true } } } },
+    },
+    take: 20,
+  });
+
+  return profiles.map((p) => ({
+    userId: p.userId,
+    firstName: p.firstName,
+    age: Math.floor((Date.now() - p.birthDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000)),
+    city: p.city,
+    mainPhoto: p.user.photos[0]?.url ?? null,
+    isVerified: p.isVerified,
+  }));
+};
+
 const isOnline = (lastSeen: Date) => {
   return Date.now() - lastSeen.getTime() < 5 * 60 * 1000;
 };
