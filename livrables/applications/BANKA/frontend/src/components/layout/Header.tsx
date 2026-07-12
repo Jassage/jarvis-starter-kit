@@ -12,6 +12,7 @@ const PAGES: Record<string, { title: string; subtitle: string }> = {
   '/comptes':       { title: 'Comptes',             subtitle: "Comptes d'épargne, courants et à terme" },
   '/transactions':  { title: 'Transactions',        subtitle: 'Dépôts, retraits, virements et validations' },
   '/caisse':        { title: 'Caisse',              subtitle: 'Ouverture, fermeture et arrêté de caisse' },
+  '/tresorerie':    { title: 'Trésorerie inter-agences', subtitle: 'Réapprovisionnement de caisse entre agences' },
   '/prets':         { title: 'Crédits & Prêts',     subtitle: 'Dossiers, approbations et remboursements' },
   '/rapports':      { title: 'Rapports',            subtitle: 'Analyses opérationnelles et indicateurs de risque' },
   '/audit':         { title: "Journal d'audit",     subtitle: 'Traçabilité complète de toutes les opérations' },

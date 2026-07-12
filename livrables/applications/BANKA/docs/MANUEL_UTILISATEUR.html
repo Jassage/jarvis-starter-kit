@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BANKA — Manuel d'utilisation</title>
+<style>
+  :root {
+    --navy: #003B7A;
+    --navy-light: #1e40af;
+    --gold: #b8860b;
+    --gray: #444;
+    --light: #f4f6fb;
+    --border: #d8deea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Calibri, Arial, sans-serif;
+    color: #222;
+    line-height: 1.6;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 40px 48px;
+    font-size: 15px;
+  }
+  h1, h2, h3 { color: var(--navy); line-height: 1.25; }
+  h1 { font-size: 26px; border-bottom: 3px solid var(--navy); padding-bottom: 8px; margin-top: 40px; }
+  h2 { font-size: 20px; margin-top: 32px; border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+  h3 { font-size: 16px; margin-top: 22px; color: var(--navy-light); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--navy); color: #fff; font-weight: 600; }
+  tr:nth-child(even) td { background: var(--light); }
+  blockquote {
+    border-left: 4px solid var(--gold);
+    background: #fffbe9;
+    margin: 16px 0;
+    padding: 10px 18px;
+    color: #6b5300;
+    border-radius: 0 6px 6px 0;
+  }
+  code {
+    background: #eef2fb;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 13px;
+    color: var(--navy);
+  }
+  strong { color: #111; }
+  figure { margin: 20px 0; }
+  figure img {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 3px 10px rgba(0,0,0,.08);
+  }
+  figcaption { font-size: 12.5px; color: #777; text-align: center; margin-top: 7px; font-style: italic; }
+
+  /* Page de couverture */
+  .cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    min-height: 90vh;
+    page-break-after: always;
+  }
+  .cover .logo {
+    width: 90px; height: 90px;
+    background: var(--navy);
+    color: #fff;
+    border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 44px; font-weight: 700;
+    margin-bottom: 28px;
+    box-shadow: 0 8px 24px rgba(0,59,122,.25);
+  }
+  .cover h1 { font-size: 44px; border: none; margin: 0; letter-spacing: 1px; }
+  .cover .subtitle { font-size: 20px; color: var(--gray); margin-top: 8px; font-weight: 500; }
+  .cover .badge {
+    margin-top: 24px;
+    background: var(--light);
+    color: var(--navy);
+    border: 1px solid var(--border);
+    padding: 8px 20px;
+    border-radius: 30px;
+    font-size: 14px;
+    letter-spacing: .5px;
+  }
+  .cover .meta { margin-top: 40px; color: #888; font-size: 14px; }
+
+  /* Table des matières */
+  .toc { background: var(--light); border: 1px solid var(--border); border-radius: 8px; padding: 20px 28px; }
+  .toc ol { padding-left: 22px; }
+  .toc a { color: var(--navy); text-decoration: none; }
+
+  @media print {
+    body { padding: 0; max-width: none; font-size: 12px; }
+    h1 { page-break-before: auto; }
+    h2 { page-break-after: avoid; }
+    table, blockquote { page-break-inside: avoid; }
+    .cover { min-height: 100vh; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="logo">B</div>
+  <h1>BANKA</h1>
+  <div class="subtitle">Manuel d'utilisation</div>
+  <div class="badge">★ Système de gestion bancaire</div>
+  <div class="meta">Version 1.0<br>Guide destiné au personnel de la banque</div>
+</div>
+
+<h1 id="sommaire">Sommaire</h1>
+<div class="toc">
+<ol>
+  <li><a href="#intro">Introduction</a></li>
+  <li><a href="#premiers-pas">Premiers pas (connexion et interface)</a></li>
+  <li><a href="#roles">Les rôles et ce que chacun peut faire</a></li>
+  <li><a href="#bancaire">Module Bancaire</a></li>
+  <li><a href="#compta">Module Comptabilité</a></li>
+  <li><a href="#rh">Module Ressources Humaines</a></li>
+  <li><a href="#faq">Questions fréquentes et dépannage</a></li>
+</ol>
+</div>
+
+<h1 id="intro">1. Introduction</h1>
+<p>BANKA est le logiciel de gestion de votre institution financière. Il centralise en un seul endroit :</p>
+<ul>
+  <li>la gestion des <strong>clients</strong> et de leurs <strong>comptes</strong> ;</li>
+  <li>les <strong>opérations de caisse</strong> (dépôts, retraits, virements) ;</li>
+  <li>les <strong>crédits et prêts</strong> avec leur suivi de remboursement ;</li>
+  <li>la <strong>comptabilité</strong> conforme au plan SYSCOHADA ;</li>
+  <li>la <strong>gestion du personnel</strong> (paie, congés, pointage) ;</li>
+  <li>la <strong>conformité</strong> (lutte anti-blanchiment) et les <strong>rapports réglementaires</strong> (BRH).</li>
+</ul>
+<p>Ce manuel explique, écran par écran, comment réaliser les tâches du quotidien. Vous n'avez pas besoin de connaissances techniques.</p>
+
+<h1 id="premiers-pas">2. Premiers pas</h1>
+
+<h3>2.1 Se connecter</h3>
+<ol>
+  <li>Ouvrez votre navigateur (Chrome, Edge ou Firefox) et rendez-vous à l'adresse fournie par votre administrateur (par exemple <code>http://localhost:3001</code>).</li>
+  <li>Saisissez votre <strong>email</strong> et votre <strong>mot de passe</strong>.</li>
+  <li>Cliquez sur <strong>Se connecter</strong>.</li>
+  <li>Si la double authentification (2FA) est activée sur votre compte, saisissez le code à 6 chiffres affiché par votre application d'authentification.</li>
+</ol>
+<blockquote><strong>Mot de passe oublié ?</strong> Cliquez sur « Mot de passe oublié », saisissez votre email : un lien de réinitialisation vous est envoyé (valable 1 heure).</blockquote>
+<figure><img src="images/01-login.png" alt="Écran de connexion BANKA"><figcaption>L'écran de connexion</figcaption></figure>
+
+<h3>2.2 L'interface</h3>
+<p>Une fois connecté, l'écran se compose de trois zones :</p>
+<ul>
+  <li><strong>La barre latérale (gauche)</strong> : le menu de navigation. Elle est organisée en trois modules que vous pouvez basculer en haut : <strong>Bancaire</strong>, <strong>Comptabilité</strong>, <strong>RH</strong>. Vous ne voyez que les menus autorisés pour votre rôle.</li>
+  <li><strong>L'en-tête (haut)</strong> : la cloche de notifications (alertes en temps réel), et votre profil (accès au profil, changement de mot de passe, déconnexion).</li>
+  <li><strong>La zone centrale</strong> : le contenu de l'écran sélectionné.</li>
+</ul>
+
+<h3>2.3 Se déconnecter</h3>
+<p>Cliquez sur votre nom en haut à droite, puis sur <strong>Déconnexion</strong>. Déconnectez-vous toujours en fin de journée ou en quittant votre poste.</p>
+
+<h1 id="roles">3. Les rôles</h1>
+<p>Chaque utilisateur possède un rôle qui détermine ce qu'il peut voir et faire.</p>
+<table>
+  <tr><th>Rôle</th><th>Ce qu'il fait principalement</th></tr>
+  <tr><td><strong>Super Admin</strong></td><td>Accès complet, configuration du système</td></tr>
+  <tr><td><strong>Directeur</strong></td><td>Vue d'ensemble, supervision, rapports, gestion des opérateurs et agences</td></tr>
+  <tr><td><strong>Superviseur</strong></td><td>Valide les opérations importantes, supervise la caisse et les alertes</td></tr>
+  <tr><td><strong>Caissier</strong></td><td>Ouvre la caisse, saisit dépôts, retraits et virements</td></tr>
+  <tr><td><strong>Agent de crédit</strong></td><td>Monte et suit les dossiers de prêt</td></tr>
+  <tr><td><strong>Comptable</strong></td><td>Tient la comptabilité, produit les états financiers</td></tr>
+  <tr><td><strong>Auditeur</strong></td><td>Consulte les rapports, le journal d'audit et les alertes (lecture)</td></tr>
+</table>
+
+<h1 id="bancaire">4. Module Bancaire</h1>
+<p>Sélectionnez <strong>Bancaire</strong> en haut de la barre latérale.</p>
+
+<h3>4.1 Tableau de bord</h3>
+<p>C'est l'écran d'accueil. Il affiche en temps réel les indicateurs clés : solde total des dépôts, encours de crédit, dépôts et retraits du jour, tendances sur 7 jours. Les grands montants sont affichés de façon compacte (ex. « 1,2 M HTG ») ; survolez-les pour voir le montant exact.</p>
+<blockquote>Si la caisse n'est pas ouverte, une bannière rouge « Caisse fermée » apparaît avec un lien direct vers l'écran Caisse.</blockquote>
+<figure><img src="images/02-dashboard.png" alt="Tableau de bord BANKA"><figcaption>Le tableau de bord et ses indicateurs en temps réel</figcaption></figure>
+
+<h3>4.2 Clients</h3>
+<p>Menu <strong>Clients</strong>. Vous y gérez le fichier des clients.</p>
+<p><strong>Créer un client :</strong></p>
+<ol>
+  <li>Cliquez sur <strong>Nouveau client</strong>.</li>
+  <li>Choisissez le type : <strong>Individuel</strong> (personne) ou <strong>Entreprise</strong>.</li>
+  <li>Renseignez les informations. Pour un client individuel, la <strong>pièce d'identité</strong> et son <strong>numéro</strong> sont obligatoires (règles KYC), et le client doit avoir <strong>18 ans ou plus</strong> (l'âge est calculé automatiquement à partir de la date de naissance).</li>
+  <li>Enregistrez.</li>
+</ol>
+<p><strong>Statuts d'un client :</strong> Actif, Inactif, Suspendu, Blacklisté. Un client blacklisté est surveillé par le module anti-blanchiment.</p>
+<blockquote>On ne peut pas supprimer définitivement un client qui a des comptes actifs ou des prêts en cours : il est archivé (mis en Inactif).</blockquote>
+<figure><img src="images/03-clients.png" alt="Écran Clients"><figcaption>La gestion des clients</figcaption></figure>
+
+<h3>4.3 Comptes</h3>
+<p>Menu <strong>Comptes</strong>. Chaque client peut avoir un ou plusieurs comptes.</p>
+<p><strong>Types de comptes disponibles :</strong> Épargne, Courant, À terme, Joint, Micro-épargne, Tontine, Retraite, Jeunesse, Crédit. Chaque compte est libellé en <strong>HTG</strong> ou en <strong>USD</strong>.</p>
+<p><strong>Ouvrir un compte :</strong></p>
+<ol>
+  <li>Cliquez sur <strong>Nouveau compte</strong>.</li>
+  <li>Sélectionnez le client, le type de compte et la devise.</li>
+  <li>Enregistrez. Un numéro de compte est généré automatiquement.</li>
+</ol>
+<p><strong>Clôturer un compte :</strong> possible uniquement si le solde est à <strong>zéro</strong>, sans prêt actif ni épargne programmée en cours.</p>
+<figure><img src="images/04-comptes.png" alt="Écran Comptes"><figcaption>La gestion des comptes bancaires</figcaption></figure>
+
+<h3>4.4 Caisse</h3>
+<p>Menu <strong>Caisse</strong>. <strong>Étape indispensable avant toute opération d'argent.</strong></p>
+<p><strong>Ouvrir la caisse (début de journée) :</strong></p>
+<ol>
+  <li>Cliquez sur <strong>Ouvrir la caisse</strong>.</li>
+  <li>Saisissez le fond de caisse initial.</li>
+  <li>Validez.</li>
+</ol>
+<p>Tant qu'aucune caisse n'est ouverte, les dépôts, retraits et virements sont <strong>bloqués</strong>. Chaque opération de la journée est automatiquement rattachée à la session de caisse ouverte.</p>
+<figure><img src="images/05-caisse.png" alt="Écran Caisse"><figcaption>L'ouverture de la caisse journalière</figcaption></figure>
+<p><strong>Fermer la caisse (fin de journée) :</strong></p>
+<ol>
+  <li>Cliquez sur <strong>Fermer la caisse</strong>.</li>
+  <li>Saisissez le montant physiquement compté.</li>
+  <li>Le système calcule l'écart éventuel entre le théorique et le réel (arrêté de caisse).</li>
+  <li>Validez.</li>
+</ol>
+
+<h3>4.5 Transactions</h3>
+<p>Menu <strong>Transactions</strong>. Les trois opérations de base :</p>
+<p><strong>Dépôt :</strong> cliquez sur <strong>Dépôt</strong>, sélectionnez le compte bénéficiaire, saisissez le montant et un motif, puis validez.</p>
+<p><strong>Retrait :</strong> cliquez sur <strong>Retrait</strong>, sélectionnez le compte, saisissez le montant (le système refuse si le solde est insuffisant), puis validez.</p>
+<p><strong>Virement :</strong> cliquez sur <strong>Virement</strong>, sélectionnez le compte source et le compte destination, saisissez le montant, puis validez.</p>
+<blockquote><strong>Validation des grosses opérations :</strong> au-delà d'un seuil défini (par défaut 50 000 HTG ou 500 USD), la transaction passe en statut <strong>En attente</strong> et doit être <strong>validée par un superviseur</strong> avant de prendre effet. Le superviseur la retrouve dans la liste des transactions et clique sur <strong>Valider</strong> ou <strong>Rejeter</strong>.</blockquote>
+<p><strong>Statuts d'une transaction :</strong> En attente, Validée, Rejetée, Annulée.</p>
+<figure><img src="images/06-transactions.png" alt="Écran Transactions"><figcaption>L'écran des transactions</figcaption></figure>
+
+<h3>4.6 Crédits &amp; Prêts</h3>
+<p>Menu <strong>Crédits &amp; Prêts</strong> (agents de crédit et direction). Cycle complet d'un prêt :</p>
+<ol>
+  <li><strong>Création du dossier</strong> : client, montant, durée, taux et type d'amortissement (<strong>dégressif</strong>, <strong>constant</strong> ou <strong>in fine</strong>). Le système génère le tableau d'amortissement.</li>
+  <li><strong>Approbation</strong> : un responsable approuve ou rejette le dossier.</li>
+  <li><strong>Décaissement</strong> : les fonds sont versés, une écriture comptable est générée, des frais de dossier sont prélevés automatiquement.</li>
+  <li><strong>Remboursement</strong> : enregistrez chaque échéance payée. Le système suit les échéances en retard.</li>
+  <li><strong>Remboursement anticipé</strong> : le tableau d'amortissement est recalculé automatiquement sur le capital restant.</li>
+</ol>
+<p><strong>Statuts d'un prêt :</strong> En attente, Approuvé, Décaissé, En cours, Soldé, En retard, Rejeté, Annulé. Un prêt peut être annulé tant qu'il n'est pas décaissé.</p>
+<figure><img src="images/07-prets.png" alt="Écran Crédits et Prêts"><figcaption>Le suivi des dossiers de crédit</figcaption></figure>
+
+<h3>4.7 Épargne programmée</h3>
+<p>Menu <strong>Épargne programmée</strong>. Automatise des virements récurrents vers un compte d'épargne (hebdomadaire, mensuel, bimestriel ou trimestriel). Définissez le compte, le montant et la fréquence : le système exécute les virements automatiquement à échéance.</p>
+<figure><img src="images/08-epargne-programmee.png" alt="Écran Épargne programmée"><figcaption>L'épargne programmée</figcaption></figure>
+
+<h3>4.8 Taux de change</h3>
+<p>Menu <strong>Taux de change</strong>. Consultez et mettez à jour le taux HTG/USD (taux d'achat et de vente). Un virement entre un compte HTG et un compte USD applique automatiquement le bon taux.</p>
+<figure><img src="images/09-taux-change.png" alt="Écran Taux de change"><figcaption>La gestion du taux HTG/USD</figcaption></figure>
+
+<h3>4.9 Rapports</h3>
+<p>Menu <strong>Rapports</strong>. Génère les rapports d'activité : rapport journalier, portefeuille à risque (PAR 30/90), impayés. Sélectionnez la période souhaitée.</p>
+<figure><img src="images/10-rapports.png" alt="Écran Rapports"><figcaption>Les rapports d'activité</figcaption></figure>
+
+<h3>4.10 Rapport BRH</h3>
+<p>Menu <strong>Rapport BRH</strong> (direction et audit). Rapport réglementaire pour la Banque de la République d'Haïti : ratio de liquidité (≥ 20 %), ratio de solvabilité (≥ 8 %), grandes expositions (top 5 emprunteurs), comptes de capitaux. Chaque ratio affiche un badge « conforme » ou « non conforme ». Bouton <strong>Imprimer</strong> disponible.</p>
+<figure><img src="images/11-rapport-brh.png" alt="Écran Rapport BRH"><figcaption>Le rapport réglementaire BRH</figcaption></figure>
+
+<h3>4.11 Alertes AML (anti-blanchiment)</h3>
+<p>Menu <strong>Alertes AML</strong>. Le système surveille automatiquement les transactions et lève une alerte en cas de : dépassement du seuil déclarable, structuration (fractionnement suspect), vélocité anormale (trop d'opérations en peu de temps), ou opération liée à un mandataire blacklisté. Traitez chaque alerte en cliquant sur <strong>Marquer traitée</strong>.</p>
+<figure><img src="images/12-aml.png" alt="Écran Alertes AML"><figcaption>Le suivi des alertes anti-blanchiment</figcaption></figure>
+
+<h3>4.12 Journal d'audit</h3>
+<p>Menu <strong>Journal d'audit</strong> (direction et audit). Trace toutes les actions sensibles réalisées dans le système : qui a fait quoi et quand. Consultation et filtrage.</p>
+<figure><img src="images/13-audit.png" alt="Écran Journal d'audit"><figcaption>Le journal d'audit</figcaption></figure>
+
+<h3>4.13 Opérateurs, Agences, Administration</h3>
+<p>Réservés à la direction :</p>
+<ul>
+  <li><strong>Opérateurs</strong> : créer et gérer les comptes utilisateurs du personnel, attribuer les rôles, activer/désactiver un compte.</li>
+  <li><strong>Agences</strong> : gérer les succursales.</li>
+  <li><strong>Administration</strong> : régler les paramètres du système (seuils AML, taux de frais, pénalités de retard, plafonds).</li>
+</ul>
+<figure><img src="images/14-utilisateurs.png" alt="Écran Opérateurs"><figcaption>La gestion des opérateurs (comptes du personnel)</figcaption></figure>
+<figure><img src="images/16-administration.png" alt="Écran Administration"><figcaption>Les paramètres du système</figcaption></figure>
+
+<h1 id="compta">5. Module Comptabilité</h1>
+<p>Sélectionnez <strong>Comptabilité</strong> en haut de la barre latérale (comptables, direction, auditeurs).</p>
+<p>Bonne nouvelle : la comptabilité est <strong>automatique</strong>. Chaque dépôt, retrait, virement, décaissement ou frais génère tout seul une écriture équilibrée. Vous n'avez pas à ressaisir les opérations.</p>
+<ul>
+  <li><strong>Tableau de bord comptable</strong> : synthèse de la situation comptable.</li>
+  <li><strong>Plan comptable</strong> : liste des comptes (classes 1 à 7 du plan SYSCOHADA).</li>
+  <li><strong>Journal des écritures</strong> : toutes les écritures, avec possibilité de saisie manuelle pour les cas particuliers.</li>
+  <li><strong>Grand livre</strong> : le détail des mouvements compte par compte.</li>
+  <li><strong>Bilan</strong> : la situation patrimoniale (actif / passif).</li>
+  <li><strong>Compte de résultat</strong> : produits et charges sur la période.</li>
+</ul>
+<figure><img src="images/17-compta-dashboard.png" alt="Tableau de bord comptable"><figcaption>Le tableau de bord comptable</figcaption></figure>
+<figure><img src="images/18-compta-journal.png" alt="Journal des écritures"><figcaption>Le journal des écritures comptables</figcaption></figure>
+
+<h1 id="rh">6. Module Ressources Humaines</h1>
+<p>Sélectionnez <strong>RH</strong> en haut de la barre latérale (direction et superviseurs).</p>
+<ul>
+  <li><strong>Tableau de bord RH</strong> : indicateurs du personnel (effectif, masse salariale…).</li>
+  <li><strong>Employés</strong> : fiches du personnel. Possibilité de créer un compte utilisateur système directement depuis la fiche, et de transférer un employé entre agences.</li>
+  <li><strong>Postes &amp; Métiers</strong> : définition des postes.</li>
+  <li><strong>Contrats</strong> : contrats de travail (CDI, CDD, stage, consultant).</li>
+  <li><strong>Gestion de la paie</strong> : bulletins de paie suivant le cycle <strong>Brouillon → Validé → Payé</strong>, avances sur salaire, éléments variables (primes, bonus, indemnités, retenues, heures supplémentaires).</li>
+  <li><strong>Congés &amp; Absences</strong> : demandes de congé (annuel, maladie, maternité…) avec workflow d'approbation.</li>
+  <li><strong>Pointage</strong> : suivi des présences, avec prise en charge des pointeuses biométriques ZKTeco.</li>
+</ul>
+<figure><img src="images/20-rh-dashboard.png" alt="Tableau de bord RH"><figcaption>Le tableau de bord RH</figcaption></figure>
+<figure><img src="images/22-rh-paie.png" alt="Gestion de la paie"><figcaption>La gestion de la paie mensuelle</figcaption></figure>
+
+<h1 id="faq">7. Questions fréquentes et dépannage</h1>
+<p><strong>Je ne vois pas certains menus.</strong><br>C'est normal : la barre latérale n'affiche que les fonctions autorisées pour votre rôle. Contactez votre directeur si vous pensez avoir besoin d'un accès supplémentaire.</p>
+<p><strong>Je ne peux pas enregistrer un dépôt / retrait / virement.</strong><br>Vérifiez que la <strong>caisse est ouverte</strong> (menu Caisse). Sans session de caisse ouverte, ces opérations sont bloquées.</p>
+<p><strong>Ma transaction reste « En attente ».</strong><br>Le montant dépasse le seuil de validation. Un superviseur doit la valider depuis l'écran Transactions.</p>
+<p><strong>Le système refuse un retrait.</strong><br>Le solde du compte est insuffisant pour le montant demandé.</p>
+<p><strong>Je n'arrive pas à clôturer un compte.</strong><br>Le solde doit être à zéro, sans prêt actif ni épargne programmée en cours.</p>
+<p><strong>J'ai oublié mon mot de passe.</strong><br>Utilisez « Mot de passe oublié » sur l'écran de connexion. Vérifiez vos emails (le lien est valable 1 heure).</p>
+<p><strong>Une alerte AML est apparue.</strong><br>Prévenez le responsable conformité. L'alerte se traite depuis le menu Alertes AML.</p>
+
+<hr style="margin-top:40px;border:none;border-top:1px solid var(--border)">
+<p style="text-align:center;color:#888;font-size:13px;margin-top:20px">Manuel utilisateur BANKA v1.0 — Pour toute assistance, contactez l'administrateur de votre institution.</p>
+
+</body>
+</html>

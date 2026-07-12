@@ -40,7 +40,7 @@ const virementChangeSchema = z.object({
 router.post('/virement', requireAuth, requireRole('SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'CAISSIER'), requireCaisseOuverte, async (req: any, res: any, next: any) => {
   try {
     const body = virementChangeSchema.parse(req.body);
-    const result = await effectuerVirementCross({ ...body, userId: req.user!.userId });
+    const result = await effectuerVirementCross({ ...body, userId: req.user!.userId, agenceId: req.user!.agenceId });
     res.json(ok(result, 'Virement change effectué'));
   } catch (e) { next(e); }
 });

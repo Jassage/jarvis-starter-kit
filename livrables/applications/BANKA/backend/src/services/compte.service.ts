@@ -72,8 +72,12 @@ export async function createCompte(data: {
   intitule?: string;
   tauxInteret?: number;
   dateEcheance?: Date;
+  agentAgenceId?: string | null;
 }, userId?: string) {
-  const { clientId, agenceId, type, devise = 'HTG', soldeInitial = 0, ...rest } = data;
+  const { clientId, agenceId, type, devise = 'HTG', soldeInitial = 0, agentAgenceId, ...rest } = data;
+
+  // Un agent lié à une agence ne peut ouvrir un compte que pour sa propre agence
+  if (agentAgenceId && agentAgenceId !== agenceId) throw new AppError(403, 'Vous ne pouvez ouvrir un compte que pour votre propre agence');
 
   const client = await prisma.client.findUnique({ where: { id: clientId } });
   if (!client || client.statut !== 'ACTIF') throw new AppError(400, 'Client inactif ou introuvable');
@@ -145,6 +149,7 @@ export async function createCompte(data: {
           motif: libelle,
           statut: 'VALIDEE',
           compteDebitId: created.id,
+          agenceExecutionId: agenceId,
           creeParId: userId || 'SYSTEM',
           valideParId: userId || 'SYSTEM',
         } as any,

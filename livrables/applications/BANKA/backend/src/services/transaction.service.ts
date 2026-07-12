@@ -27,6 +27,47 @@ async function resolveSessionId(agenceId: string, devise: string, providedSessio
   return session?.id;
 }
 
+// Dépôt/retrait sont les seuls mouvements qui déplacent du cash physique (une agence ne peut
+// débiter/créditer que ses propres comptes, cf. RBAC ci-dessous, donc l'agence du compte = l'agence
+// d'exécution). Incrémente le cash de l'agence, sans garde (l'argent est déjà physiquement en main).
+async function crediterCaisseAgence(tx: any, agenceId: string, devise: string, montant: number) {
+  return tx.caisseAgence.upsert({
+    where: { agenceId_devise: { agenceId, devise } },
+    update: { solde: { increment: montant } },
+    create: { agenceId, devise: devise as any, solde: montant },
+  });
+}
+
+// Compare-and-swap : rejette si le cash physique de l'agence est insuffisant, indépendamment du
+// solde du compte client débité (les deux gardes sont distinctes et coexistent).
+async function debiterCaisseAgence(tx: any, agenceId: string, devise: string, montant: number) {
+  const caisse = await tx.caisseAgence.upsert({
+    where: { agenceId_devise: { agenceId, devise } },
+    update: {},
+    create: { agenceId, devise: devise as any, solde: 0 },
+  });
+  const cas = await tx.caisseAgence.updateMany({
+    where: { agenceId, devise, solde: { gte: montant } },
+    data: { solde: { decrement: montant } },
+  });
+  if (cas.count === 0) {
+    throw new AppError(400, `Cash insuffisant en agence pour ce retrait. Cash disponible : ${Number(caisse.solde)} ${devise}`);
+  }
+}
+
+// Alerte (pas de blocage : l'argent est déjà en caisse) si le solde dépasse le plafond configuré —
+// diffusée après validation du dépôt, réutilise le canal SSE existant (sse.service.ts)
+async function verifierPlafondCaisse(agenceId: string, devise: string) {
+  const caisse = await prisma.caisseAgence.findUnique({ where: { agenceId_devise: { agenceId, devise: devise as any } } });
+  if (caisse?.plafondAlerte && Number(caisse.solde) > Number(caisse.plafondAlerte)) {
+    broadcastSSE({
+      type: 'PLAFOND_CAISSE_DEPASSE',
+      agenceId,
+      data: { solde: Number(caisse.solde), plafond: Number(caisse.plafondAlerte), devise },
+    });
+  }
+}
+
 export async function effectuerDepot(data: {
   compteId: string;
   montant: number;
@@ -45,6 +86,7 @@ export async function effectuerDepot(data: {
   if (agenceId && comptePre.agenceId !== agenceId) throw new AppError(403, 'Ce compte n\'appartient pas à votre agence');
 
   const sessionId = await resolveSessionId(comptePre.agenceId, comptePre.devise, data.sessionId);
+  const agenceExecutionId = agenceId ?? comptePre.agenceId;
   const reference = await generateReferenceTransaction('DEPOT');
   const needsValidation = seuilDepasse(montant, comptePre.devise);
 
@@ -66,6 +108,7 @@ export async function effectuerDepot(data: {
         statut: needsValidation ? 'EN_ATTENTE' : 'VALIDEE',
         compteCreditId: compteId,
         sessionId,
+        agenceExecutionId,
         creeParId: userId,
       },
     });
@@ -76,6 +119,7 @@ export async function effectuerDepot(data: {
         where: { id: compteId },
         data: { solde: { increment: montant } },
       });
+      await crediterCaisseAgence(tx, agenceExecutionId, comptePre.devise, montant);
       await creerEcritureAuto(tx, {
         debitNumero:  '5700',
         creditNumero: '2600',
@@ -92,7 +136,10 @@ export async function effectuerDepot(data: {
   }));
   const eventType = needsValidation ? 'TRANSACTION_EN_ATTENTE' : 'TRANSACTION_VALIDEE';
   broadcastSSE({ type: eventType, agenceId: comptePre.agenceId, data: { id: result.id, type: 'DEPOT', montant, devise: String(comptePre.devise) } });
-  if (!needsValidation) analyserTransactionAML({ compteId, clientId: comptePre.clientId, transactionId: result.id, montant, devise: String(comptePre.devise) }).catch(() => {});
+  if (!needsValidation) {
+    analyserTransactionAML({ compteId, clientId: comptePre.clientId, transactionId: result.id, montant, devise: String(comptePre.devise) }).catch(() => {});
+    await verifierPlafondCaisse(agenceExecutionId, comptePre.devise);
+  }
   return result;
 }
 
@@ -141,6 +188,7 @@ export async function effectuerRetrait(data: {
   }
 
   const sessionId = await resolveSessionId(comptePre.agenceId, comptePre.devise, data.sessionId);
+  const agenceExecutionId = agenceId ?? comptePre.agenceId;
   const reference = await generateReferenceTransaction('RETRAIT');
   const needsValidation = seuilDepasse(montant, comptePre.devise);
   const soldeMinimum = Number(comptePre.soldeMinimum);
@@ -162,6 +210,8 @@ export async function effectuerRetrait(data: {
         const available = soldeAvant - soldeMinimum;
         throw new AppError(400, `Solde insuffisant. Solde disponible : ${available} ${comptePre.devise}`);
       }
+      // Garde distincte : le cash physique de l'agence doit aussi être suffisant
+      await debiterCaisseAgence(tx, agenceExecutionId, comptePre.devise, montant);
     } else {
       // Transaction en attente : vérifier le solde sans décrémenter
       if (soldeAvant - montant < soldeMinimum) {
@@ -181,6 +231,7 @@ export async function effectuerRetrait(data: {
         statut: needsValidation ? 'EN_ATTENTE' : 'VALIDEE',
         compteDebitId: compteId,
         sessionId,
+        agenceExecutionId,
         creeParId: userId,
       },
     });
@@ -237,6 +288,7 @@ export async function effectuerVirement(data: {
   const refDebit = await generateReferenceTransaction('VIREMENT_DEBIT');
   const needsValidation = seuilDepasse(montant, source.devise);
   const sessionId = await resolveSessionId(source.agenceId, source.devise, data.sessionId);
+  const agenceExecutionId = agenceId ?? source.agenceId;
 
   const virementResult = await withRetry(() => prisma.$transaction(async (tx) => {
     // B1: Lire les soldes À L'INTÉRIEUR de la transaction pour snapshot cohérent
@@ -259,7 +311,7 @@ export async function effectuerVirement(data: {
         throw new AppError(400, `Solde insuffisant sur le compte source. Disponible : ${available} ${source.devise}`);
       }
       await tx.compte.update({ where: { id: compteDestinationId }, data: { solde: { increment: montant } } });
-      await preleverFraisVirement({ compteSourceId, montant, devise: source.devise, userId, tx });
+      await preleverFraisVirement({ compteSourceId, montant, devise: source.devise, userId, tx, soldeMinimum: soldeSourceMin });
     } else {
       // Transaction en attente : vérifier le solde sans modifier
       if (soldeSourceAvant - montant < soldeSourceMin) {
@@ -280,6 +332,7 @@ export async function effectuerVirement(data: {
         compteDebitId: compteSourceId,
         compteCreditId: compteDestinationId,
         sessionId,
+        agenceExecutionId,
         creeParId: userId,
       },
     });
@@ -297,6 +350,7 @@ export async function effectuerVirement(data: {
         compteDebitId: compteSourceId,
         compteCreditId: compteDestinationId,
         sessionId,
+        agenceExecutionId,
         creeParId: userId,
       },
     });
@@ -333,6 +387,8 @@ export async function validerTransaction(id: string, userId: string) {
 
     if (tx.type === 'DEPOT' && tx.compteCreditId) {
       await p.compte.update({ where: { id: tx.compteCreditId }, data: { solde: { increment: montant } } });
+      const agenceExecutionId = tx.agenceExecutionId ?? tx.compteCredit?.agenceId;
+      if (agenceExecutionId) await crediterCaisseAgence(p, agenceExecutionId, tx.devise, montant);
       await creerEcritureAuto(p, {
         debitNumero:  '5700',
         creditNumero: '2600',
@@ -350,6 +406,8 @@ export async function validerTransaction(id: string, userId: string) {
         data: { solde: { decrement: montant } },
       });
       if (result.count === 0) throw new AppError(400, 'Solde insuffisant pour valider ce retrait');
+      const agenceExecutionId = tx.agenceExecutionId ?? tx.compteDebit?.agenceId;
+      if (agenceExecutionId) await debiterCaisseAgence(p, agenceExecutionId, tx.devise, montant);
       await creerEcritureAuto(p, {
         debitNumero:  '2600',
         creditNumero: '5700',
@@ -386,6 +444,9 @@ export async function validerTransactionWithSSE(id: string, userId: string) {
   // Récupérer l'agenceId depuis le compte débité ou crédité pour router la notification SSE
   const agenceId = result.compteDebit?.agenceId ?? result.compteCredit?.agenceId ?? null;
   broadcastSSE({ type: 'TRANSACTION_VALIDEE', agenceId, data: { id, type: result.type, montant: Number(result.montant) } });
+  if (result.type === 'DEPOT' && (result as any).agenceExecutionId) {
+    await verifierPlafondCaisse((result as any).agenceExecutionId, String(result.devise));
+  }
   return result;
 }
 

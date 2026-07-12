@@ -92,3 +92,12 @@ export const createCompteSchema = z.object({
     }
   }
 });
+
+// Whitelist stricte : solde, statut, clientId, agenceId, numeroCompte sont volontairement exclus —
+// ils ne doivent transiter que par les flux dédiés (transactions, changement de statut, clôture)
+export const updateCompteSchema = z.object({
+  intitule: z.string().max(200).optional(),
+  soldeMinimum: z.number().min(0, 'Le solde minimum ne peut pas être négatif').optional(),
+  tauxInteret: z.number().min(0).max(100).optional(),
+  dateEcheance: z.string().datetime().optional(),
+});

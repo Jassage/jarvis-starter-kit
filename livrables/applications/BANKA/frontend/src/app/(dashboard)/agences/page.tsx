@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useAgenceStore, Agence } from '@/stores/agenceStore';
 import { useAuthStore } from '@/stores/authStore';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatMontant } from '@/lib/utils';
 import Tooltip from '@/components/ui/Tooltip';
 
 function DrawerForm({ initial, onClose, onSuccess }: {
@@ -17,6 +17,7 @@ function DrawerForm({ initial, onClose, onSuccess }: {
     nom: initial?.nom || '',
     adresse: initial?.adresse || '',
     telephone: initial?.telephone || '',
+    plafondCaisseHTG: initial?.caisses?.[0]?.plafondAlerte != null ? String(initial.caisses[0].plafondAlerte) : '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -26,11 +27,12 @@ function DrawerForm({ initial, onClose, onSuccess }: {
     if (!form.code || !form.nom) { setError('Code et nom sont obligatoires'); return; }
     setError('');
     setLoading(true);
+    const plafondCaisseHTG = form.plafondCaisseHTG.trim() === '' ? undefined : Number(form.plafondCaisseHTG);
     try {
       if (isEdit) {
-        await updateAgence(initial!.id, { nom: form.nom, adresse: form.adresse, telephone: form.telephone });
+        await updateAgence(initial!.id, { nom: form.nom, adresse: form.adresse, telephone: form.telephone, plafondCaisseHTG: plafondCaisseHTG ?? null });
       } else {
-        await createAgence(form);
+        await createAgence({ code: form.code, nom: form.nom, adresse: form.adresse, telephone: form.telephone, plafondCaisseHTG });
       }
       onSuccess();
     } catch (err: any) {
@@ -98,6 +100,16 @@ function DrawerForm({ initial, onClose, onSuccess }: {
           <div>
             <label className="label">Téléphone</label>
             <input value={form.telephone} onChange={(e) => set('telephone', e.target.value)} className="input" placeholder="+509 3700-0000" />
+          </div>
+
+          <div>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="label mb-0">Plafond d'alerte caisse (HTG)</label>
+              <Tooltip content="Au-delà de ce montant de cash en caisse, une alerte est envoyée — le dépôt lui-même n'est jamais bloqué. Laisser vide pour ne pas surveiller." position="right">
+                <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5" style={{ color: '#8b94b0' }}><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8"/><path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              </Tooltip>
+            </div>
+            <input type="number" min="0" value={form.plafondCaisseHTG} onChange={(e) => set('plafondCaisseHTG', e.target.value)} className="input" placeholder="Ex: 2 000 000" />
           </div>
 
           {error && (
@@ -237,6 +249,22 @@ export default function AgencesPage() {
                   </p>
                 )}
               </div>
+
+              {/* Caisse HTG */}
+              {agence.caisses && agence.caisses.length > 0 && (() => {
+                const soldeCaisse = Number(agence.caisses[0].solde);
+                const plafond = agence.caisses[0].plafondAlerte != null ? Number(agence.caisses[0].plafondAlerte) : null;
+                const depasse = plafond != null && soldeCaisse > plafond;
+                return (
+                <div className="flex items-center justify-between p-2.5 rounded-xl mb-3" style={{ background: depasse ? '#fef2f2' : '#f7f8fc' }}>
+                  <span className="text-xs" style={{ color: '#8b94b0' }}>Cash en caisse (HTG)</span>
+                  <span className="text-sm font-bold" style={{ color: depasse ? '#b91c1c' : '#0b1733' }}>
+                    {formatMontant(soldeCaisse, 'HTG')}
+                    {depasse ? ' ⚠' : ''}
+                  </span>
+                </div>
+                );
+              })()}
 
               {/* Stats */}
               {agence._count && (

@@ -107,6 +107,7 @@ enum TypeRemboursement {
   MENSUALITE
   ANTICIPEE
   PARTIELLE
+  RETENUE_SALAIRE
 }
 
 enum TypeCompteComptable {
@@ -241,6 +242,9 @@ model Utilisateur {
   pointagesCrees         PointageEmploye[]    @relation("PointageCreePar")
   employe                Employe?
   passwordResetTokens    PasswordResetToken[]
+  transfertsTresorerieCrees TransfertTresorerie[] @relation("TransfertCreateur")
+  transfertsTresorerieRecus TransfertTresorerie[] @relation("TransfertRecepteur")
+  documentsCrees            Document[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -277,11 +281,70 @@ model Agence {
   prets        Pret[]
   sessions     SessionCaisse[]
   employes     Employe[]
+  caisses               CaisseAgence[]
+  transactionsExecutees Transaction[]        @relation("TransactionAgenceExecution")
+  transfertsEnvoyes     TransfertTresorerie[] @relation("TransfertSource")
+  transfertsRecus       TransfertTresorerie[] @relation("TransfertDest")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("agences")
+}
+
+// Solde de cash physique par agence et par devise — source de vérité indépendante des sessions
+// journalières (contrairement à SessionCaisse.soldeOuverture, qui n'était jusqu'ici qu'une saisie
+// libre sans mémoire d'un jour sur l'autre)
+model CaisseAgence {
+  id            String   @id @default(cuid())
+  agenceId      String
+  agence        Agence   @relation(fields: [agenceId], references: [id])
+  devise        Devise
+  solde         Decimal  @default(0) @db.Decimal(15, 2)
+  plafondAlerte Decimal? @db.Decimal(15, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([agenceId, devise])
+  @@map("caisses_agence")
+}
+
+enum StatutTransfertTresorerie {
+  ENVOYE
+  RECU
+  ANNULE
+}
+
+// Réapprovisionnement de caisse entre agences (ou vers/depuis le siège, agenceId = null) —
+// mouvement de trésorerie interne, distinct d'un virement client : aucune écriture comptable
+// classique (le plan comptable BANKA est consolidé au niveau banque, un seul compte 5700 Caisse)
+model TransfertTresorerie {
+  id             String  @id @default(cuid())
+  reference      String  @unique
+  agenceSourceId String?
+  agenceSource   Agence? @relation("TransfertSource", fields: [agenceSourceId], references: [id])
+  agenceDestId   String?
+  agenceDest     Agence? @relation("TransfertDest", fields: [agenceDestId], references: [id])
+  devise         Devise
+  montant        Decimal @db.Decimal(15, 2)
+  statut         StatutTransfertTresorerie @default(ENVOYE)
+  notes          String?
+
+  creeParId String
+  creePar   Utilisateur  @relation("TransfertCreateur", fields: [creeParId], references: [id])
+  recuParId String?
+  recuPar   Utilisateur? @relation("TransfertRecepteur", fields: [recuParId], references: [id])
+
+  envoyeAt DateTime  @default(now())
+  recuAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agenceSourceId, statut])
+  @@index([agenceDestId, statut])
+  @@map("transferts_tresorerie")
 }
 
 model Client {
@@ -313,6 +376,7 @@ model Client {
   comptes      Compte[]
   prets        Pret[]
   mandatsRecus MandatCompte[] @relation("MandataireCompte")
+  documents    Document[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -367,6 +431,10 @@ model SessionCaisse {
   fermePar       Utilisateur?  @relation("SessionFermeture", fields: [fermeParId], references: [id])
   soldeOuverture Decimal       @db.Decimal(15, 2)
   soldeFermeture Decimal?      @db.Decimal(15, 2)
+  // Écart entre le solde théorique (ouverture + mouvements de la session) et le comptage physique
+  // saisi à la fermeture — tracé pour investigation plutôt que silencieusement absorbé
+  ecartConstate      Decimal? @db.Decimal(15, 2)
+  justificationEcart String?
   devise         Devise        @default(HTG)
   statut         StatutSession @default(OUVERTE)
   notes          String?
@@ -399,6 +467,11 @@ model Transaction {
   sessionId String?
   session   SessionCaisse? @relation(fields: [sessionId], references: [id])
 
+  // Traçabilité de l'agence ayant physiquement exécuté l'opération (peut différer de l'agence du
+  // compte débité/crédité). Nullable : pas de backfill des transactions historiques.
+  agenceExecutionId String?
+  agenceExecution   Agence? @relation("TransactionAgenceExecution", fields: [agenceExecutionId], references: [id])
+
   creeParId    String
   creePar      Utilisateur  @relation("TransactionCreateur", fields: [creeParId], references: [id])
   valideParId  String?
@@ -419,6 +492,7 @@ model Transaction {
   @@index([type])
   @@index([creeParId])
   @@index([sessionId])
+  @@index([agenceExecutionId])
   @@index([createdAt])
   @@index([compteDebitId, statut])
   @@index([compteCreditId, statut])
@@ -461,6 +535,7 @@ model Pret {
   lignes         LignePret[]
   remboursements RemboursementPret[]
   garanties      Garantie[]
+  fichesPaie     FichePaie[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -619,6 +694,47 @@ model Garantie {
   @@map("garanties")
 }
 
+enum TypeDocument {
+  PIECE_IDENTITE
+  JUSTIFICATIF_DOMICILE
+  CONTRAT
+  AUTRE
+}
+
+enum StatutDocument {
+  ACTIF
+  EXPIRE
+  ARCHIVE
+}
+
+// Pièces jointes KYC du client (upload local, servi via /uploads — pas de compte cloud disponible
+// dans cet environnement, même pattern que ANTENN/POSTA). L'expiration (pièce d'identité) est
+// surveillée par un job quotidien (jobs/documentsExpiration.ts) plutôt que calculée à la volée.
+model Document {
+  id             String         @id @default(cuid())
+  clientId       String
+  client         Client         @relation(fields: [clientId], references: [id])
+  type           TypeDocument
+  nomFichier     String
+  cheminFichier  String
+  mimeType       String
+  tailleOctets   Int
+  dateExpiration DateTime?
+  statut         StatutDocument @default(ACTIF)
+  notes          String?
+
+  creeParId String
+  creePar   Utilisateur @relation(fields: [creeParId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([statut])
+  @@index([dateExpiration])
+  @@map("documents")
+}
+
 model EpargneProgrammee {
   id                String           @id @default(cuid())
   compteSourceId    String
@@ -743,6 +859,10 @@ model FichePaie {
   cotisations     Decimal       @default(0) @db.Decimal(15, 2)
   avanceDeduite   Decimal       @default(0) @db.Decimal(15, 2)
   creditDeduit    Decimal       @default(0) @db.Decimal(15, 2)
+  // Prêt sur lequel creditDeduit a été calculé — nécessaire pour appliquer la retenue au bon prêt
+  // au moment du paiement (voir rh.service.ts::payerSalaires + pret.service.ts::appliquerRetenueSalariale)
+  pretId          String?
+  pret            Pret?         @relation(fields: [pretId], references: [id])
   salaireNet      Decimal       @db.Decimal(15, 2)
   statut          StatutPaie    @default(BROUILLON)
   modeReglement   ModeReglement @default(VIREMENT_BANKA)

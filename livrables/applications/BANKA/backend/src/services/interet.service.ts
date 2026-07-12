@@ -50,6 +50,7 @@ export async function crediterInteretsMensuels(): Promise<{ traites: number; err
             motif: libelle,
             statut: 'VALIDEE',
             compteCreditId: compte.id,
+            agenceExecutionId: compte.agenceId,
             creeParId: 'SYSTEM',
             valideParId: 'SYSTEM',
           } as any,

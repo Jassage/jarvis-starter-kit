@@ -18,7 +18,7 @@ export function removeSSEClient(id: string): void {
 }
 
 export interface SSEEvent {
-  type: 'TRANSACTION_EN_ATTENTE' | 'TRANSACTION_VALIDEE' | 'TRANSACTION_REJETEE' | 'ALERTE_AML' | 'ECHEANCE_RETARD' | 'CAISSE_FERMEE';
+  type: 'TRANSACTION_EN_ATTENTE' | 'TRANSACTION_VALIDEE' | 'TRANSACTION_REJETEE' | 'ALERTE_AML' | 'ECHEANCE_RETARD' | 'CAISSE_FERMEE' | 'PLAFOND_CAISSE_DEPASSE';
   agenceId?: string | null;
   userId?: string;
   data: Record<string, unknown>;

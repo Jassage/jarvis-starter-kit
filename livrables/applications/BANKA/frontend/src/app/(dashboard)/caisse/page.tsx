@@ -14,9 +14,10 @@ export default function CaissePage() {
   const { utilisateur } = useAuthStore();
   const toast = useToastStore();
   const [session, setSession] = useState<any>(null);
+  const [soldeActuel, setSoldeActuel] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [soldeOuverture, setSoldeOuverture] = useState("");
   const [soldeFermeture, setSoldeFermeture] = useState("");
+  const [justificationEcart, setJustificationEcart] = useState("");
   const [action, setAction] = useState(false);
   const [showFermer, setShowFermer] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -31,6 +32,12 @@ export default function CaissePage() {
         params: { agenceId: utilisateur.agenceId },
       });
       setSession(data.data);
+      if (!data.data) {
+        const solde = await api.get("/caisse/solde-actuel", {
+          params: { agenceId: utilisateur.agenceId },
+        });
+        setSoldeActuel(solde.data.data);
+      }
     } finally {
       setLoading(false);
     }
@@ -41,19 +48,15 @@ export default function CaissePage() {
   }, []);
 
   const ouvrir = async () => {
-    if (!soldeOuverture || !utilisateur?.agenceId) return;
+    if (!utilisateur?.agenceId) return;
     setAction(true);
     try {
-      await api.post("/caisse", {
-        agenceId: utilisateur.agenceId,
-        soldeOuverture: parseFloat(soldeOuverture),
-      });
+      await api.post("/caisse", { agenceId: utilisateur.agenceId });
       toast.success(
         "Caisse ouverte",
         "La session de caisse a démarré avec succès.",
       );
       await loadSession();
-      setSoldeOuverture("");
     } catch (e: any) {
       toast.error(
         "Erreur d'ouverture",
@@ -70,6 +73,7 @@ export default function CaissePage() {
     try {
       await api.patch(`/caisse/${session.id}/fermer`, {
         soldeFermeture: parseFloat(soldeFermeture),
+        justificationEcart: justificationEcart || undefined,
       });
       toast.success(
         "Caisse fermée",
@@ -77,6 +81,7 @@ export default function CaissePage() {
       );
       setShowFermer(false);
       setSoldeFermeture("");
+      setJustificationEcart("");
       await loadSession();
     } catch (e: any) {
       toast.error(
@@ -172,22 +177,11 @@ export default function CaissePage() {
       .reduce((s: number, t: any) => s + Number(t.montant), 0) || 0;
   const nbOps = session?.transactions?.length || 0;
 
-  // Solde théorique = tous les mouvements de cash physique de la session
-  // Entrées caisse : dépôts clients, virements reçus en espèces, remboursements de prêts
-  // Sorties caisse : retraits clients, virements émis en espèces, décaissements de prêts
-  const TYPES_ENTREE_CAISSE = ["DEPOT", "VIREMENT_CREDIT", "REMBOURSEMENT_PRET"];
-  const TYPES_SORTIE_CAISSE = ["RETRAIT", "VIREMENT_DEBIT", "DECAISSEMENT_PRET"];
-  const totalEntrees =
-    session?.transactions
-      ?.filter((t: any) => TYPES_ENTREE_CAISSE.includes(t.type))
-      .reduce((s: number, t: any) => s + Number(t.montant), 0) || 0;
-  const totalSorties =
-    session?.transactions
-      ?.filter((t: any) => TYPES_SORTIE_CAISSE.includes(t.type))
-      .reduce((s: number, t: any) => s + Number(t.montant), 0) || 0;
-  const soldeTheo = session
-    ? Number(session.soldeOuverture) + totalEntrees - totalSorties
-    : 0;
+  // Solde théorique = solde de caisse persistant de l'agence, source de vérité côté serveur
+  // (mis à jour en direct à chaque dépôt/retrait validé, plus recalculé côté frontend)
+  const soldeTheo = session?.caisseActuelle ? Number(session.caisseActuelle.solde) : 0;
+  const plafondAlerte = session?.caisseActuelle?.plafondAlerte != null ? Number(session.caisseActuelle.plafondAlerte) : null;
+  const plafondDepasse = plafondAlerte != null && soldeTheo > plafondAlerte;
 
   return (
     <div className="space-y-5 animate-slide-up">
@@ -254,34 +248,22 @@ export default function CaissePage() {
               Ouvrir la caisse du jour
             </p>
             <p className="text-xs mb-4" style={{ color: "#8b94b0" }}>
-              Entrez le solde de départ constaté en caisse avant de commencer
-              les opérations.
+              Le solde d'ouverture reprend automatiquement le cash constaté à
+              la dernière fermeture de cette agence.
             </p>
             <div className="flex gap-3 items-end">
               <div className="flex-1">
                 <label className="label">Solde d'ouverture (HTG)</label>
-                <div className="relative">
-                  <span
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold"
-                    style={{ color: "#4a5578" }}
-                  >
-                    HTG
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={soldeOuverture}
-                    onChange={(e) => setSoldeOuverture(e.target.value)}
-                    className="input"
-                    style={{ paddingLeft: '3.5rem' }}
-                    placeholder="0.00"
-                  />
+                <div
+                  className="p-3.5 rounded-xl text-lg font-bold"
+                  style={{ background: "#f7f8fc", color: "#0b1733" }}
+                >
+                  {formatMontant(soldeActuel?.solde || 0, "HTG")}
                 </div>
               </div>
               <button
                 onClick={ouvrir}
-                disabled={!soldeOuverture || action}
+                disabled={action}
                 className="btn-primary disabled:opacity-40 flex items-center gap-2"
               >
                 {action ? (
@@ -375,6 +357,21 @@ export default function CaissePage() {
                 </div>
               </div>
             </div>
+
+            {/* Alerte plafond de caisse */}
+            {plafondDepasse && (
+              <div
+                className="px-6 py-3 flex items-center gap-2.5"
+                style={{ background: "#fffbeb", borderBottom: "1px solid #fde68a" }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 flex-shrink-0" style={{ color: "#b45309" }}>
+                  <path d="M10.29 3.86l-8.18 14.14a2 2 0 001.71 3h16.36a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <p className="text-xs font-medium" style={{ color: "#92400e" }}>
+                  Le cash en caisse ({formatMontant(soldeTheo, "HTG")}) dépasse le plafond d'alerte ({formatMontant(plafondAlerte || 0, "HTG")}). Envisagez un transfert vers une autre agence ou le siège.
+                </p>
+              </div>
+            )}
 
             {/* Stats rapides */}
             <div
@@ -741,6 +738,21 @@ export default function CaissePage() {
                     )}
                   </div>
                 )}
+                {soldeFermeture &&
+                  Math.abs(parseFloat(soldeFermeture) - soldeTheo) >= 1 && (
+                    <div className="mt-3">
+                      <label className="label">
+                        Justification de l'écart
+                      </label>
+                      <textarea
+                        value={justificationEcart}
+                        onChange={(e) => setJustificationEcart(e.target.value)}
+                        className="input"
+                        rows={2}
+                        placeholder="Ex: erreur de rendu monnaie sur une transaction, billet contrefait retiré..."
+                      />
+                    </div>
+                  )}
               </div>
             </div>
 

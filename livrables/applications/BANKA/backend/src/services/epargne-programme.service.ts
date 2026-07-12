@@ -104,17 +104,20 @@ export async function executerEpargnes(userId?: string) {
         results.details.push(`${ep.id}: compte source ou destination inactif`);
         continue;
       }
-      const soldeSource = Number(ep.compteSource.solde);
       const montant = Number(ep.montant);
-      if (soldeSource < montant) {
-        results.erreurs++;
-        results.details.push(`${ep.id}: solde insuffisant (${soldeSource} < ${montant})`);
-        continue;
-      }
+      const soldeMinimum = Number(ep.compteSource.soldeMinimum);
 
       await prisma.$transaction(async (tx) => {
-        await tx.compte.update({ where: { id: ep.compteSourceId }, data: { solde: { decrement: montant } } });
-        await tx.compte.update({ where: { id: ep.compteDestId },   data: { solde: { increment: montant } } });
+        // Compare-and-swap : le solde a pu bouger depuis la lecture hors-transaction (retrait
+        // concurrent) — la vérification et le décrément doivent être une seule opération SQL,
+        // même garde (solde >= soldeMinimum + montant) que les retraits manuels
+        const cas = await tx.compte.updateMany({
+          where: { id: ep.compteSourceId, solde: { gte: soldeMinimum + montant } },
+          data: { solde: { decrement: montant } },
+        });
+        if (cas.count === 0) throw new Error(`Solde insuffisant (minimum ${soldeMinimum} + montant ${montant})`);
+
+        await tx.compte.update({ where: { id: ep.compteDestId }, data: { solde: { increment: montant } } });
         await (tx as any).epargneProgrammee.update({
           where: { id: ep.id },
           data: {

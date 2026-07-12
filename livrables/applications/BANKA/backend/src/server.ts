@@ -4,6 +4,7 @@ import { startCleanupJob } from './jobs/cleanupTokens';
 import { startEpargneJob } from './jobs/epargne';
 import { startInteretsJob } from './jobs/interets';
 import { startFraisJob } from './jobs/frais';
+import { startDocumentsExpirationJob } from './jobs/documentsExpiration';
 
 const PORT = parseInt(process.env.PORT || '4001', 10);
 
@@ -13,4 +14,5 @@ app.listen(PORT, () => {
   startEpargneJob();
   startInteretsJob();
   startFraisJob();
+  startDocumentsExpirationJob();
 });

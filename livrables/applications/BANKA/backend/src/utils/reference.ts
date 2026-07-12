@@ -85,6 +85,7 @@ export async function generateReferenceTransaction(type: string): Promise<string
     FRAIS: 'FRS',
     INTERET: 'INT',
     AJUSTEMENT: 'AJT',
+    TRANSFERT_TRESORERIE: 'TRF',
   };
   const code = codes[type] || 'TXN';
   const now = new Date();

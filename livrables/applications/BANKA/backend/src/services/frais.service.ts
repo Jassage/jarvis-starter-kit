@@ -2,6 +2,7 @@ import prisma from '../utils/prisma';
 import { generateReferenceTransaction } from '../utils/reference';
 import { creerEcritureAuto } from './compta.service';
 import { getConfig } from './configuration.service';
+import { AppError } from '../types';
 
 // ─── Frais de tenue de compte (job mensuel) ───────────────────────────────────
 
@@ -43,11 +44,18 @@ export async function preleverFraisTenueCompte(): Promise<{ traites: number; err
             motif: libelle,
             statut: 'VALIDEE',
             compteDebitId: compte.id,
+            agenceExecutionId: compte.agenceId,
             creeParId: 'SYSTEM',
             valideParId: 'SYSTEM',
           } as any,
         });
-        await tx.compte.update({ where: { id: compte.id }, data: { solde: { decrement: montant } } });
+        // Compare-and-swap : le solde a pu bouger entre la sélection des comptes éligibles et ce
+        // prélèvement (retrait concurrent) — on revérifie et décrémente en une seule requête SQL
+        const cas = await tx.compte.updateMany({
+          where: { id: compte.id, solde: { gte: montant } },
+          data: { solde: { decrement: montant } },
+        });
+        if (cas.count === 0) throw new Error('Solde devenu insuffisant entre la sélection et le prélèvement');
         await creerEcritureAuto(tx, {
           debitNumero:  '2600',
           creditNumero: '7020',
@@ -83,7 +91,7 @@ export async function preleverFraisDossierPret(opts: {
   const montant = Math.round(opts.montantPret * (taux / 100) * 100) / 100;
   if (montant <= 0) return 0;
 
-  const compte = await opts.tx.compte.findUnique({ where: { id: opts.compteId }, select: { solde: true } });
+  const compte = await opts.tx.compte.findUnique({ where: { id: opts.compteId }, select: { solde: true, agenceId: true } });
   const soldeAvant = Number(compte?.solde || 0);
   const reference = await generateReferenceTransaction('FRAIS');
   const libelle = `Frais de dossier prêt — ${taux}%`;
@@ -99,12 +107,18 @@ export async function preleverFraisDossierPret(opts: {
       motif: libelle,
       statut: 'VALIDEE',
       compteDebitId: opts.compteId,
+      agenceExecutionId: compte?.agenceId,
       creeParId: opts.userId,
       valideParId: opts.userId,
     } as any,
   });
 
-  await opts.tx.compte.update({ where: { id: opts.compteId }, data: { solde: { decrement: montant } } });
+  // Compare-and-swap : garantit que le prélèvement ne fait jamais passer le solde sous zéro
+  const cas = await opts.tx.compte.updateMany({
+    where: { id: opts.compteId, solde: { gte: montant } },
+    data: { solde: { decrement: montant } },
+  });
+  if (cas.count === 0) throw new AppError(400, 'Solde insuffisant pour prélever les frais de dossier');
 
   await creerEcritureAuto(opts.tx, {
     debitNumero:  '2600',
@@ -127,6 +141,7 @@ export async function preleverFraisVirement(opts: {
   devise: string;
   userId: string;
   tx: any;
+  soldeMinimum?: number;
 }): Promise<number> {
   const tauxConfig = await getConfig('FRAIS_VIREMENT_TAUX');
   const taux = parseFloat(tauxConfig || '0');
@@ -135,7 +150,8 @@ export async function preleverFraisVirement(opts: {
   const montantFrais = Math.round(opts.montant * (taux / 100) * 100) / 100;
   if (montantFrais <= 0) return 0;
 
-  const compte = await opts.tx.compte.findUnique({ where: { id: opts.compteSourceId }, select: { solde: true } });
+  const soldeMinimum = opts.soldeMinimum ?? 0;
+  const compte = await opts.tx.compte.findUnique({ where: { id: opts.compteSourceId }, select: { solde: true, agenceId: true } });
   const soldeAvant = Number(compte?.solde || 0);
   const reference = await generateReferenceTransaction('FRAIS');
   const libelle = `Frais de virement — ${taux}%`;
@@ -151,12 +167,19 @@ export async function preleverFraisVirement(opts: {
       motif: libelle,
       statut: 'VALIDEE',
       compteDebitId: opts.compteSourceId,
+      agenceExecutionId: compte?.agenceId,
       creeParId: opts.userId,
       valideParId: opts.userId,
     } as any,
   });
 
-  await opts.tx.compte.update({ where: { id: opts.compteSourceId }, data: { solde: { decrement: montantFrais } } });
+  // Compare-and-swap : le débit du virement lui-même vient d'être posé juste avant ce prélèvement —
+  // le frais ne doit pas faire passer le compte sous son solde minimum
+  const cas = await opts.tx.compte.updateMany({
+    where: { id: opts.compteSourceId, solde: { gte: soldeMinimum + montantFrais } },
+    data: { solde: { decrement: montantFrais } },
+  });
+  if (cas.count === 0) throw new AppError(400, 'Solde insuffisant pour prélever les frais de virement');
 
   await creerEcritureAuto(opts.tx, {
     debitNumero:  '2600',

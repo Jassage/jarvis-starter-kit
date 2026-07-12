@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { requireSupervisor, requireAgentCredit, requireCaissier } from '../middleware/rbac';
+import { validate } from '../middleware/validate';
+import { createGarantieSchema, updateGarantieSchema } from '../validation/garantie.schemas';
 import * as ctrl from '../controllers/pret.controller';
 import * as garantieCtrl from '../controllers/garantie.controller';
 
@@ -18,7 +20,7 @@ router.post('/:id/remboursement', requireAuth, requireCaissier, ctrl.rembourser)
 router.get('/:id/penalite', requireAuth, ctrl.penalite);
 
 router.get('/:id/garanties', requireAuth, garantieCtrl.list);
-router.post('/:id/garanties', requireAuth, garantieCtrl.create);
-router.put('/:id/garanties/:garantieId', requireAuth, garantieCtrl.update);
+router.post('/:id/garanties', requireAuth, requireAgentCredit, validate(createGarantieSchema), garantieCtrl.create);
+router.put('/:id/garanties/:garantieId', requireAuth, requireAgentCredit, validate(updateGarantieSchema), garantieCtrl.update);
 
 export default router;

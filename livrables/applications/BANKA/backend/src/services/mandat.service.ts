@@ -36,9 +36,16 @@ export async function listMandats(compteId: string) {
 export async function createMandat(
   compteId: string,
   data: { mandataireId: string; droits: string[]; dateFin?: string; notes?: string },
-  userId: string
+  userId: string,
+  agentAgenceId?: string | null
 ) {
   validateDroits(data.droits);
+
+  if (agentAgenceId) {
+    const compte = await prisma.compte.findUnique({ where: { id: compteId }, select: { agenceId: true } });
+    if (!compte) throw new AppError(404, 'Compte introuvable');
+    if (compte.agenceId !== agentAgenceId) throw new AppError(403, 'Ce compte n\'appartient pas à votre agence');
+  }
 
   const existing = await prisma.mandatCompte.findFirst({
     where: { compteId, mandataireId: data.mandataireId, actif: true },
@@ -76,11 +83,13 @@ export async function createMandat(
 export async function updateMandat(
   mandatId: string,
   data: { droits?: string[]; dateFin?: string | null; notes?: string },
-  userId: string
+  userId: string,
+  agentAgenceId?: string | null
 ) {
   if (data.droits !== undefined) validateDroits(data.droits);
 
-  const existing = await prisma.mandatCompte.findUniqueOrThrow({ where: { id: mandatId } });
+  const existing = await prisma.mandatCompte.findUniqueOrThrow({ where: { id: mandatId }, include: { compte: { select: { agenceId: true } } } });
+  if (agentAgenceId && existing.compte.agenceId !== agentAgenceId) throw new AppError(403, 'Ce mandat n\'appartient pas à votre agence');
 
   const mandat = await prisma.mandatCompte.update({
     where: { id: mandatId },
@@ -104,7 +113,10 @@ export async function updateMandat(
   return mandat;
 }
 
-export async function revoquerMandat(mandatId: string, userId: string) {
+export async function revoquerMandat(mandatId: string, userId: string, agentAgenceId?: string | null) {
+  const existing = await prisma.mandatCompte.findUniqueOrThrow({ where: { id: mandatId }, include: { compte: { select: { agenceId: true } } } });
+  if (agentAgenceId && existing.compte.agenceId !== agentAgenceId) throw new AppError(403, 'Ce mandat n\'appartient pas à votre agence');
+
   const mandat = await prisma.mandatCompte.update({
     where: { id: mandatId },
     data: { actif: false },

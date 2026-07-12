@@ -11,6 +11,8 @@ export interface Agence {
   actif: boolean;
   createdAt: string;
   _count?: { utilisateurs: number; comptes: number; prets: number; employes: number };
+  // Caisse HTG uniquement dans cette première tranche (USD non couvert)
+  caisses?: { solde: number; plafondAlerte: number | null }[];
 }
 
 interface AgenceState {

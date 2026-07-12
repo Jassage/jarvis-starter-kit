@@ -43,8 +43,9 @@ export async function effectuerVirementCross(data: {
   montant: number;
   userId: string;
   sessionId?: string;
+  agenceId?: string | null;
 }) {
-  const { compteSourceId, compteDestinationId, montant, userId, sessionId } = data;
+  const { compteSourceId, compteDestinationId, montant, userId, sessionId, agenceId } = data;
 
   const [source, dest] = await Promise.all([
     prisma.compte.findUnique({ where: { id: compteSourceId } }),
@@ -56,6 +57,8 @@ export async function effectuerVirementCross(data: {
   if (source.statut !== 'ACTIF') throw new AppError(400, 'Compte source inactif');
   if (dest.statut !== 'ACTIF') throw new AppError(400, 'Compte destination inactif');
   if (source.devise === dest.devise) throw new AppError(400, 'Utilisez le virement standard pour les comptes de même devise');
+  if (agenceId && source.agenceId !== agenceId) throw new AppError(403, 'Le compte source n\'appartient pas à votre agence');
+  const agenceExecutionId = agenceId ?? source.agenceId;
 
   // Déterminer le sens : source HTG / dest USD => client achète USD (banque vend USD, applique tauxVente)
   //                      source USD / dest HTG => client vend USD (banque achète USD, applique tauxAchat)
@@ -104,6 +107,7 @@ export async function effectuerVirementCross(data: {
         compteDebitId: compteSourceId,
         compteCreditId: compteDestinationId,
         sessionId,
+        agenceExecutionId,
         creeParId: userId,
         valideParId: userId,
       },
@@ -122,6 +126,7 @@ export async function effectuerVirementCross(data: {
         compteDebitId: compteSourceId,
         compteCreditId: compteDestinationId,
         sessionId,
+        agenceExecutionId,
         creeParId: userId,
         valideParId: userId,
       },

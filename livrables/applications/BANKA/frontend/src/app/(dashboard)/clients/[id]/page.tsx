@@ -8,6 +8,7 @@ import api from '@/lib/api';
 import { nomClient, formatMontant, formatDate, TYPE_COMPTE_LABELS, STATUT_PRET_LABELS } from '@/lib/utils';
 import ClientForm from '@/components/clients/ClientForm';
 import CompteForm from '@/components/comptes/CompteForm';
+import ClientDocuments from '@/components/clients/ClientDocuments';
 
 const STATUT_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
   ACTIF:      { label: 'Actif',      color: '#047857', bg: '#ecfdf5', border: '#6ee7b7' },
@@ -203,6 +204,8 @@ export default function ClientDetailPage() {
               )}
             </div>
           </div>
+
+          <ClientDocuments clientId={client.id} />
         </div>
 
         {/* Right: comptes + prêts */}

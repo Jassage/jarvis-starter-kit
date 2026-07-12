@@ -1,6 +1,8 @@
+import { timingSafeEqual } from 'crypto';
 import prisma from '../utils/prisma';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
+import { hashToken } from '../utils/hash';
 
 // ─── CRUD Appareils ──────────────────────────────────────────────────────────
 
@@ -14,16 +16,21 @@ export async function listDevices() {
 export async function createDevice(data: { nom: string; serialNumber: string; commKey: string }, userId: string) {
   const existing = await prisma.pointageDevice.findUnique({ where: { serialNumber: data.serialNumber } });
   if (existing) throw new AppError(409, 'Numéro de série déjà enregistré');
-  const device = await prisma.pointageDevice.create({ data });
-  await createAuditLog({ userId, table: 'pointage_devices', action: 'CREATE', entiteId: device.id, nouveau: data });
+  // La CommKey est un secret partagé avec l'appareil biométrique — hashée au repos comme les
+  // refresh/reset tokens (utils/hash.ts::hashToken), jamais stockée en clair en base
+  const device = await prisma.pointageDevice.create({ data: { ...data, commKey: hashToken(data.commKey) } });
+  await createAuditLog({ userId, table: 'pointage_devices', action: 'CREATE', entiteId: device.id, nouveau: { ...data, commKey: undefined } });
   return device;
 }
 
 export async function updateDevice(id: string, data: { nom?: string; commKey?: string; actif?: boolean }, userId: string) {
   const device = await prisma.pointageDevice.findUnique({ where: { id } });
   if (!device) throw new AppError(404, 'Appareil introuvable');
-  const updated = await prisma.pointageDevice.update({ where: { id }, data });
-  await createAuditLog({ userId, table: 'pointage_devices', action: 'UPDATE', entiteId: id, nouveau: data });
+  const updated = await prisma.pointageDevice.update({
+    where: { id },
+    data: { ...data, commKey: data.commKey !== undefined ? hashToken(data.commKey) : undefined },
+  });
+  await createAuditLog({ userId, table: 'pointage_devices', action: 'UPDATE', entiteId: id, nouveau: { ...data, commKey: undefined } });
   return updated;
 }
 
@@ -40,8 +47,13 @@ export async function deleteDevice(id: string, userId: string) {
 export async function findDeviceBySN(serialNumber: string, commKey?: string) {
   const device = await prisma.pointageDevice.findUnique({ where: { serialNumber } });
   if (!device || !device.actif) return null;
-  // Si l'appareil a une CommKey configurée, la requête doit la fournir correctement
-  if (device.commKey && device.commKey !== commKey) return null;
+  // Si l'appareil a une CommKey configurée, la requête doit la fournir correctement.
+  // Comparaison en temps constant sur les hash (longueur fixe SHA-256) pour éviter un timing attack.
+  if (device.commKey) {
+    const provided = Buffer.from(hashToken(commKey || ''), 'hex');
+    const expected = Buffer.from(device.commKey, 'hex');
+    if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) return null;
+  }
   return device;
 }
 

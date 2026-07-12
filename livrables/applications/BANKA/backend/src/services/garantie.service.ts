@@ -22,10 +22,12 @@ export async function createGarantie(
     dateConstit?: Date;
     notes?: string;
   },
-  userId: string
+  userId: string,
+  agentAgenceId?: string | null
 ) {
   const pret = await prisma.pret.findUnique({ where: { id: pretId } });
   if (!pret) throw new AppError(404, 'Prêt introuvable');
+  if (agentAgenceId && pret.agenceId !== agentAgenceId) throw new AppError(403, 'Ce prêt n\'appartient pas à votre agence');
 
   const garantie = await prisma.garantie.create({
     data: {
@@ -54,10 +56,12 @@ export async function createGarantie(
 export async function updateGarantie(
   id: string,
   data: { statut?: string; description?: string; valeurEstimee?: number; dateLevee?: Date; notes?: string },
-  userId: string
+  userId: string,
+  agentAgenceId?: string | null
 ) {
-  const existing = await prisma.garantie.findUnique({ where: { id } });
+  const existing = await prisma.garantie.findUnique({ where: { id }, include: { pret: { select: { agenceId: true } } } });
   if (!existing) throw new AppError(404, 'Garantie introuvable');
+  if (agentAgenceId && existing.pret.agenceId !== agentAgenceId) throw new AppError(403, 'Cette garantie n\'appartient pas à votre agence');
 
   const updated = await prisma.garantie.update({
     where: { id },

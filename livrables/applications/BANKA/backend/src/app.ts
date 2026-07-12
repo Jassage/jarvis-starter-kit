@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -25,6 +26,7 @@ import iclockRoutes from './routes/iclock.routes';
 import amlRoutes from './routes/aml.routes';
 import sseRoutes from './routes/sse.routes';
 import tauxChangeRoutes from './routes/tauxChange.routes';
+import tresorerieRoutes from './routes/tresorerie.routes';
 import { ensureComptesBase } from './services/compta.service';
 
 const app = express();
@@ -48,6 +50,14 @@ app.use('/api', apiRateLimit);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'banka-backend' }));
 
+// Documents KYC uploadés (multer, voir middleware/upload.middleware.ts). Le Cross-Origin-Resource-Policy
+// n'est relâché que sur ce chemin précis (pas globalement dans helmet()) : le frontend tourne sur un
+// port différent et doit pouvoir afficher ces fichiers, sans affaiblir la protection du reste de l'API.
+app.use('/uploads', (_req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static(path.join(__dirname, '../uploads')));
+
 app.use('/api/auth', authRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/comptes', compteRoutes);
@@ -66,6 +76,7 @@ app.use('/api/rh/pointage/devices', deviceRoutes);
 app.use('/api/aml', amlRoutes);
 app.use('/api/sse', sseRoutes);
 app.use('/api/taux-change', tauxChangeRoutes);
+app.use('/api/tresorerie', tresorerieRoutes);
 // ZKTeco ADMS — monté à la racine, pas sous /api (protocole propriétaire)
 // Les appareils font un heartbeat toutes les 10s → 60 req/min par IP est généreux sans être abusable
 app.use('/iclock', rateLimit({ windowMs: 60 * 1000, max: 60, message: 'REJECT' }));

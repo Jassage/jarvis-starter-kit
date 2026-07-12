@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import prisma from '../utils/prisma';
 import { signToken, signRefreshToken, verifyRefreshToken, signTempToken, verifyTempToken } from '../utils/jwt';
-import { hashPassword, comparePassword } from '../utils/hash';
+import { hashPassword, comparePassword, hashToken } from '../utils/hash';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
 import { sendPasswordResetEmail } from '../utils/email';
@@ -53,7 +53,7 @@ export async function login(email: string, motDePasse: string) {
   expiresAt.setDate(expiresAt.getDate() + 30);
 
   await prisma.refreshToken.create({
-    data: { token: refreshToken, utilisateurId: user.id, expiresAt },
+    data: { token: hashToken(refreshToken), utilisateurId: user.id, expiresAt },
   });
 
   await createAuditLog({ userId: user.id, table: 'utilisateurs', action: 'LOGIN', entiteId: user.id, nouveau: { email: user.email, role: user.role } });
@@ -86,7 +86,7 @@ export async function verify2FA(tempToken: string, code: string) {
   expiresAt.setDate(expiresAt.getDate() + 30);
 
   await prisma.refreshToken.create({
-    data: { token: refreshToken, utilisateurId: user.id, expiresAt },
+    data: { token: hashToken(refreshToken), utilisateurId: user.id, expiresAt },
   });
 
   await createAuditLog({ userId: user.id, table: 'utilisateurs', action: 'LOGIN_2FA', entiteId: user.id, nouveau: { email: user.email } });
@@ -144,7 +144,7 @@ export async function refresh(refreshToken: string) {
   }
 
   const stored = await prisma.refreshToken.findUnique({
-    where: { token: refreshToken },
+    where: { token: hashToken(refreshToken) },
     include: { utilisateur: true },
   });
 
@@ -162,7 +162,7 @@ export async function refresh(refreshToken: string) {
 
   await prisma.$transaction([
     prisma.refreshToken.update({ where: { id: stored.id }, data: { revoked: true } }),
-    prisma.refreshToken.create({ data: { token: newRefreshToken, utilisateurId: user.id, expiresAt } }),
+    prisma.refreshToken.create({ data: { token: hashToken(newRefreshToken), utilisateurId: user.id, expiresAt } }),
   ]);
 
   const token = signToken({ userId: user.id, email: user.email, role: user.role, agenceId: user.agenceId });
@@ -171,7 +171,7 @@ export async function refresh(refreshToken: string) {
 
 export async function logout(refreshToken: string) {
   await prisma.refreshToken.updateMany({
-    where: { token: refreshToken },
+    where: { token: hashToken(refreshToken) },
     data: { revoked: true },
   });
 }
@@ -219,20 +219,27 @@ export async function demanderResetMotDePasse(email: string) {
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 heure
 
   await prisma.passwordResetToken.create({
-    data: { token, utilisateurId: user.id, expiresAt },
+    data: { token: hashToken(token), utilisateurId: user.id, expiresAt },
   });
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
   const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
 
-  await sendPasswordResetEmail({ to: user.email, nom: user.prenom, resetUrl });
+  // Best-effort : le token est déjà en base et reste valide même si l'envoi échoue (SMTP en panne
+  // par ex.) — la réponse au client doit rester identique dans tous les cas pour ne pas révéler
+  // si l'email existe, et un email en panne ne doit jamais faire échouer la requête
+  try {
+    await sendPasswordResetEmail({ to: user.email, nom: user.prenom, resetUrl });
+  } catch (err) {
+    console.error('[RESET_PASSWORD] Échec envoi email :', err instanceof Error ? err.message : err);
+  }
   await createAuditLog({ userId: user.id, table: 'utilisateurs', action: 'RESET_PASSWORD_REQUEST', entiteId: user.id });
 }
 
 export async function reinitialiserMotDePasse(token: string, nouveauMdp: string) {
   validateMotDePasse(nouveauMdp);
 
-  const record = await prisma.passwordResetToken.findUnique({ where: { token } });
+  const record = await prisma.passwordResetToken.findUnique({ where: { token: hashToken(token) } });
   if (!record || record.used || record.expiresAt < new Date()) {
     throw new AppError(400, 'Lien de réinitialisation invalide ou expiré');
   }

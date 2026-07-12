@@ -55,3 +55,14 @@ export const createUtilisateurSchema = z.object({
   agenceId: z.string().cuid().optional(),
   telephone: z.string().max(20).optional(),
 });
+
+// Whitelist stricte : motDePasse, email, twoFactorSecret, twoFactorEnabled sont volontairement
+// exclus — ils ne doivent être modifiables que via les flux dédiés (changePassword, 2FA setup/enable/disable)
+export const updateUtilisateurSchema = z.object({
+  nom: z.string().min(1).max(100).trim().optional(),
+  prenom: z.string().min(1).max(100).trim().optional(),
+  telephone: z.string().max(20).optional(),
+  role: z.enum(['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'CAISSIER', 'AGENT_CREDIT', 'COMPTABLE', 'AUDITEUR']).optional(),
+  agenceId: z.string().cuid().optional(),
+  actif: z.boolean().optional(),
+});

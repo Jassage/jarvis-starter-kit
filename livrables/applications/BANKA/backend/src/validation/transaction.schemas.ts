@@ -20,11 +20,12 @@ export const retraitSchema = z.object({
 });
 
 export const virementSchema = z.object({
-  compteDebitId: z.string().cuid('Compte source invalide'),
-  compteCreditId: z.string().cuid('Compte destination invalide'),
+  compteSourceId: z.string().cuid('Compte source invalide'),
+  compteDestinationId: z.string().cuid('Compte destination invalide'),
   montant: montantPositif,
   motif: z.string().max(500).optional(),
-}).refine((d) => d.compteDebitId !== d.compteCreditId, {
+  sessionId: z.string().cuid().optional(),
+}).refine((d) => d.compteSourceId !== d.compteDestinationId, {
   message: 'Le compte source et le compte destination doivent être différents',
 });
 

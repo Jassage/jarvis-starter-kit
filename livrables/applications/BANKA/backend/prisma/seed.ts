@@ -22,6 +22,14 @@ async function main() {
     },
   });
 
+  // Solde de caisse physique initial de l'agence, aligné sur la dotation en capital ci-dessous —
+  // sans cette ligne, la première ouverture de session de caisse partirait de zéro
+  await prisma.caisseAgence.upsert({
+    where: { agenceId_devise: { agenceId: agence.id, devise: 'HTG' } },
+    update: {},
+    create: { agenceId: agence.id, devise: 'HTG', solde: CAPITAL_INITIAL, plafondAlerte: 2_000_000 },
+  });
+
   const hash = await bcrypt.hash('Admin@123', 12);
 
   await prisma.utilisateur.upsert({

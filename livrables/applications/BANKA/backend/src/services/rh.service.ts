@@ -4,6 +4,7 @@ import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
 import { creerEcritureAuto } from './compta.service';
 import { hashPassword } from '../utils/hash';
+import { appliquerRetenueSalariale } from './pret.service';
 
 // T5: Utiliser randomBytes pour garantir l'unicité (Date.now().slice(-6) peut se répéter à la milliseconde)
 function genMatricule(): string {
@@ -328,8 +329,11 @@ export async function listFichesPaie(opts: { periode?: string; employeId?: strin
 export async function genererFichesPaie(periode: string, userId: string) {
   const employes = await prisma.employe.findMany({
     where: { statut: 'ACTIF' },
-    // B8: Inclure les lignes du prêt actif pour récupérer la prochaine mensualité réelle
-    include: { compte: { include: { client: { include: { prets: { where: { statut: 'EN_COURS' }, take: 1, include: { lignes: { where: { statut: { not: 'PAYE' } }, orderBy: { numeroEcheance: 'asc' }, take: 1 } } } } } } } },
+    // B8: Inclure les lignes du prêt actif pour récupérer la prochaine mensualité réelle.
+    // DECAISSE inclus : un prêt tout juste décaissé n'est PAS encore EN_COURS (cette transition ne
+    // se fait qu'au premier remboursement) — sans ça, la toute première retenue sur salaire d'un
+    // prêt neuf n'était jamais appliquée. Mêmes statuts "actifs" que enregistrerRemboursement.
+    include: { compte: { include: { client: { include: { prets: { where: { statut: { in: ['DECAISSE', 'EN_COURS', 'EN_RETARD'] } }, take: 1, include: { lignes: { where: { statut: { not: 'PAYE' } }, orderBy: { numeroEcheance: 'asc' }, take: 1 } } } } } } } },
   });
   const results = { crees: 0, ignores: 0 };
 
@@ -389,6 +393,7 @@ export async function genererFichesPaie(periode: string, userId: string) {
         cotisations,
         avanceDeduite,
         creditDeduit,
+        pretId: creditDeduit > 0 ? pretActif!.id : undefined,
         salaireNet: Math.max(net, 0),
         modeReglement: emp.modeReglement,
         details: {
@@ -477,6 +482,11 @@ export async function payerSalaires(periode: string, userId: string) {
       const emp = fiche.employe;
       const net = Number(fiche.salaireNet);
 
+      // Verrou logique posé AVANT tout crédit : compare-and-swap sur le statut VALIDE → PAYE.
+      // Empêche un double appel concurrent de POST /paie/payer de créditer deux fois le même salaire.
+      const cas = await (tx as any).fichePaie.updateMany({ where: { id: fiche.id, statut: 'VALIDE' }, data: { statut: 'PAYE' } });
+      if (cas.count === 0) continue;
+
       if (fiche.modeReglement === 'VIREMENT_BANKA' && emp.compteId) {
         // Lire le solde dans la transaction pour snapshot cohérent
         const compte = await tx.compte.findUnique({ where: { id: emp.compteId }, select: { solde: true } });
@@ -493,6 +503,7 @@ export async function payerSalaires(periode: string, userId: string) {
             motif: `Salaire net ${periode}`,
             statut: 'VALIDEE',
             compteCreditId: emp.compteId,
+            agenceExecutionId: emp.agenceId,
             creeParId: userId,
           },
         });
@@ -511,6 +522,11 @@ export async function payerSalaires(periode: string, userId: string) {
           date: new Date(),
           userId,
         });
+        // Répercute la retenue sur le prêt lui-même (resteARegler/montantRembourse/ligne/statut) —
+        // sans cette étape, le prêt et la fiche de paie divergeaient silencieusement (bug corrigé)
+        if (fiche.pretId) {
+          await appliquerRetenueSalariale({ pretId: fiche.pretId, montant: Number(fiche.creditDeduit), userId, tx });
+        }
       }
 
       if (Number(fiche.avanceDeduite) > 0) {
@@ -524,8 +540,6 @@ export async function payerSalaires(periode: string, userId: string) {
           userId,
         });
       }
-
-      await (tx as any).fichePaie.update({ where: { id: fiche.id }, data: { statut: 'PAYE' } });
 
       totalNet += net;
       totalCotisations += Number(fiche.cotisations);
@@ -636,10 +650,21 @@ export async function annulerAvance(avanceId: string, userId: string) {
   if (avance.statut !== 'EN_ATTENTE') throw new AppError(400, 'Seules les avances en attente peuvent être annulées');
 
   await prisma.$transaction(async (tx) => {
+    // Verrou logique posé en premier : compare-and-swap sur le statut EN_ATTENTE → ANNULEE,
+    // empêche une double annulation concurrente de décrémenter deux fois le compte de l'employé
+    const casAvance = await (tx as any).avanceSalaire.updateMany({ where: { id: avanceId, statut: 'EN_ATTENTE' }, data: { statut: 'ANNULEE' } });
+    if (casAvance.count === 0) throw new AppError(400, 'Cette avance a déjà été annulée ou déduite');
+
     if (avance.employe.compteId) {
-      await tx.compte.update({ where: { id: avance.employe.compteId }, data: { solde: { decrement: Number(avance.montant) } } });
+      // Compare-and-swap : le solde a pu bouger depuis l'octroi de l'avance (retrait concurrent) —
+      // on garantit que la contre-passation ne fait jamais passer le compte sous zéro
+      const montant = Number(avance.montant);
+      const casCompte = await tx.compte.updateMany({
+        where: { id: avance.employe.compteId, solde: { gte: montant } },
+        data: { solde: { decrement: montant } },
+      });
+      if (casCompte.count === 0) throw new AppError(400, 'Solde du compte employé insuffisant pour annuler cette avance');
     }
-    await (tx as any).avanceSalaire.update({ where: { id: avanceId }, data: { statut: 'ANNULEE' } });
     // Contre-passation de l'écriture d'octroi : l'argent revient en caisse, la créance s'éteint
     await creerEcritureAuto(tx, {
       debitNumero:  '5700',

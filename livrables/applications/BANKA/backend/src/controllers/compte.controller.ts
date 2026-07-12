@@ -24,7 +24,7 @@ export async function getOne(req: AuthRequest, res: Response, next: NextFunction
 
 export async function create(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const compte = await compteService.createCompte(req.body, req.user!.userId);
+    const compte = await compteService.createCompte({ ...req.body, agentAgenceId: req.user!.agenceId }, req.user!.userId);
     res.status(201).json(ok(compte, 'Compte créé avec succès'));
   } catch (e) { next(e); }
 }

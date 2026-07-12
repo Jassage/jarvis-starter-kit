@@ -70,12 +70,15 @@ export async function creerPret(data: {
   objet?: string;
   notes?: string;
   userId: string;
+  agentAgenceId?: string | null;
 }) {
-  const { clientId, agenceId, montant, tauxMensuel, dureeMois, typeAmortissement = 'DEGRESSIF', devise = 'HTG', objet, notes, userId } = data;
+  const { clientId, agenceId, montant, tauxMensuel, dureeMois, typeAmortissement = 'DEGRESSIF', devise = 'HTG', objet, notes, userId, agentAgenceId } = data;
 
   if (!montant || montant <= 0) throw new AppError(400, 'Le montant du prêt doit être positif');
   if (tauxMensuel <= 0 || tauxMensuel > 30) throw new AppError(400, 'Le taux mensuel doit être entre 0 et 30%');
   if (!Number.isInteger(dureeMois) || dureeMois < 1 || dureeMois > 360) throw new AppError(400, 'La durée doit être entre 1 et 360 mois');
+  // Un agent lié à une agence ne peut créer un prêt que pour sa propre agence
+  if (agentAgenceId && agentAgenceId !== agenceId) throw new AppError(403, 'Vous ne pouvez créer un prêt que pour votre propre agence');
 
   const client = await prisma.client.findUnique({ where: { id: clientId } });
   if (!client || client.statut !== 'ACTIF') throw new AppError(400, 'Client inactif ou introuvable');
@@ -159,21 +162,35 @@ export async function decaisserPret(data: {
   compteDestinationId: string;
   sessionId?: string;
   userId: string;
+  agenceId?: string | null;
 }) {
-  const { pretId, compteDestinationId, sessionId, userId } = data;
+  const { pretId, compteDestinationId, sessionId, userId, agenceId } = data;
 
   const pret = await prisma.pret.findUnique({ where: { id: pretId } });
   if (!pret) throw new AppError(404, 'Prêt introuvable');
   if (pret.statut !== 'APPROUVE') throw new AppError(400, 'Prêt doit être approuvé avant décaissement');
+  // Un agent lié à une agence ne peut décaisser que les prêts de sa propre agence
+  if (agenceId && pret.agenceId !== agenceId) throw new AppError(403, 'Ce prêt n\'appartient pas à votre agence');
 
   const compte = await prisma.compte.findUnique({ where: { id: compteDestinationId } });
   if (!compte || compte.clientId !== pret.clientId) throw new AppError(400, 'Compte destination invalide');
+  if (compte.statut !== 'ACTIF') throw new AppError(400, 'Le compte destination doit être actif');
 
   const montant = Number(pret.montant);
   const reference = await generateReferenceTransaction('DECAISSEMENT_PRET');
   const soldeAvant = Number(compte.solde);
 
   return prisma.$transaction(async (tx) => {
+    // Verrou logique : seul un prêt encore APPROUVE peut être décaissé — empêche un double décaissement
+    // en cas de double-clic ou de requêtes concurrentes (compare-and-swap au niveau SQL)
+    const cas = await tx.pret.updateMany({
+      where: { id: pretId, statut: 'APPROUVE' },
+      data: { statut: 'DECAISSE', dateDecaissement: new Date() },
+    });
+    if (cas.count === 0) {
+      throw new AppError(409, 'Ce prêt a déjà été décaissé ou son statut ne permet plus le décaissement');
+    }
+
     const txDecaissement = await tx.transaction.create({
       data: {
         reference,
@@ -186,6 +203,7 @@ export async function decaisserPret(data: {
         statut: 'VALIDEE',
         compteCreditId: compteDestinationId,
         sessionId,
+        agenceExecutionId: agenceId ?? pret.agenceId,
         creeParId: userId,
         valideParId: userId,
       },
@@ -193,13 +211,6 @@ export async function decaisserPret(data: {
 
     await tx.compte.update({ where: { id: compteDestinationId }, data: { solde: { increment: montant } } });
     await preleverFraisDossierPret({ pretId, compteId: compteDestinationId, montantPret: montant, devise: pret.devise as string, userId, tx });
-
-    // Transition APPROUVE → DECAISSE : les fonds sont versés, les remboursements n'ont pas encore commencé.
-    // Le premier remboursement fera passer le prêt en EN_COURS.
-    const pretUpdated = await tx.pret.update({
-      where: { id: pretId },
-      data: { statut: 'DECAISSE', dateDecaissement: new Date() },
-    });
 
     // Écriture comptable du décaissement liée à sa transaction — Débit 2000 / Crédit 2600
     await creerEcritureAuto(tx, {
@@ -213,7 +224,7 @@ export async function decaisserPret(data: {
     });
 
     await createAuditLog({ userId, table: 'prets', action: 'DECAISSEMENT', entiteId: pretId, nouveau: { statut: 'EN_COURS', compteDestinationId, montant } });
-    return pretUpdated;
+    return tx.pret.findUniqueOrThrow({ where: { id: pretId } });
   });
 }
 
@@ -224,13 +235,16 @@ export async function enregistrerRemboursement(data: {
   sessionId?: string;
   userId: string;
   type?: string;
+  agenceId?: string | null;
 }) {
-  const { pretId, montant, compteSourceId, sessionId, userId, type = 'MENSUALITE' } = data;
+  const { pretId, montant, compteSourceId, sessionId, userId, type = 'MENSUALITE', agenceId } = data;
 
   if (!montant || montant <= 0) throw new AppError(400, 'Le montant du remboursement doit être positif');
 
   const pret = await prisma.pret.findUnique({ where: { id: pretId }, include: { lignes: { orderBy: { numeroEcheance: 'asc' } } } });
   if (!pret) throw new AppError(404, 'Prêt introuvable');
+  // Un caissier/agent lié à une agence ne peut enregistrer un remboursement que sur un prêt de sa propre agence
+  if (agenceId && pret.agenceId !== agenceId) throw new AppError(403, 'Ce prêt n\'appartient pas à votre agence');
   if (!['DECAISSE', 'EN_COURS', 'EN_RETARD'].includes(pret.statut)) throw new AppError(400, 'Prêt non actif');
   if (montant > Number(pret.resteARegler)) throw new AppError(400, `Le montant dépasse le reste à régler (${Number(pret.resteARegler).toFixed(2)} ${pret.devise})`);
 
@@ -264,8 +278,6 @@ export async function enregistrerRemboursement(data: {
   const capital = Math.max(0, resteApresPenalite - interet);
 
   const reference = await generateReferenceTransaction('REMBOURSEMENT_PRET');
-  const nouveauMontantRembourse = Number(pret.montantRembourse) + montant;
-  const nouveauResteARegler = Math.max(0, Number(pret.resteARegler) - montant);
   return prisma.$transaction(async (tx) => {
     // Décrémentation atomique : la vérification et la mise à jour sont une seule opération SQL
     // Cela évite toute race condition entre deux remboursements simultanés
@@ -277,6 +289,19 @@ export async function enregistrerRemboursement(data: {
       const current = await tx.compte.findUnique({ where: { id: compteSourceId }, select: { solde: true } });
       throw new AppError(400, `Solde insuffisant. Solde disponible : ${Number(current!.solde)} ${pret.devise}`);
     }
+
+    // Même principe côté prêt : l'incrément/décrément et la vérification du reste à régler sont
+    // une seule opération SQL atomique, plutôt que d'écrire une valeur absolue calculée sur un
+    // snapshot pris avant la transaction (qui écraserait un remboursement concurrent — lost update)
+    const casPret = await tx.pret.updateMany({
+      where: { id: pretId, resteARegler: { gte: montant } },
+      data: { montantRembourse: { increment: montant }, resteARegler: { decrement: montant } },
+    });
+    if (casPret.count === 0) {
+      throw new AppError(400, `Le montant dépasse le reste à régler actuel du prêt`);
+    }
+    const pretApres = await tx.pret.findUniqueOrThrow({ where: { id: pretId } });
+    const nouveauResteARegler = Number(pretApres.resteARegler);
 
     const soldeAvant = Number(compte.solde);
 
@@ -304,6 +329,7 @@ export async function enregistrerRemboursement(data: {
         statut: 'VALIDEE',
         compteDebitId: compteSourceId,
         sessionId,
+        agenceExecutionId: agenceId ?? pret.agenceId,
         creeParId: userId,
         valideParId: userId,
         remboursementId: remboursement.id,
@@ -317,17 +343,14 @@ export async function enregistrerRemboursement(data: {
       });
     }
 
-    // Premier remboursement sur un prêt DECAISSE : on passe en EN_COURS
+    // Premier remboursement sur un prêt DECAISSE : on passe en EN_COURS. montantRembourse et
+    // resteARegler sont déjà à jour (mis à jour atomiquement plus haut) — seul le statut reste à poser.
     const statutCourant = pret.statut === 'DECAISSE' ? 'EN_COURS' : pret.statut;
     const nouveauStatut = nouveauResteARegler <= 0 ? 'SOLDE' : statutCourant;
 
     await tx.pret.update({
       where: { id: pretId },
-      data: {
-        montantRembourse: nouveauMontantRembourse,
-        resteARegler: nouveauResteARegler,
-        statut: nouveauStatut,
-      },
+      data: { statut: nouveauStatut },
     });
 
     // Recalcul de l'échéancier sur remboursement anticipé partiel
@@ -384,6 +407,54 @@ export async function enregistrerRemboursement(data: {
     await createAuditLog({ userId, table: 'prets', action: 'REMBOURSEMENT', entiteId: pretId, nouveau: { montant, compteSourceId, nouveauResteARegler } });
     return { remboursement, transaction };
   });
+}
+
+// Applique la retenue sur salaire (FichePaie.creditDeduit) au prêt correspondant — appelée par
+// rh.service.ts::payerSalaires DANS la même transaction que le paiement de la paie. Contrairement à
+// enregistrerRemboursement, aucun compte bancaire n'est débité (l'argent ne transite jamais par un
+// compte, il est simplement soustrait du salaire brut) et aucune Transaction n'est créée (l'écriture
+// comptable 4600/2000 de la retenue est déjà postée par l'appelant) : seul le prêt lui-même est mis à
+// jour (resteARegler/montantRembourse/statut/ligne), corrigeant la désynchronisation entre la fiche de
+// paie et le prêt qui existait jusqu'ici.
+export async function appliquerRetenueSalariale(opts: { pretId: string; montant: number; userId: string; tx: any }): Promise<void> {
+  const { pretId, montant, userId, tx } = opts;
+  if (!montant || montant <= 0) return;
+
+  const pret = await tx.pret.findUnique({ where: { id: pretId }, include: { lignes: { orderBy: { numeroEcheance: 'asc' } } } });
+  if (!pret || !['DECAISSE', 'EN_COURS', 'EN_RETARD'].includes(pret.statut)) return;
+
+  // Même garde compare-and-swap que enregistrerRemboursement : si le prêt a été soldé entre-temps
+  // (ex: remboursement anticipé fait entre la génération de la fiche et le paiement), on ne fait rien
+  // plutôt que de faire passer resteARegler en négatif.
+  const casPret = await tx.pret.updateMany({
+    where: { id: pretId, resteARegler: { gte: montant } },
+    data: { montantRembourse: { increment: montant }, resteARegler: { decrement: montant } },
+  });
+  if (casPret.count === 0) return;
+
+  const pretApres = await tx.pret.findUniqueOrThrow({ where: { id: pretId } });
+  const nouveauResteARegler = Number(pretApres.resteARegler);
+
+  const prochaineLigne = pret.lignes.find((l: any) => l.statut === 'EN_ATTENTE' || l.statut === 'EN_RETARD');
+  if (prochaineLigne) {
+    await tx.lignePret.update({
+      where: { id: prochaineLigne.id },
+      data: { statut: montant >= Number(prochaineLigne.mensualite) ? 'PAYE' : 'PARTIELLEMENT_PAYE' },
+    });
+  }
+  const capital = prochaineLigne ? Number(prochaineLigne.capital) : montant;
+  const interet = prochaineLigne ? Number(prochaineLigne.interet) : 0;
+
+  await tx.remboursementPret.create({
+    data: { pretId, type: 'RETENUE_SALAIRE', montant, capital, interet, penalite: 0, creeParId: userId },
+  });
+
+  // Premier remboursement sur un prêt DECAISSE : passage en EN_COURS, comme enregistrerRemboursement
+  const statutCourant = pret.statut === 'DECAISSE' ? 'EN_COURS' : pret.statut;
+  const nouveauStatut = nouveauResteARegler <= 0 ? 'SOLDE' : statutCourant;
+  await tx.pret.update({ where: { id: pretId }, data: { statut: nouveauStatut } });
+
+  await createAuditLog({ userId, table: 'prets', action: 'RETENUE_SALAIRE', entiteId: pretId, nouveau: { montant, nouveauResteARegler } });
 }
 
 export async function annulerPret(id: string, userId: string, notes?: string) {

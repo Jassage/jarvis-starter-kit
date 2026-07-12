@@ -46,6 +46,7 @@ const NAV_BANKING = [
   { href: '/comptes',             label: 'Comptes',             icon: 'wallet',   roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'CAISSIER', 'COMPTABLE'] },
   { href: '/transactions',        label: 'Transactions',        icon: 'arrows',   roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'CAISSIER', 'COMPTABLE'] },
   { href: '/caisse',              label: 'Caisse',              icon: 'cash',     roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'CAISSIER'] },
+  { href: '/tresorerie',          label: 'Trésorerie inter-agences', icon: 'exchange', roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR'] },
   { href: '/prets',               label: 'Crédits & Prêts',    icon: 'doc',      roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'AGENT_CREDIT'] },
   { href: '/epargne-programmee',  label: 'Épargne programmée', icon: 'piggy',    roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'CAISSIER'] },
   { href: '/taux-change',          label: 'Taux de change',      icon: 'exchange', roles: ['SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR', 'CAISSIER'] },

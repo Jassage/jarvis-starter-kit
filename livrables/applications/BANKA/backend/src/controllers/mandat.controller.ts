@@ -11,21 +11,21 @@ export const list = async (req: AuthRequest, res: Response, next: NextFunction) 
 
 export const create = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const mandat = await svc.createMandat(req.params.id, req.body, req.user!.userId);
+    const mandat = await svc.createMandat(req.params.id, req.body, req.user!.userId, req.user!.agenceId);
     res.status(201).json({ data: mandat });
   } catch (err) { next(err); }
 };
 
 export const update = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const mandat = await svc.updateMandat(req.params.mandatId, req.body, req.user!.userId);
+    const mandat = await svc.updateMandat(req.params.mandatId, req.body, req.user!.userId, req.user!.agenceId);
     res.json({ data: mandat });
   } catch (err) { next(err); }
 };
 
 export const revoquer = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    await svc.revoquerMandat(req.params.mandatId, req.user!.userId);
+    await svc.revoquerMandat(req.params.mandatId, req.user!.userId, req.user!.agenceId);
     res.json({ message: 'Mandat révoqué' });
   } catch (err) { next(err); }
 };

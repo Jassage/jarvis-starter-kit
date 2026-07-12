@@ -4,14 +4,14 @@ import * as caisseService from '../services/caisse.service';
 
 export async function ouvrir(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const session = await caisseService.ouvrirSession({ ...req.body, userId: req.user!.userId });
+    const session = await caisseService.ouvrirSession({ ...req.body, userId: req.user!.userId, agentAgenceId: req.user!.agenceId });
     res.status(201).json(ok(session, 'Session de caisse ouverte'));
   } catch (e) { next(e); }
 }
 
 export async function fermer(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const session = await caisseService.fermerSession(req.params.id, req.user!.userId, req.body.soldeFermeture, req.body.notes);
+    const session = await caisseService.fermerSession(req.params.id, req.user!.userId, req.body.soldeFermeture, req.body.notes, req.user!.agenceId, req.body.justificationEcart);
     res.json(ok(session, 'Session de caisse fermée'));
   } catch (e) { next(e); }
 }
@@ -23,6 +23,16 @@ export async function sessionActive(req: AuthRequest, res: Response, next: NextF
     if (!id) { res.status(400).json({ success: false, error: 'agenceId requis' }); return; }
     const session = await caisseService.getSessionActive(id, (devise as any) || 'HTG');
     res.json(ok(session));
+  } catch (e) { next(e); }
+}
+
+export async function soldeActuel(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { agenceId, devise } = req.query as Record<string, string>;
+    const id = agenceId || req.user!.agenceId;
+    if (!id) { res.status(400).json({ success: false, error: 'agenceId requis' }); return; }
+    const caisse = await caisseService.getCaisseActuelle(id, (devise as any) || 'HTG');
+    res.json(ok(caisse));
   } catch (e) { next(e); }
 }
 

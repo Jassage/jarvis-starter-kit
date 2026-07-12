@@ -6,6 +6,7 @@ import * as ctrl from '../controllers/caisse.controller';
 const router = Router();
 
 router.get('/active', requireAuth, ctrl.sessionActive);
+router.get('/solde-actuel', requireAuth, ctrl.soldeActuel);
 router.get('/', requireAuth, ctrl.list);
 router.get('/:id', requireAuth, ctrl.getOne);
 router.get('/:id/arrete', requireAuth, ctrl.arrete);

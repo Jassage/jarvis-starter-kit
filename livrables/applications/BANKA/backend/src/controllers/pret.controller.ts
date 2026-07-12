@@ -23,7 +23,7 @@ export async function getOne(req: AuthRequest, res: Response, next: NextFunction
 
 export async function create(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const pret = await pretService.creerPret({ ...req.body, userId: req.user!.userId });
+    const pret = await pretService.creerPret({ ...req.body, userId: req.user!.userId, agentAgenceId: req.user!.agenceId });
     res.status(201).json(ok(pret, 'Demande de prêt créée'));
   } catch (e) { next(e); }
 }
@@ -44,14 +44,14 @@ export async function rejeter(req: AuthRequest, res: Response, next: NextFunctio
 
 export async function decaisser(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const pret = await pretService.decaisserPret({ ...req.body, pretId: req.params.id, userId: req.user!.userId });
+    const pret = await pretService.decaisserPret({ ...req.body, pretId: req.params.id, userId: req.user!.userId, agenceId: req.user!.agenceId });
     res.json(ok(pret, 'Prêt décaissé'));
   } catch (e) { next(e); }
 }
 
 export async function rembourser(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const result = await pretService.enregistrerRemboursement({ ...req.body, pretId: req.params.id, userId: req.user!.userId });
+    const result = await pretService.enregistrerRemboursement({ ...req.body, pretId: req.params.id, userId: req.user!.userId, agenceId: req.user!.agenceId });
     res.status(201).json(ok(result, 'Remboursement enregistré'));
   } catch (e) { next(e); }
 }

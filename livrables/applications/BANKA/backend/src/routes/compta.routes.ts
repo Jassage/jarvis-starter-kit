@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { requireAdmin, requireComptable, requireRole } from '../middleware/rbac';
+import { validate } from '../middleware/validate';
+import { createCompteComptableSchema, updateCompteComptableSchema } from '../validation/compta.schemas';
 import * as ctrl from '../controllers/compta.controller';
 
 const router = Router();
@@ -17,8 +19,8 @@ router.get('/resultat',              requireAuth, requireComptable, ctrl.resulta
 router.post('/journal',              requireAuth, requireComptable, ctrl.createEcriture);
 
 // B7: Modifications du plan comptable et suppression d'écritures réservées aux admins
-router.post('/plan-comptable',       requireAuth, requireAdmin, ctrl.createCompte);
-router.put('/plan-comptable/:id',    requireAuth, requireAdmin, ctrl.updateCompte);
+router.post('/plan-comptable',       requireAuth, requireAdmin, validate(createCompteComptableSchema), ctrl.createCompte);
+router.put('/plan-comptable/:id',    requireAuth, requireAdmin, validate(updateCompteComptableSchema), ctrl.updateCompte);
 router.delete('/plan-comptable/:id', requireAuth, requireAdmin, ctrl.deleteCompte);
 router.delete('/journal/:id',        requireAuth, requireAdmin, ctrl.deleteEcriture);
 

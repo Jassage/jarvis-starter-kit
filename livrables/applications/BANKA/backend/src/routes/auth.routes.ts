@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
 import {
-  loginSchema, refreshSchema, changePasswordSchema, createUtilisateurSchema,
+  loginSchema, refreshSchema, changePasswordSchema, createUtilisateurSchema, updateUtilisateurSchema,
   verify2FASchema, enable2FASchema, disable2FASchema,
   requestPasswordResetSchema, confirmPasswordResetSchema,
 } from '../validation/auth.schemas';
@@ -35,6 +35,6 @@ router.post('/2fa/disable', requireAuth, validate(disable2FASchema), ctrl.disabl
 
 router.get('/utilisateurs', requireAuth, requireAdmin, ctrl.listUtilisateurs);
 router.post('/utilisateurs', requireAuth, requireAdmin, validate(createUtilisateurSchema), ctrl.createUtilisateur);
-router.put('/utilisateurs/:id', requireAuth, requireAdmin, ctrl.updateUtilisateur);
+router.put('/utilisateurs/:id', requireAuth, requireAdmin, validate(updateUtilisateurSchema), ctrl.updateUtilisateur);
 
 export default router;
