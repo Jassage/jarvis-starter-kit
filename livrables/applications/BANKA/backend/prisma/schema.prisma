@@ -938,6 +938,28 @@ model EcritureEchec {
   @@map("ecritures_echec")
 }
 
+enum StatutPeriodeComptable {
+  OUVERTE
+  CLOTUREE
+}
+
+model PeriodeComptable {
+  id             String                 @id @default(cuid())
+  periode        String                 @unique // format "YYYY-MM"
+  statut         StatutPeriodeComptable @default(OUVERTE)
+
+  clotureeParId  String?
+  clotureeAt     DateTime?
+  reouverteParId String?
+  reouverteAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([statut])
+  @@map("periodes_comptables")
+}
+
 model TauxChange {
   id          String   @id @default(cuid())
   devise      String   // "USD", "EUR", etc.

@@ -64,6 +64,9 @@ export default function JournalPage() {
   const [fMontant, setFMontant]   = useState('');
   const [fLibelle, setFLibelle]   = useState('');
   const [fDate, setFDate]         = useState(new Date().toISOString().slice(0, 10));
+  const [periodesCloturees, setPeriodesCloturees] = useState<string[]>([]);
+
+  const periodeChoisieCloturee = periodesCloturees.includes(fDate.slice(0, 7));
 
   const load = async () => {
     setLoading(true);
@@ -84,6 +87,10 @@ export default function JournalPage() {
       const { data } = await api.get('/compta/plan-comptable');
       setComptes(data.data.filter((c: CompteComptable) => c.actif !== false));
     }
+    if (periodesCloturees.length === 0) {
+      const { data } = await api.get('/compta/cloture/periodes');
+      setPeriodesCloturees(data.data.filter((p: { statut: string }) => p.statut === 'CLOTUREE').map((p: { periode: string }) => p.periode));
+    }
     setShowForm(true); setFormError('');
   };
 
@@ -93,6 +100,7 @@ export default function JournalPage() {
     if (fDebit === fCredit) { setFormError('Débit et crédit doivent être différents'); return; }
     if (!fMontant || Number(fMontant) <= 0) { setFormError('Montant invalide'); return; }
     if (!fLibelle.trim()) { setFormError('Libellé requis'); return; }
+    if (periodeChoisieCloturee) { setFormError(`La période ${fDate.slice(0, 7)} est clôturée — saisie impossible`); return; }
     setSaving(true); setFormError('');
     try {
       await api.post('/compta/journal', { compteDebitId: fDebit, compteCreditId: fCredit, montant: Number(fMontant), libelle: fLibelle.trim(), date: fDate });
@@ -310,16 +318,25 @@ export default function JournalPage() {
                 <label className="label">Libellé <span style={{ color: '#b91c1c' }}>*</span></label>
                 <input value={fLibelle} onChange={(e) => setFLibelle(e.target.value)} placeholder="Description de l'opération..." className="input w-full" />
               </div>
-              <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: '#fffbeb', color: '#92400e' }}>
-                <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: '#d97706' }}>
-                  <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                </svg>
-                Cette écriture sera enregistrée manuellement et ne sera pas liée à une transaction bancaire.
-              </div>
+              {periodeChoisieCloturee ? (
+                <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                  <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: '#b91c1c' }}>
+                    <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
+                  La période {fDate.slice(0, 7)} est clôturée — aucune saisie manuelle n'y est plus possible.
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl text-xs flex items-start gap-2" style={{ background: '#fffbeb', color: '#92400e' }}>
+                  <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: '#d97706' }}>
+                    <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
+                  Cette écriture sera enregistrée manuellement et ne sera pas liée à une transaction bancaire.
+                </div>
+              )}
               {formError && <div className="p-3 rounded-xl text-sm" style={{ background: '#fee2e2', color: '#b91c1c' }}>{formError}</div>}
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl text-sm font-semibold" style={{ background: '#f0f2f9', color: '#4a5578' }}>Annuler</button>
-                <button onClick={handleCreate} disabled={saving} className="flex-1 btn-primary flex items-center justify-center gap-2 disabled:opacity-50">
+                <button onClick={handleCreate} disabled={saving || periodeChoisieCloturee} className="flex-1 btn-primary flex items-center justify-center gap-2 disabled:opacity-50">
                   {saving && <Spin />} Enregistrer
                 </button>
               </div>

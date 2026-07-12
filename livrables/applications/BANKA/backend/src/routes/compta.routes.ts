@@ -3,7 +3,9 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin, requireComptable, requireRole } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
 import { createCompteComptableSchema, updateCompteComptableSchema } from '../validation/compta.schemas';
+import { cloturerPeriodeSchema, rouvrirPeriodeSchema } from '../validation/cloture.schemas';
 import * as ctrl from '../controllers/compta.controller';
+import * as clotureCtrl from '../controllers/cloture.controller';
 
 const router = Router();
 
@@ -27,5 +29,10 @@ router.delete('/journal/:id',        requireAuth, requireAdmin, ctrl.deleteEcrit
 // Réconciliation des écritures en échec — visible aux comptables, résolution aux superviseurs+
 router.get('/echecs',        requireAuth, requireComptable, ctrl.listEchecs);
 router.patch('/echecs/:id',  requireAuth, requireRole('SUPER_ADMIN', 'DIRECTEUR', 'SUPERVISEUR'), ctrl.resoudreEchec);
+
+// Clôture comptable mensuelle — clôture réservée aux admins, réouverture réservée au SUPER_ADMIN seul
+router.get('/cloture/periodes',  requireAuth, requireComptable, clotureCtrl.listPeriodes);
+router.post('/cloture',          requireAuth, requireAdmin, validate(cloturerPeriodeSchema), clotureCtrl.cloturer);
+router.post('/cloture/reouvrir', requireAuth, requireRole('SUPER_ADMIN'), validate(rouvrirPeriodeSchema), clotureCtrl.rouvrir);
 
 export default router;

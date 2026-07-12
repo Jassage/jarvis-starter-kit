@@ -1,6 +1,7 @@
 import prisma from '../utils/prisma';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
+import { verifierPeriodeOuverte } from './cloture.service';
 
 // ─── Comptes de base & écritures automatiques ─────────────────────────────────
 
@@ -206,6 +207,9 @@ export async function createEcriture(data: { compteDebitId: string; compteCredit
   if (data.compteDebitId === data.compteCreditId) throw new AppError(400, 'Débit et crédit doivent être différents');
   if (data.montant <= 0) throw new AppError(400, 'Montant invalide');
 
+  const dateEcriture = data.date ? new Date(data.date) : new Date();
+  await verifierPeriodeOuverte(prisma, dateEcriture);
+
   const [debit, credit] = await Promise.all([
     prisma.compteComptable.findUnique({ where: { id: data.compteDebitId } }),
     prisma.compteComptable.findUnique({ where: { id: data.compteCreditId } }),
@@ -219,7 +223,7 @@ export async function createEcriture(data: { compteDebitId: string; compteCredit
       compteCreditId: data.compteCreditId,
       montant: data.montant,
       libelle: data.libelle,
-      date: data.date ? new Date(data.date) : new Date(),
+      date: dateEcriture,
       creeParId: userId,
       transactionId: undefined as any,
     } as any,
@@ -235,6 +239,7 @@ export async function deleteEcriture(id: string, userId: string) {
   const ecriture = await prisma.ecritureComptable.findUnique({ where: { id } });
   if (!ecriture) throw new AppError(404, 'Écriture introuvable');
   if ((ecriture as any).transactionId) throw new AppError(400, 'Les écritures liées à une transaction bancaire ne peuvent pas être supprimées');
+  await verifierPeriodeOuverte(prisma, (ecriture as any).date);
   await createAuditLog({ userId, table: 'ecritures_comptables', action: 'DELETE', entiteId: id, nouveau: { libelle: (ecriture as any).libelle } });
   return prisma.ecritureComptable.delete({ where: { id } });
 }

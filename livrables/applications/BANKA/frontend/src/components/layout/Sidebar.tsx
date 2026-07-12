@@ -33,6 +33,7 @@ const Icon = ({ name }: { name: string }) => {
     case 'calendar': return <svg {...p}><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor"/><path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor"/></svg>;
     case 'briefcase':return <svg {...p}><rect x="2" y="7" width="20" height="14" rx="2" stroke="currentColor"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2" stroke="currentColor"/><path d="M12 12v3M9 12h6" stroke="currentColor"/></svg>;
     case 'clock':    return <svg {...p}><circle cx="12" cy="12" r="9" stroke="currentColor"/><path d="M12 7v5l3.5 3.5" stroke="currentColor"/></svg>;
+    case 'lock':     return <svg {...p}><rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor"/><path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor"/></svg>;
     default: return null;
   }
 };
@@ -66,6 +67,7 @@ const NAV_COMPTA = [
   { href: '/compta/grand-livre',   label: 'Grand livre',         icon: 'trending', roles: ['SUPER_ADMIN', 'DIRECTEUR', 'COMPTABLE', 'AUDITEUR'] },
   { href: '/compta/bilan',         label: 'Bilan',               icon: 'balance',  roles: ['SUPER_ADMIN', 'DIRECTEUR', 'COMPTABLE', 'AUDITEUR'] },
   { href: '/compta/resultat',      label: 'Compte de résultat',  icon: 'chart',    roles: ['SUPER_ADMIN', 'DIRECTEUR', 'COMPTABLE', 'AUDITEUR'] },
+  { href: '/compta/cloture',       label: 'Clôture mensuelle',   icon: 'lock',     roles: ['SUPER_ADMIN', 'DIRECTEUR'] },
 ];
 
 const NAV_RH = [
