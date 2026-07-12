@@ -1,7 +1,7 @@
 'use client';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { authApi } from '../lib/api';
+import { authApi, refreshAccessToken } from '../lib/api';
 
 interface User {
   id: string;
@@ -19,40 +19,35 @@ interface User {
 
 interface AuthState {
   user: User | null;
+  // Access token gardé en mémoire uniquement (jamais en localStorage) : le refresh
+  // token, lui, ne touche jamais le JS, il vit dans un cookie httpOnly côté backend.
   accessToken: string | null;
-  refreshToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
 
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  setTokens: (access: string, refresh: string) => void;
+  hydrate: () => Promise<void>;
+  setAccessToken: (access: string) => void;
   setUser: (user: User) => void;
   clearAuth: () => void;
 }
 
-const readToken = (key: string) =>
-  typeof window !== 'undefined' ? localStorage.getItem(key) : null;
-
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
-      // Initialisés depuis localStorage au démarrage pour éviter la double source de vérité
-      accessToken: readToken('lakay_token'),
-      refreshToken: readToken('lakay_refresh_token'),
+      accessToken: null,
       isLoading: false,
-      isAuthenticated: !!readToken('lakay_token'),
+      isAuthenticated: false,
 
       login: async (email, password) => {
         set({ isLoading: true });
         try {
           const { data } = await authApi.login(email, password);
-          const { accessToken, refreshToken, user } = data.data;
-          localStorage.setItem('lakay_token', accessToken);
-          localStorage.setItem('lakay_refresh_token', refreshToken);
-          set({ user, accessToken, refreshToken, isAuthenticated: true });
+          const { accessToken, user } = data.data;
+          set({ user, accessToken, isAuthenticated: true });
         } finally {
           set({ isLoading: false });
         }
@@ -60,12 +55,9 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
-          const { refreshToken } = get();
-          if (refreshToken) await authApi.logout(refreshToken);
+          await authApi.logout();
         } catch { /* ignore */ }
-        localStorage.removeItem('lakay_token');
-        localStorage.removeItem('lakay_refresh_token');
-        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+        set({ user: null, accessToken: null, isAuthenticated: false });
       },
 
       refreshUser: async () => {
@@ -77,31 +69,33 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      setTokens: (access, refresh) => {
-        localStorage.setItem('lakay_token', access);
-        localStorage.setItem('lakay_refresh_token', refresh);
-        set({ accessToken: access, refreshToken: refresh, isAuthenticated: true });
+      // Appelé une fois au démarrage de l'app : échange le cookie httpOnly contre
+      // un access token frais en mémoire (le cookie survit au rechargement, pas le state JS).
+      // Passe par le même verrou que l'intercepteur Axios (refreshAccessToken) : le refresh
+      // token étant à usage unique, un second /auth/refresh concurrent (déclenché par un 401
+      // sur une requête tirée avant que ce hydrate() ait fini) casserait la session.
+      hydrate: async () => {
+        try {
+          await refreshAccessToken();
+        } catch {
+          set({ user: null, accessToken: null, isAuthenticated: false });
+        }
       },
+
+      setAccessToken: (access) => set({ accessToken: access, isAuthenticated: true }),
 
       setUser: (user) => set({ user }),
 
       // Réinitialise l'état d'auth sans appel réseau (utilisé quand le refresh échoue)
       clearAuth: () => {
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('lakay_token');
-          localStorage.removeItem('lakay_refresh_token');
-        }
-        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+        set({ user: null, accessToken: null, isAuthenticated: false });
       },
     }),
     {
       name: 'lakay-auth',
-      // Tokens non persistés ici : localStorage 'lakay_token' est la source de vérité
-      // (lue par l'intercepteur Axios et initialisée dans le state au démarrage)
-      partialize: (state) => ({
-        user: state.user,
-        isAuthenticated: state.isAuthenticated,
-      }),
+      // Rien de sensible persisté : le seul état durable de la session est le
+      // cookie httpOnly côté serveur, rejoué par hydrate() à chaque chargement.
+      partialize: () => ({}),
     }
   )
 );

@@ -1,7 +1,8 @@
 import { Worker, Job } from 'bullmq';
 import { env } from '../config/env';
-import { expireSubscriptions } from '../modules/payments/payments.service';
+import { expireSubscriptions, expireStalePendingPayments } from '../modules/payments/payments.service';
 import { expireListings } from '../modules/listings/listings.service';
+import { completeElapsedVisits } from '../modules/visits/visits.service';
 
 function redisConnection() {
   const url = new URL(env.REDIS_URL);
@@ -17,12 +18,14 @@ function redisConnection() {
 export const maintenanceWorker = new Worker(
   'maintenance',
   async (_job: Job) => {
-    const [subscriptions, listings] = await Promise.all([
+    const [subscriptions, listings, payments, visits] = await Promise.all([
       expireSubscriptions(),
       expireListings(),
+      expireStalePendingPayments(),
+      completeElapsedVisits(),
     ]);
-    console.log(`[MaintenanceWorker] Expiry sweep — ${subscriptions} abonnement(s) rétrogradé(s), ${listings} annonce(s) expirée(s)`);
-    return { subscriptions, listings };
+    console.log(`[MaintenanceWorker] Expiry sweep — ${subscriptions} abonnement(s) rétrogradé(s), ${listings} annonce(s) expirée(s), ${payments} paiement(s) orphelin(s) annulé(s), ${visits} visite(s) marquée(s) effectuée(s)`);
+    return { subscriptions, listings, payments, visits };
   },
   {
     connection: redisConnection(),

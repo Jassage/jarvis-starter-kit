@@ -8,7 +8,6 @@ import { uploadAvatar } from '../../middlewares/upload.middleware';
 import {
   registerSchema,
   loginSchema,
-  refreshTokenSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
   verifyEmailSchema,
@@ -21,8 +20,9 @@ const router = Router();
 // Auth publique
 router.post('/register', authLimiter, validate(registerSchema), asyncHandler(ctrl.register));
 router.post('/login', authLimiter, validate(loginSchema), asyncHandler(ctrl.login));
-router.post('/refresh', validate(refreshTokenSchema), asyncHandler(ctrl.refresh));
-router.post('/logout', validate(refreshTokenSchema), asyncHandler(ctrl.logout));
+// refreshToken transite désormais uniquement via le cookie httpOnly, jamais dans le body
+router.post('/refresh', asyncHandler(ctrl.refresh));
+router.post('/logout', asyncHandler(ctrl.logout));
 router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), asyncHandler(ctrl.forgotPassword));
 router.post('/reset-password', authLimiter, validate(resetPasswordSchema), asyncHandler(ctrl.resetPassword));
 router.get('/verify-email/:token', validate(verifyEmailSchema), asyncHandler(ctrl.verifyEmail));

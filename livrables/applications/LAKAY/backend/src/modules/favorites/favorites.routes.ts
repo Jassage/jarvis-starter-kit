@@ -57,10 +57,14 @@ router.post('/:listingId', asyncHandler(async (req, res) => {
 
 // Retirer des favoris
 router.delete('/:listingId', asyncHandler(async (req, res) => {
-  await prisma.favorite.deleteMany({
+  const { count } = await prisma.favorite.deleteMany({
     where: { userId: req.user!.id, listingId: req.params.listingId },
   });
-  await prisma.listing.update({ where: { id: req.params.listingId }, data: { favoriteCount: { decrement: 1 } } });
+  // Ne décrémenter que si un favori a réellement été supprimé (sinon un appel répété
+  // sur une annonce jamais/déjà retirée des favoris ferait passer favoriteCount en négatif)
+  if (count > 0) {
+    await prisma.listing.update({ where: { id: req.params.listingId }, data: { favoriteCount: { decrement: 1 } } });
+  }
   sendSuccess(res, null, 'Retiré des favoris');
 }));
 

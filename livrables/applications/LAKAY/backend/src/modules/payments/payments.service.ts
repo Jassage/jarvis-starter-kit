@@ -270,6 +270,32 @@ export async function failPayment(paymentId: string): Promise<void> {
   });
 }
 
+// Un checkout Stripe/MonCash/NatCash initié puis jamais finalisé reste PENDING
+// indéfiniment (aucun webhook ne viendra jamais le clore). Au-delà de ce délai,
+// il est considéré abandonné. Ne s'applique jamais à une preuve manuelle déjà
+// soumise (`awaitingVerification: true`) : celle-ci attend une action admin.
+const PENDING_PAYMENT_STALE_MS = 2 * 60 * 60 * 1000; // 2h
+
+/**
+ * Échoue les paiements PENDING orphelins (checkout abandonné) plus vieux que
+ * le délai de grâce, pour éviter qu'ils bloquent indéfiniment toute nouvelle
+ * tentative de paiement de l'utilisateur (cf. submitPaymentProof).
+ *
+ * @returns le nombre de paiements marqués FAILED
+ */
+export async function expireStalePendingPayments(): Promise<number> {
+  const cutoff = new Date(Date.now() - PENDING_PAYMENT_STALE_MS);
+  const result = await prisma.payment.updateMany({
+    where: {
+      status: "PENDING",
+      createdAt: { lt: cutoff },
+      NOT: { metadata: { path: ["awaitingVerification"], equals: true } },
+    },
+    data: { status: "FAILED" },
+  });
+  return result.count;
+}
+
 // ─────────────────────────────────────────
 // PAIEMENT MANUEL (en attendant l'intégration API MonCash/NatCash)
 // L'utilisateur transfère l'argent au numéro affiché puis soumet une preuve.
@@ -339,16 +365,24 @@ export async function submitPaymentProof(userId: string, input: ProofInput) {
     throw new AppError("La référence de la transaction est requise", 400);
   }
 
-  // Empêche l'accumulation : une seule preuve en attente par utilisateur à la fois
+  // Empêche l'accumulation de vraies preuves en double, sans bloquer sur un
+  // paiement PENDING orphelin (Stripe/MonCash/NatCash initié puis abandonné,
+  // qui n'a jamais reçu de preuve manuelle) — celui-ci est simplement annulé.
   const pending = await prisma.payment.findFirst({
     where: { userId, status: "PENDING" },
-    select: { id: true },
+    select: { id: true, metadata: true },
   });
   if (pending) {
-    throw new AppError(
-      "Vous avez déjà un paiement en attente de vérification.",
-      409,
-    );
+    const isAwaitingVerification =
+      (pending.metadata as { awaitingVerification?: boolean } | null)
+        ?.awaitingVerification === true;
+    if (isAwaitingVerification) {
+      throw new AppError(
+        "Vous avez déjà un paiement en attente de vérification.",
+        409,
+      );
+    }
+    await failPayment(pending.id);
   }
 
   let proofImageUrl: string | undefined;

@@ -23,12 +23,6 @@ export const loginSchema = z.object({
   }),
 });
 
-export const refreshTokenSchema = z.object({
-  body: z.object({
-    refreshToken: z.string().min(1, 'Refresh token requis'),
-  }),
-});
-
 export const forgotPasswordSchema = z.object({
   body: z.object({
     email: z.string().email('Email invalide'),

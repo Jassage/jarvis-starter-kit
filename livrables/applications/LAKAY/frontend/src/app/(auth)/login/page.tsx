@@ -7,7 +7,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Eye, EyeOff, Home, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
-import { authApi } from '../../../lib/api';
 
 const schema = z.object({
   email: z.string().email('Email invalide'),
@@ -18,7 +17,7 @@ type Form = z.infer<typeof schema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setTokens, refreshUser } = useAuthStore();
+  const { login } = useAuthStore();
   const [showPass, setShowPass] = useState(false);
   const [serverError, setServerError] = useState('');
 
@@ -29,10 +28,7 @@ export default function LoginPage() {
   const onSubmit = async (data: Form) => {
     setServerError('');
     try {
-      const res = await authApi.login(data.email, data.password);
-      const { accessToken, refreshToken } = res.data.data;
-      setTokens(accessToken, refreshToken);
-      await refreshUser();
+      await login(data.email, data.password);
       router.push('/dashboard');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Identifiants incorrects';

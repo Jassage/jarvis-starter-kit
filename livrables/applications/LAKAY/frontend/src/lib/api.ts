@@ -9,22 +9,42 @@ const PROTECTED_PREFIXES = ['/dashboard', '/admin'];
 
 export const api = axios.create({
   baseURL: API_URL,
-  withCredentials: false,
+  // Requis pour que le cookie httpOnly du refresh token transite (login/refresh/logout)
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Injecter le token JWT
+// Injecter le token JWT (access token en mémoire uniquement, jamais persisté)
 api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('lakay_token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-  }
+  const token = useAuthStore.getState().accessToken;
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Refresh automatique sur 401
-let isRefreshing = false;
-let failedQueue: Array<{ resolve: (v: string) => void; reject: (e: unknown) => void }> = [];
+// Refresh automatique sur 401.
+// Le refresh token est à usage unique (rotation à chaque appel) : si deux refresh
+// partent en parallèle avec le même cookie (ex. hydrate() au bootstrap + un 401
+// concurrent sur une autre requête), le second échoue car le premier a déjà fait
+// tourner le token côté serveur. `refreshPromise` sert de verrou partagé — tout
+// appelant concurrent (y compris hydrate() dans authStore) attend la même promesse
+// au lieu de rejouer son propre /auth/refresh.
+let refreshPromise: Promise<{ accessToken: string; user: unknown }> | null = null;
+
+export function refreshAccessToken() {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(`${API_URL}/auth/refresh`, {}, { withCredentials: true })
+      .then(({ data }) => {
+        useAuthStore.getState().setAccessToken(data.data.accessToken);
+        useAuthStore.getState().setUser(data.data.user);
+        return data.data;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
 
 api.interceptors.response.use(
   (response) => response,
@@ -32,39 +52,15 @@ api.interceptors.response.use(
     const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
 
     if (error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        }).then((token) => {
-          originalRequest.headers = { ...originalRequest.headers, Authorization: `Bearer ${token}` };
-          return api(originalRequest);
-        });
-      }
-
       originalRequest._retry = true;
-      isRefreshing = true;
 
       try {
-        const refreshToken = localStorage.getItem('lakay_refresh_token');
-        if (!refreshToken) throw new Error('No refresh token');
-
-        const { data } = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
-        const newToken = data.data.accessToken;
-        localStorage.setItem('lakay_token', newToken);
-        localStorage.setItem('lakay_refresh_token', data.data.refreshToken);
-
-        failedQueue.forEach((p) => p.resolve(newToken));
-        failedQueue = [];
-        originalRequest.headers = { ...originalRequest.headers, Authorization: `Bearer ${newToken}` };
+        const { accessToken } = await refreshAccessToken();
+        originalRequest.headers = { ...originalRequest.headers, Authorization: `Bearer ${accessToken}` };
         return api(originalRequest);
       } catch (refreshError) {
-        failedQueue.forEach((p) => p.reject(refreshError));
-        failedQueue = [];
-        // Session expirée : on nettoie l'état d'auth sans appel réseau
-        try { useAuthStore.getState().clearAuth(); } catch {
-          localStorage.removeItem('lakay_token');
-          localStorage.removeItem('lakay_refresh_token');
-        }
+        // Session expirée (cookie de refresh absent/invalide) : on nettoie l'état d'auth
+        useAuthStore.getState().clearAuth();
         // On ne redirige vers /login QUE depuis une page protégée.
         // Sur une page publique (accueil, annonces…), on reste en place, déconnecté.
         const path = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -72,8 +68,6 @@ api.interceptors.response.use(
           window.location.href = '/login';
         }
         return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
       }
     }
 
@@ -85,8 +79,8 @@ api.interceptors.response.use(
 export const authApi = {
   register: (data: Record<string, unknown>) => api.post('/auth/register', data),
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
-  logout: (refreshToken: string) => api.post('/auth/logout', { refreshToken }),
-  refresh: (refreshToken: string) => api.post('/auth/refresh', { refreshToken }),
+  logout: () => api.post('/auth/logout'),
+  refresh: () => api.post('/auth/refresh'),
   getMe: () => api.get('/auth/me'),
   updateProfile: (data: Record<string, unknown>) => api.patch('/auth/me', data),
   changePassword: (data: Record<string, unknown>) => api.patch('/auth/change-password', data),
