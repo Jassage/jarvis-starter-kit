@@ -1,0 +1,767 @@
+// OTELA — PMS hôtelier multi-établissements (Haitech Solutions)
+// Prisma Schema — PostgreSQL
+// Phase 1 : modèle de données + moteur anti-double-booking + réservation en ligne +
+// back-office établissement/chaîne. Phase 2 : réception (check-in/check-out) +
+// ménage (TacheMenage). Phase 3 : facturation (Facture, Paiement).
+// Extension 5 étoiles (tranche 1) : Folio (facture maîtresse du séjour, adossée à
+// Facture) + Restaurant/Bar (PointDeVente, Table, MenuItem, Commande).
+// Extension 5 étoiles (tranche 2) : Spa & Bien-être (ServiceSpa, Praticien,
+// RendezVousSpa), même intégration folio que Restaurant/Bar.
+// Extension 5 étoiles (tranche 3) : modules "simples" scopés à une Chambre —
+// Minibar, Blanchisserie, Conciergerie, Voiturier, facturation folio directe ou
+// optionnelle selon le module.
+// Extension 5 étoiles (tranche 4) : Room Service (CommandeRoomService, catalogue
+// MenuItem partagé avec Restaurant/Bar, toujours facturé au folio).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum RoleEmploye {
+  RECEPTION
+  MENAGE
+  SERVEUR
+  ADMINISTRATEUR_ETABLISSEMENT
+  ADMINISTRATEUR_CHAINE
+}
+
+enum Devise {
+  HTG
+  USD
+}
+
+enum StatutChambre {
+  DISPONIBLE
+  OCCUPEE
+  MAINTENANCE
+  NETTOYAGE_EN_COURS
+}
+
+enum StatutTacheMenage {
+  A_FAIRE
+  EN_COURS
+  TERMINE
+}
+
+enum StatutPaiement {
+  IMPAYE
+  PARTIEL
+  PAYE
+}
+
+enum MethodePaiement {
+  ESPECES
+  CARTE
+  MONCASH
+  AUTRE
+}
+
+enum StatutReservation {
+  CONFIRMEE
+  EN_ATTENTE
+  ANNULEE
+  TERMINEE
+  NO_SHOW
+}
+
+// Un seul canal existe aujourd'hui — champ posé dès maintenant pour que la Phase 4
+// (channel manager Booking.com/Expedia) s'intègre sans refonte du modèle central.
+enum CanalReservation {
+  SITE_DIRECT
+}
+
+enum StatutFolio {
+  OUVERT
+  FERME
+}
+
+// La ligne "nuitée" n'existe volontairement PAS ici : elle est synthétisée à
+// l'affichage depuis Facture.montantHT/taxes, jamais dupliquée en LigneFolio.
+enum DepartementFolio {
+  RESTAURANT
+  BAR
+  ROOM_SERVICE
+  MINIBAR
+  SPA
+  BLANCHISSERIE
+  EVENEMENTIEL
+  VOITURIER
+  AUTRE
+}
+
+enum TypePointDeVente {
+  RESTAURANT
+  BAR
+}
+
+enum StatutTable {
+  LIBRE
+  OCCUPEE
+  RESERVEE
+}
+
+enum CategorieMenuItem {
+  ENTREE
+  PLAT
+  DESSERT
+  BOISSON
+  CARTE_BAR
+}
+
+enum StatutCommande {
+  EN_COURS
+  ENVOYEE_CUISINE
+  SERVIE
+  PAYEE
+}
+
+enum StatutRendezVousSpa {
+  CONFIRME
+  TERMINE
+  ANNULE
+}
+
+enum StatutBlanchisserie {
+  RECUE
+  EN_TRAITEMENT
+  PRETE
+  LIVREE
+}
+
+enum StatutConciergerie {
+  RECUE
+  EN_COURS
+  TERMINEE
+}
+
+// JOUR : séjour day-use, quelques heures le même jour calendaire, tarif
+// forfaitaire jamais multiplié par une durée. NUITEE reste le cas par défaut.
+enum TypeSejour {
+  NUITEE
+  JOUR
+}
+
+// ─────────────────────────────────────────
+// CHAÎNE / ÉTABLISSEMENTS
+// ─────────────────────────────────────────
+
+model Chaine {
+  id        String   @id @default(cuid())
+  nom       String
+  createdAt DateTime @default(now())
+
+  etablissements Etablissement[]
+
+  @@map("chaines")
+}
+
+model Etablissement {
+  id               String   @id @default(cuid())
+  chaineId         String
+  chaine           Chaine   @relation(fields: [chaineId], references: [id])
+  nom              String
+  adresse          String
+  commune          String
+  departement      String
+  devisesAcceptees Devise[]
+  // Taxe locale en points de pourcentage, propre à chaque établissement — jamais de
+  // taux global codé en dur (même principe que les tarifs par devise).
+  tauxTaxe         Decimal  @default(10) @db.Decimal(5, 2)
+  actif            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  typesChambres TypeChambre[]
+  chambres      Chambre[]
+  employes      Employe[]
+  reservations  Reservation[]
+  folios        Folio[]
+  pointsDeVente PointDeVente[]
+  servicesSpa   ServiceSpa[]
+  praticiens    Praticien[]
+  articlesMinibar ArticleMinibar[]
+
+  @@index([chaineId])
+  @@map("etablissements")
+}
+
+// ─────────────────────────────────────────
+// CHAMBRES / TARIFS
+// ─────────────────────────────────────────
+
+model TypeChambre {
+  id              String   @id @default(cuid())
+  etablissementId String
+  etablissement   Etablissement @relation(fields: [etablissementId], references: [id])
+  nom             String
+  capaciteMax     Int
+  description     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  chambres Chambre[]
+  tarifs   Tarif[]
+
+  @@index([etablissementId])
+  @@map("types_chambres")
+}
+
+model Chambre {
+  id              String        @id @default(cuid())
+  etablissementId String
+  etablissement   Etablissement @relation(fields: [etablissementId], references: [id])
+  typeChambreId   String
+  typeChambre     TypeChambre   @relation(fields: [typeChambreId], references: [id])
+  numero          String
+  statut          StatutChambre @default(DISPONIBLE)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  reservations  Reservation[]
+  tachesMenage  TacheMenage[]
+  consommationsMinibar    ConsommationMinibar[]
+  commandesBlanchisserie  CommandeBlanchisserie[]
+  demandesConciergerie    DemandeConciergerie[]
+  vehicules               Vehicule[]
+  commandesRoomService    CommandeRoomService[]
+
+  @@unique([etablissementId, numero])
+  @@index([typeChambreId])
+  @@map("chambres")
+}
+
+// Un tarif est fixé explicitement PAR devise — jamais de conversion automatique
+// HTG/USD à la volée, chaque établissement fixe ses prix indépendamment dans
+// chaque devise.
+model Tarif {
+  id              String      @id @default(cuid())
+  typeChambreId   String
+  typeChambre     TypeChambre @relation(fields: [typeChambreId], references: [id])
+  devise          Devise
+  // JOUR : montant forfaitaire fixe, jamais multiplié par une durée (cf.
+  // reservations.service.ts::creerReservation).
+  typeSejour      TypeSejour  @default(NUITEE)
+  montant         Decimal     @db.Decimal(12, 2)
+  dateDebutSaison DateTime
+  dateFinSaison   DateTime
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([typeChambreId, devise, typeSejour])
+  @@map("tarifs")
+}
+
+// ─────────────────────────────────────────
+// CLIENTS
+// ─────────────────────────────────────────
+
+model Client {
+  id        String   @id @default(cuid())
+  nom       String
+  telephone String
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reservations  Reservation[]
+  rendezVousSpa RendezVousSpa[]
+
+  @@map("clients")
+}
+
+// ─────────────────────────────────────────
+// RÉSERVATIONS
+// ─────────────────────────────────────────
+
+model Reservation {
+  id              String            @id @default(cuid())
+  etablissementId String
+  etablissement   Etablissement     @relation(fields: [etablissementId], references: [id])
+  chambreId       String
+  chambre         Chambre           @relation(fields: [chambreId], references: [id])
+  clientId        String
+  client          Client            @relation(fields: [clientId], references: [id])
+  dateArrivee     DateTime
+  dateDepart      DateTime
+  nombrePersonnes Int
+  devise          Devise
+  // Persisté pour affichage/rapports — cf. rapports.service.ts (exclu du calcul
+  // de nuitsOccupees, compté séparément dans sejoursJourCount).
+  typeSejour      TypeSejour        @default(NUITEE)
+  // Montant figé au moment de la réservation (snapshot du Tarif) — ne doit jamais
+  // être recalculé depuis Tarif après coup, les tarifs évoluent par saison.
+  montantTotal    Decimal           @db.Decimal(12, 2)
+  statut          StatutReservation @default(CONFIRMEE)
+  canal           CanalReservation  @default(SITE_DIRECT)
+  dateCreation    DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  facture Facture?
+  folio   Folio?
+
+  @@index([etablissementId])
+  @@index([chambreId])
+  @@index([clientId])
+  @@index([dateArrivee, dateDepart])
+  @@map("reservations")
+}
+
+// ─────────────────────────────────────────
+// FACTURATION
+// ─────────────────────────────────────────
+
+// Générée automatiquement à la création de la réservation (reservations.service.ts)
+// — jamais générée séparément, une réservation confirmée a toujours sa facture.
+model Facture {
+  id             String         @id @default(cuid())
+  reservationId  String         @unique
+  reservation    Reservation    @relation(fields: [reservationId], references: [id])
+  // Snapshot au moment de la facturation : montantHT = Reservation.montantTotal,
+  // taxes = montantHT * Etablissement.tauxTaxe/100 — jamais recalculé après coup si
+  // le taux de taxe de l'établissement change ensuite.
+  montantHT      Decimal        @db.Decimal(12, 2)
+  taxes          Decimal        @db.Decimal(12, 2)
+  montantTotal   Decimal        @db.Decimal(12, 2)
+  devise         Devise
+  statutPaiement StatutPaiement @default(IMPAYE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  paiements Paiement[]
+
+  @@map("factures")
+}
+
+// Historique multi-paiements (un IMPAYE peut être soldé en plusieurs versements) —
+// remplace le champ unique datePaiement du sketch initial, insuffisant dès qu'on
+// veut vraiment tracer un historique de paiements partiels.
+model Paiement {
+  id           String          @id @default(cuid())
+  factureId    String
+  facture      Facture         @relation(fields: [factureId], references: [id])
+  montant      Decimal         @db.Decimal(12, 2)
+  methode      MethodePaiement
+  datePaiement DateTime        @default(now())
+  employeId    String?
+  employe      Employe?        @relation(fields: [employeId], references: [id])
+  createdAt    DateTime        @default(now())
+
+  @@index([factureId])
+  @@map("paiements")
+}
+
+// ─────────────────────────────────────────
+// FOLIO (extension 5 étoiles)
+// ─────────────────────────────────────────
+
+// La "facture maîtresse" du séjour au sens du document 5-étoiles — mais adossée à
+// la Facture existante plutôt qu'un système de paiement parallèle : chaque
+// LigneFolio fait grossir Facture.montantTotal (cf. folios.service.ts). Ouvert au
+// check-in, fermé au check-out (bloqué si solde impayé).
+model Folio {
+  id              String      @id @default(cuid())
+  reservationId   String      @unique
+  reservation     Reservation @relation(fields: [reservationId], references: [id])
+  etablissementId String
+  etablissement   Etablissement @relation(fields: [etablissementId], references: [id])
+  statut          StatutFolio @default(OUVERT)
+  dateOuverture   DateTime    @default(now())
+  dateFermeture   DateTime?
+  devise          Devise
+
+  lignes        LigneFolio[]
+  commandes     Commande[]
+  rendezVousSpa RendezVousSpa[]
+  consommationsMinibar   ConsommationMinibar[]
+  commandesBlanchisserie CommandeBlanchisserie[]
+  demandesConciergerie   DemandeConciergerie[]
+  vehicules              Vehicule[]
+  commandesRoomService   CommandeRoomService[]
+
+  @@index([etablissementId])
+  @@map("folios")
+}
+
+model LigneFolio {
+  id                String           @id @default(cuid())
+  folioId           String
+  folio             Folio            @relation(fields: [folioId], references: [id])
+  departementSource DepartementFolio
+  description       String
+  montant           Decimal          @db.Decimal(12, 2)
+  dateHeure         DateTime         @default(now())
+  employeId         String?
+  employe           Employe?         @relation(fields: [employeId], references: [id])
+
+  @@index([folioId])
+  @@map("lignes_folio")
+}
+
+// ─────────────────────────────────────────
+// RESTAURANT / BAR (POS — extension 5 étoiles)
+// ─────────────────────────────────────────
+
+model PointDeVente {
+  id              String           @id @default(cuid())
+  etablissementId String
+  etablissement   Etablissement    @relation(fields: [etablissementId], references: [id])
+  nom             String
+  type            TypePointDeVente
+
+  tables    Table[]
+  menuItems MenuItem[]
+
+  @@index([etablissementId])
+  @@map("points_de_vente")
+}
+
+model Table {
+  id             String       @id @default(cuid())
+  pointDeVenteId String
+  pointDeVente   PointDeVente @relation(fields: [pointDeVenteId], references: [id])
+  numero         String
+  capacite       Int
+  statut         StatutTable  @default(LIBRE)
+
+  commandes Commande[]
+
+  @@unique([pointDeVenteId, numero])
+  @@map("tables")
+}
+
+model MenuItem {
+  id             String            @id @default(cuid())
+  pointDeVenteId String
+  pointDeVente   PointDeVente      @relation(fields: [pointDeVenteId], references: [id])
+  nom            String
+  prix           Decimal           @db.Decimal(12, 2)
+  devise         Devise
+  categorie      CategorieMenuItem
+  disponible     Boolean           @default(true)
+
+  lignesCommande LigneCommande[]
+  lignesCommandeRoomService LigneCommandeRoomService[]
+
+  @@index([pointDeVenteId])
+  @@map("menu_items")
+}
+
+model Commande {
+  id        String          @id @default(cuid())
+  tableId   String
+  table     Table           @relation(fields: [tableId], references: [id])
+  // Nullable si client non-résident (facturation directe, sans folio).
+  folioId   String?
+  folio     Folio?          @relation(fields: [folioId], references: [id])
+  statut    StatutCommande  @default(EN_COURS)
+  // Rempli uniquement si folioId est null (paiement comptant/carte immédiat) —
+  // sinon la ligne de règlement passe par Facture/Paiement via le folio.
+  methodePaiement MethodePaiement?
+  employeId String?
+  employe   Employe?        @relation(fields: [employeId], references: [id])
+  dateHeure DateTime        @default(now())
+
+  lignes LigneCommande[]
+
+  @@index([tableId])
+  @@index([folioId])
+  @@map("commandes")
+}
+
+model LigneCommande {
+  id         String   @id @default(cuid())
+  commandeId String
+  commande   Commande @relation(fields: [commandeId], references: [id])
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  quantite   Int
+  notes      String?
+
+  @@index([commandeId])
+  @@map("lignes_commande")
+}
+
+// ─────────────────────────────────────────
+// ROOM SERVICE (extension 5 étoiles)
+// ─────────────────────────────────────────
+
+// Modèle volontairement PARALLÈLE à Commande (pas une extension) : Room Service
+// réutilise le catalogue MenuItem mais n'a ni table ni point de vente, seulement
+// une Chambre — mutualiser aurait cassé la résolution d'établissement déjà écrite
+// dans restaurant.service.ts (table.pointDeVente.etablissementId). Toujours
+// facturé au folio (jamais de paiement direct, le client est forcément résident).
+model CommandeRoomService {
+  id        String         @id @default(cuid())
+  chambreId String
+  chambre   Chambre        @relation(fields: [chambreId], references: [id])
+  statut    StatutCommande @default(EN_COURS)
+  folioId   String?
+  folio     Folio?         @relation(fields: [folioId], references: [id])
+  employeId String?
+  employe   Employe?       @relation(fields: [employeId], references: [id])
+  dateHeure DateTime       @default(now())
+
+  lignes LigneCommandeRoomService[]
+
+  @@index([chambreId])
+  @@index([folioId])
+  @@map("commandes_room_service")
+}
+
+model LigneCommandeRoomService {
+  id                    String              @id @default(cuid())
+  commandeRoomServiceId String
+  commandeRoomService   CommandeRoomService @relation(fields: [commandeRoomServiceId], references: [id])
+  menuItemId            String
+  menuItem              MenuItem            @relation(fields: [menuItemId], references: [id])
+  quantite              Int
+  notes                 String?
+
+  @@index([commandeRoomServiceId])
+  @@map("lignes_commande_room_service")
+}
+
+// ─────────────────────────────────────────
+// SPA & BIEN-ÊTRE (extension 5 étoiles)
+// ─────────────────────────────────────────
+
+model ServiceSpa {
+  id              String   @id @default(cuid())
+  etablissementId String
+  etablissement   Etablissement @relation(fields: [etablissementId], references: [id])
+  nom             String
+  dureeMinutes    Int
+  prix            Decimal  @db.Decimal(12, 2)
+  devise          Devise
+  actif           Boolean  @default(true)
+
+  rendezVous RendezVousSpa[]
+
+  @@index([etablissementId])
+  @@map("services_spa")
+}
+
+model Praticien {
+  id              String  @id @default(cuid())
+  etablissementId String
+  etablissement   Etablissement @relation(fields: [etablissementId], references: [id])
+  nom             String
+  specialites     String?
+  actif           Boolean @default(true)
+
+  rendezVous RendezVousSpa[]
+
+  @@index([etablissementId])
+  @@map("praticiens")
+}
+
+// Chevauchement vérifié en application (pas de contrainte d'exclusion Postgres,
+// enjeu bien moindre qu'une double réservation de chambre) — cf. spa.service.ts.
+model RendezVousSpa {
+  id           String              @id @default(cuid())
+  serviceSpaId String
+  serviceSpa   ServiceSpa          @relation(fields: [serviceSpaId], references: [id])
+  praticienId  String
+  praticien    Praticien           @relation(fields: [praticienId], references: [id])
+  clientId     String
+  client       Client              @relation(fields: [clientId], references: [id])
+  dateHeure    DateTime
+  statut       StatutRendezVousSpa @default(CONFIRME)
+  // Posé seulement si le client est résident et le RDV clôturé "au folio" —
+  // même intégration que Commande.folioId (cf. folios.service.ts).
+  folioId      String?
+  folio        Folio?              @relation(fields: [folioId], references: [id])
+  // Rempli uniquement si folioId est null (client non-résident, paiement direct) —
+  // même pattern que Commande.methodePaiement.
+  methodePaiement MethodePaiement?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([praticienId, dateHeure])
+  @@index([folioId])
+  @@map("rendez_vous_spa")
+}
+
+// ─────────────────────────────────────────
+// MINIBAR (extension 5 étoiles)
+// ─────────────────────────────────────────
+
+model ArticleMinibar {
+  id              String   @id @default(cuid())
+  etablissementId String
+  etablissement   Etablissement @relation(fields: [etablissementId], references: [id])
+  nom             String
+  prix            Decimal  @db.Decimal(12, 2)
+  devise          Devise
+
+  consommations ConsommationMinibar[]
+
+  @@index([etablissementId])
+  @@map("articles_minibar")
+}
+
+// Constatée par le ménage lors du contrôle de chambre — postée directement sur le
+// folio ouvert de la chambre (cf. spa/restaurant, même mécanique). Si le folio est
+// déjà fermé (contrôle après le départ du client), rejetée avec message clair.
+model ConsommationMinibar {
+  id               String         @id @default(cuid())
+  chambreId        String
+  chambre          Chambre        @relation(fields: [chambreId], references: [id])
+  articleMinibarId String
+  articleMinibar   ArticleMinibar @relation(fields: [articleMinibarId], references: [id])
+  quantite         Int
+  dateConstat      DateTime       @default(now())
+  folioId          String?
+  folio            Folio?         @relation(fields: [folioId], references: [id])
+  employeId        String?
+  employe          Employe?       @relation(fields: [employeId], references: [id])
+
+  @@index([chambreId])
+  @@index([folioId])
+  @@map("consommations_minibar")
+}
+
+// ─────────────────────────────────────────
+// BLANCHISSERIE (extension 5 étoiles)
+// ─────────────────────────────────────────
+
+// articles en texte libre (pas une table de lignes séparée) — cohérent avec le
+// niveau de simplicité voulu par le document pour ce module. Facturée au folio
+// automatiquement au passage à LIVREE (service rendu, pas juste demandé).
+model CommandeBlanchisserie {
+  id        String              @id @default(cuid())
+  chambreId String
+  chambre   Chambre             @relation(fields: [chambreId], references: [id])
+  articles  String
+  montant   Decimal             @db.Decimal(12, 2)
+  devise    Devise
+  statut    StatutBlanchisserie @default(RECUE)
+  folioId   String?
+  folio     Folio?              @relation(fields: [folioId], references: [id])
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([chambreId])
+  @@map("commandes_blanchisserie")
+}
+
+// ─────────────────────────────────────────
+// CONCIERGERIE (extension 5 étoiles)
+// ─────────────────────────────────────────
+
+// Liste de tâches assignables — pas de logique financière complexe, sauf si la
+// demande implique une réservation externe payante (montant renseigné à la
+// clôture, alors une ligne est postée au folio ; sinon aucune facturation).
+model DemandeConciergerie {
+  id               String             @id @default(cuid())
+  chambreId        String
+  chambre          Chambre            @relation(fields: [chambreId], references: [id])
+  description      String
+  statut           StatutConciergerie @default(RECUE)
+  employeAssigneId String?
+  employeAssigne   Employe?           @relation(fields: [employeAssigneId], references: [id])
+  dateHeure        DateTime           @default(now())
+  montant          Decimal?           @db.Decimal(12, 2)
+  folioId          String?
+  folio            Folio?             @relation(fields: [folioId], references: [id])
+
+  @@index([chambreId])
+  @@map("demandes_conciergerie")
+}
+
+// ─────────────────────────────────────────
+// VOITURIER (extension 5 étoiles)
+// ─────────────────────────────────────────
+
+// Suivi simple — pas de facturation dans la plupart des hôtels (souvent inclus),
+// sauf si le client veut un supplément payant (montant optionnel au départ).
+model Vehicule {
+  id                  String    @id @default(cuid())
+  chambreId           String
+  chambre             Chambre   @relation(fields: [chambreId], references: [id])
+  plaqueImmatriculation String
+  dateArrivee         DateTime  @default(now())
+  dateDepart          DateTime?
+  emplacement         String
+  montant             Decimal?  @db.Decimal(12, 2)
+  folioId             String?
+  folio               Folio?    @relation(fields: [folioId], references: [id])
+
+  @@index([chambreId])
+  @@map("vehicules")
+}
+
+// ─────────────────────────────────────────
+// MÉNAGE
+// ─────────────────────────────────────────
+
+// Générée automatiquement au check-out (reception.service.ts::checkout). Tant que
+// son statut n'est pas TERMINE, la chambre reste NETTOYAGE_EN_COURS et exclue de
+// toute recherche de disponibilité (cf. disponibilite.service.ts).
+model TacheMenage {
+  id               String            @id @default(cuid())
+  chambreId        String
+  chambre          Chambre           @relation(fields: [chambreId], references: [id])
+  dateAssignation  DateTime          @default(now())
+  statut           StatutTacheMenage @default(A_FAIRE)
+  employeAssigneId String?
+  employeAssigne   Employe?          @relation(fields: [employeAssigneId], references: [id])
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([chambreId])
+  @@index([statut])
+  @@map("taches_menage")
+}
+
+// ─────────────────────────────────────────
+// EMPLOYÉS / AUTH
+// ─────────────────────────────────────────
+
+model Employe {
+  id   String @id @default(cuid())
+  // Null uniquement pour ADMINISTRATEUR_CHAINE (vue consolidée, pas d'établissement
+  // propre) — appliqué en validation applicative, cf. resolveEtablissement.
+  etablissementId String?
+  etablissement   Etablissement? @relation(fields: [etablissementId], references: [id])
+  nom             String
+  email           String         @unique
+  password        String
+  role            RoleEmploye
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  refreshTokens         RefreshToken[]
+  tachesMenageAssignees TacheMenage[]
+  paiementsEncaisses    Paiement[]
+  lignesFolioSaisies    LigneFolio[]
+  commandesPrises       Commande[]
+  consommationsMinibarSaisies ConsommationMinibar[]
+  demandesConciergerieAssignees DemandeConciergerie[]
+  commandesRoomServicePrises CommandeRoomService[]
+
+  @@index([etablissementId])
+  @@map("employes")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  employeId String
+  employe   Employe  @relation(fields: [employeId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([employeId])
+  @@map("refresh_tokens")
+}

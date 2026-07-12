@@ -1,0 +1,178 @@
+@import "tailwindcss";
+
+/* OTELA — palette navy/or, cohérente entre le site public et le back-office
+   (contrairement à ANTENN où le dashboard est 100% dark, ici on garde un thème
+   clair "outil de travail" partout, avec un habillage glassmorphism navy/or
+   uniquement sur le hero du site public — cf. app/(public)/layout.tsx). */
+@theme {
+  --color-bg: #f7f8fc;
+  --color-surface: #ffffff;
+  --color-surface-2: #f0f2f9;
+  --color-ink: #0b1733;
+  --color-ink-2: #4a5578;
+  --color-ink-3: #8b94b0;
+  --color-line: #e7eaf3;
+  --color-line-2: #f0f2f9;
+
+  --color-primary: #0b1733;
+  --color-primary-2: #1e3a8a;
+  --color-primary-3: #2563eb;
+  --color-primary-soft: #eef2ff;
+
+  --color-accent: #c8941c;
+  --color-accent-soft: rgba(200, 148, 28, 0.10);
+
+  --color-success: #10b981;
+  --color-success-soft: #ecfdf5;
+  --color-danger: #ef4444;
+  --color-danger-soft: #fef2f2;
+  --color-warning: #f59e0b;
+  --color-warning-soft: #fffbeb;
+  --color-info: #3b82f6;
+  --color-info-soft: #eff6ff;
+  --color-violet: #7c3aed;
+  --color-violet-soft: #f5f3ff;
+  --color-rose: #e11d48;
+  --color-rose-soft: #fff1f2;
+  --color-neutral-soft: #f0f2f9;
+
+  --shadow-card: 0 1px 2px rgba(11, 23, 51, 0.04), 0 0 0 1px rgba(11, 23, 51, 0.05);
+  --shadow-card-hover: 0 4px 16px rgba(11, 23, 51, 0.08), 0 0 0 1px rgba(11, 23, 51, 0.06);
+  --shadow-lg: 0 20px 50px rgba(11, 23, 51, 0.15);
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  --font-inter: var(--font-inter);
+}
+
+:root {
+  --gradient-brand: linear-gradient(135deg, #0b1733, #1e3a8a);
+  --gradient-brand-deep: linear-gradient(135deg, #050b1a 0%, #0b1733 55%, #1e3a8a 100%);
+  --gradient-gold: linear-gradient(135deg, #a3730f, #c8941c);
+  --gradient-blue: linear-gradient(135deg, #3b82f6, #2563eb);
+  --gradient-amber: linear-gradient(135deg, #f59e0b, #d97706);
+  --gradient-violet: linear-gradient(135deg, #a78bfa, #7c3aed);
+  --gradient-rose: linear-gradient(135deg, #fb7185, #e11d48);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d4d8e6; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #b9bfd2; }
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.card-hover:hover { box-shadow: var(--shadow-card-hover); }
+
+.card-accent-blue   { border-left: 3px solid var(--color-primary-3); }
+.card-accent-gold   { border-left: 3px solid var(--color-accent); }
+.card-accent-green  { border-left: 3px solid var(--color-success); }
+.card-accent-amber  { border-left: 3px solid var(--color-warning); }
+.card-accent-violet { border-left: 3px solid var(--color-violet); }
+.card-accent-rose   { border-left: 3px solid var(--color-rose); }
+
+:where(.input) {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: 0.875rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input::placeholder { color: var(--color-ink-3); }
+.input:focus {
+  outline: none;
+  border-color: var(--color-primary-3);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+.input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border-radius: var(--radius);
+  padding: 0.65rem 1.1rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary {
+  background: var(--gradient-brand);
+  color: white;
+  box-shadow: 0 1px 2px rgba(11, 23, 51, 0.2), 0 4px 16px rgba(11, 23, 51, 0.18);
+}
+.btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(11, 23, 51, 0.28); }
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-ink-2);
+  border: 1px solid var(--color-line);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--color-surface-2); }
+.btn-danger {
+  background: var(--gradient-rose);
+  color: white;
+  box-shadow: 0 4px 16px rgba(225, 29, 72, 0.2);
+}
+.btn-danger:hover:not(:disabled) { transform: translateY(-1px); }
+.btn-gold {
+  background: var(--gradient-gold);
+  color: white;
+  box-shadow: 0 4px 16px rgba(200, 148, 28, 0.25);
+}
+.btn-gold:hover:not(:disabled) { transform: translateY(-1px); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.table-shell thead tr { background: var(--color-surface-2); }
+.table-shell th {
+  text-align: left;
+  padding: 0.8rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+  white-space: nowrap;
+}
+.table-shell td {
+  padding: 0.85rem 1rem;
+  border-top: 1px solid var(--color-line-2);
+  font-size: 0.875rem;
+  color: var(--color-ink-2);
+}
+.table-shell tbody tr { transition: background-color 0.12s ease; }
+.table-shell tbody tr:hover { background: var(--color-surface-2); }

@@ -7,6 +7,25 @@
 
 ---
 
+## 2026-07-12 (suite 2)
+
+### OTELA : tarif Day-Use (séjour à la journée) livré
+
+**Contexte :** second des deux chantiers validés par Jaslin ("les deux, l'un après l'autre") après le module Gestion des Employés livré plus tôt le même jour, suite à sa question produit sur les clients ne réservant pas une nuit complète. Plan détaillé écrit et validé avant codage (message "VAS Y : VOICI LE PLAN").
+
+**Audit préalable, cœur de la découverte :** `Reservation`/`Tarif` n'avaient aucune notion de durée hors nuitée — `differenceEnNuits` arrondissait un séjour de quelques heures à 0 nuit, donnant un prix nul. Bonne nouvelle confirmée en exploration : la contrainte anti-double-booking PostgreSQL (`EXCLUDE USING gist` sur `chambreId` + `tsrange(dateArrivee, dateDepart)`, migration `exclude_overlap_reservation`) travaille déjà sur des timestamps complets, pas des dates arrondies — elle protège donc nativement un séjour day-use de quelques heures sans aucune modification. Le check-in/check-out ne lit lui aussi que le statut, jamais la durée. Le vrai trou : uniquement le calcul du prix et l'UI de saisie (dates sans heure).
+
+**Livré :** nouvel enum `TypeSejour` (`NUITEE`/`JOUR`), champ ajouté à `Tarif` (JOUR = montant forfaitaire, jamais multiplié par une durée) et à `Reservation` (persisté pour affichage/rapports) — migration purement additive. Règle métier JOUR : arrivée et départ doivent tomber le même jour calendaire en UTC (même convention déjà établie ailleurs dans le codebase pour "aujourd'hui"), sinon rejet 400 — nouvelle fonction `reservations.utils.ts::estMemeJourCalendaireUTC`. `reservations.service.ts` et `disponibilite.service.ts` filtrent désormais les tarifs sur `typeSejour` en plus de devise/dates, et calculent un prix forfaitaire (JOUR) vs multiplié par les nuits (NUITEE). Correctif de cohérence dans `rapports.service.ts::getOccupationEtRevenu` : un séjour JOUR se serait arrondi à 0 nuit dans `nuitsOccupees` (sous-comptant silencieusement l'occupation, alors que le revenu — dépendant seulement de `montantTotal` — restait juste) — compté séparément dans un nouveau `sejoursJourCount`. Frontend : nouveau composant `TarifModal.tsx` (trou frontend identifié en exploration — il n'existait auparavant aucun moyen d'ajouter un tarif à un type de chambre existant après sa création initiale, seul `TypeChambreModal` le permettait à la création d'un nouveau type), bouton "+ Tarif" sur `/chambres` avec badge "forfait jour" distinguant les tarifs JOUR, toggle Nuitée/Day-use sur `ReservationModal.tsx` (back-office — date + deux heures au lieu de deux dates en mode Day-use), badge type de séjour et affichage horaires sur la liste `/reservations`, même toggle sur le site public `/reserver` (formulaire de recherche, cartes de résultat "Forfait journée" au lieu de "X nuit(s)", écran de confirmation avec horaires au lieu de deux dates identiques).
+
+**Vérifié en conditions réelles :**
+- API (curl) : tarif JOUR créé sur un type de chambre existant ; réservation day-use le même jour calendaire → prix forfaitaire exact (2500 HTG, pas multiplié) ; réservation day-use à cheval sur deux jours calendaires → rejet 400 ; double-booking croisé testé dans les deux sens sur la même chambre (NUITEE posée puis JOUR chevauchante refusée en 409, JOUR non-chevauchante acceptée en 201 ; puis l'inverse JOUR posée puis NUITEE chevauchante refusée en 409) — confirmant que la contrainte d'exclusion protège nativement les deux types de séjour sans modification ; `/disponibilite?typeSejour=JOUR` excluant correctement les types de chambre sans tarif JOUR et renvoyant le prix forfaitaire ; rapport établissement confirmant `sejoursJourCount: 3` et `nuitsOccupees: 2` comptés séparément avec le bon revenu total ; réservation day-use du jour confirmée visible dans arrivées ET départs de `/reception/vue-du-jour` (exigence explicite du plan).
+- Navigateur (Playwright, Chromium en cache réutilisé) : site public bout en bout (toggle Day-use → recherche → carte "Forfait journée" → réservation avec heures → confirmation affichant "Horaires") ; back-office (`/chambres` ajout réel d'un tarif JOUR via le nouveau bouton avec badge visible, `/reservations` création manuelle day-use avec badge "Day-use" visible dans la liste) ; `/reception` confirmant la réservation day-use du jour.
+- `tsc --noEmit` propre backend et frontend. Base de données remise à un état de seed propre après vérification (`prisma migrate reset` + reseed), serveurs arrêtés.
+
+**Roadmap des deux chantiers produit validés par Jaslin (gestion des employés + tarif day-use) entièrement clôturée.** Reste à faire sur OTELA (documenté, pas codé, hors périmètre de ces deux chantiers) : Phase 4 du cœur PMS (channel manager), réservation spa en ligne côté site public, Événementiel/Banquets et Programme de fidélité (extension 5 étoiles). Tests automatisés toujours absents. Jamais commité en git au moment de l'écriture de cette entrée.
+
+---
+
 ## 2026-07-12 (suite)
 
 ### BANKA : audit sécurité approfondi (6 correctifs), architecture multi-agence centralisée, fix prêt employé/paie, module Documents/KYC
