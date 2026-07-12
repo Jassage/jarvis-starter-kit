@@ -18,22 +18,24 @@ export default function HlsPlayer({ enDirect }: { enDirect: boolean }) {
 
     let hls: import('hls.js').default | null = null;
 
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = streamUrl;
-    } else {
-      import('hls.js').then(({ default: Hls }) => {
-        if (Hls.isSupported()) {
-          hls = new Hls();
-          hls.loadSource(streamUrl);
-          hls.attachMedia(video);
-          hls.on(Hls.Events.ERROR, (_evt, data) => {
-            if (data.fatal) setErreur(true);
-          });
-        } else {
-          setErreur(true);
-        }
-      });
-    }
+    // Toujours préférer hls.js (démuxeur MSE testé et fiable) quand il est
+    // supporté. Le support HLS natif de Chrome via canPlayType() ment parfois
+    // (retourne "maybe" puis échoue au demux réel, DEMUXER_ERROR_COULD_NOT_PARSE) —
+    // le natif n'est donc utilisé qu'en dernier recours, pour le vrai Safari/iOS.
+    import('hls.js').then(({ default: Hls }) => {
+      if (Hls.isSupported()) {
+        hls = new Hls();
+        hls.loadSource(streamUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.ERROR, (_evt, data) => {
+          if (data.fatal) setErreur(true);
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = streamUrl;
+      } else {
+        setErreur(true);
+      }
+    });
 
     return () => {
       hls?.destroy();

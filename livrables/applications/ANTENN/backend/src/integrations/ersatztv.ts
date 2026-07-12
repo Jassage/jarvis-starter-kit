@@ -22,6 +22,19 @@
  *
  * ERSATZTV_BASE_URL / ERSATZTV_API_KEY sont déjà en config (src/config/env.ts)
  * pour éviter d'avoir à retoucher la config quand l'intégration sera codée.
+ *
+ * --- Note sur l'architecture RTMP/CDN (corrigée après contact avec le support Bunny) ---
+ * Bunny (comme la plupart des CDN génériques) ne fait que du "HLS re-streaming" :
+ * il cache/distribue un flux HLS qui doit déjà exister quelque part, il ne
+ * transforme pas du RTMP en HLS lui-même. Le maillon manquant est un petit
+ * serveur RTMP→HLS auto-hébergé (MediaMTX, voir ../ersatztv/docker-compose.yml)
+ * entre l'encodeur terrain (OBS/Larix) et le Pull Zone Bunny :
+ *
+ *   OBS/Larix --RTMP--> MediaMTX --HLS--> Pull Zone Bunny (origin) --> player ANTENN
+ *
+ * `Match.ingestUrlRtmp` pointe donc vers MediaMTX (ex. rtmp://<vps>:1935/<clé>),
+ * pas directement vers Bunny. `CDN_BASE_URL` reste l'URL finale Bunny (le pull
+ * zone), inchangée niveau code — seul ce qui alimente l'origin du pull zone change.
  */
 import { env } from '../config/env';
 
