@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Pencil, UserX, UserCheck } from 'lucide-react';
+import { ArrowLeft, Pencil, UserX, UserCheck, FileText } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Table, Th, Td, Tr } from '../../components/ui/Table';
@@ -44,12 +44,17 @@ export function MembreFiche() {
       liste.sort((a, b) => new Date(b.saisiLe).getTime() - new Date(a.saisiLe).getTime());
     }
     const moisTries = [...groupes.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
-    const total = moisTries.reduce((sum, [, liste]) => sum + liste[0].montant, 0);
+    const total = moisTries.reduce((sum, [, liste]) => {
+      const courant = liste.find((c) => !c.annulee);
+      return sum + (courant?.montant ?? 0);
+    }, 0);
     return { totalCotise: total, parMois: moisTries };
   }, [cotisations]);
 
-  const aJourCeMois = parMois.find(([mois]) => mois === moisCourant())?.[1][0];
-  const estAJour = aJourCeMois ? aJourCeMois.montant >= MONTANT_MINIMUM : false;
+  const cotisationCourante = (liste: Cotisation[]) => liste.find((c) => !c.annulee);
+  const aJourCeMois = parMois.find(([mois]) => mois === moisCourant());
+  const montantCeMois = aJourCeMois ? cotisationCourante(aJourCeMois[1])?.montant ?? 0 : 0;
+  const estAJour = montantCeMois >= MONTANT_MINIMUM;
 
   if (chargement) return <p className="text-[var(--color-muted)]">Chargement…</p>;
   if (!membre) return <EmptyState title="Membre introuvable" />;
@@ -112,49 +117,77 @@ export function MembreFiche() {
               <tr>
                 <Th>Mois</Th>
                 <Th>Montant courant</Th>
-                <Th>Moyen</Th>
+                <Th className="hidden sm:table-cell">Moyen</Th>
+                <Th className="hidden sm:table-cell">Preuve</Th>
                 <Th>Corrections</Th>
               </tr>
             </thead>
             <tbody>
-              {parMois.map(([mois, liste]) => (
-                <Tr key={mois}>
-                  <Td className="font-medium text-[var(--color-ink)]">{formatMoisLabel(mois)}</Td>
-                  <Td>
-                    {formatMontant(liste[0].montant)}
-                    {liste[0].montant > MONTANT_MINIMUM && (
-                      <span className="ml-1 text-xs text-[var(--color-brand)]">
-                        (+{formatMontant(liste[0].montant - MONTANT_MINIMUM)} de surplus)
-                      </span>
-                    )}
-                  </Td>
-                  <Td className="capitalize">{liste[0].moyenPaiement}</Td>
-                  <Td>
-                    {liste.length > 1 ? (
-                      <details>
-                        <summary className="cursor-pointer text-xs text-[var(--color-info)]">
-                          {liste.length - 1} correction(s)
-                        </summary>
-                        <ul className="mt-1 space-y-1 text-xs text-[var(--color-muted)]">
-                          {liste.slice(1).map((c) => (
-                            <li key={c.id}>
-                              {formatDate(c.saisiLe)} — {formatMontant(c.montant)} ({c.moyenPaiement})
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    ) : (
-                      <span className="text-xs text-[var(--color-muted)]">—</span>
-                    )}
-                  </Td>
-                </Tr>
-              ))}
+              {parMois.map(([mois, liste]) => {
+                const courant = cotisationCourante(liste);
+                const autres = liste.filter((c) => c.id !== courant?.id);
+                return (
+                  <Tr key={mois}>
+                    <Td className="font-medium text-[var(--color-ink)]">{formatMoisLabel(mois)}</Td>
+                    <Td>
+                      {courant ? (
+                        <>
+                          {formatMontant(courant.montant)}
+                          {courant.montant > MONTANT_MINIMUM && (
+                            <span className="ml-1 text-xs text-[var(--color-brand)]">
+                              (+{formatMontant(courant.montant - MONTANT_MINIMUM)} de surplus)
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <Badge tone="danger">Annulée</Badge>
+                      )}
+                    </Td>
+                    <Td className="hidden capitalize sm:table-cell">{courant?.moyenPaiement ?? '—'}</Td>
+                    <Td className="hidden sm:table-cell">
+                      {courant?.preuveUrl ? (
+                        <a
+                          href={courant.preuveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 text-xs text-[var(--color-brand)] hover:underline"
+                        >
+                          <FileText size={14} /> Voir
+                        </a>
+                      ) : (
+                        <span className="text-xs text-[var(--color-muted)]">—</span>
+                      )}
+                    </Td>
+                    <Td>
+                      {autres.length > 0 ? (
+                        <details>
+                          <summary className="cursor-pointer text-xs text-[var(--color-info)]">
+                            {autres.length} entrée(s) précédente(s)
+                          </summary>
+                          <ul className="mt-1 space-y-1 text-xs text-[var(--color-muted)]">
+                            {autres.map((c) => (
+                              <li key={c.id}>
+                                {formatDate(c.saisiLe)} — {formatMontant(c.montant)} ({c.moyenPaiement})
+                                {c.annulee && <span className="ml-1 text-[var(--color-danger)]">(annulée)</span>}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      ) : (
+                        <span className="text-xs text-[var(--color-muted)]">—</span>
+                      )}
+                    </Td>
+                  </Tr>
+                );
+              })}
             </tbody>
           </Table>
         )}
       </div>
 
-      <MembreModal open={modalOuverte} onClose={() => setModalOuverte(false)} membre={membre} />
+      {modalOuverte && (
+        <MembreModal open={modalOuverte} onClose={() => setModalOuverte(false)} membre={membre} />
+      )}
     </div>
   );
 }

@@ -30,9 +30,9 @@ export function UtilisateursListe() {
           <thead>
             <tr>
               <Th>Nom</Th>
-              <Th>Email</Th>
+              <Th className="hidden sm:table-cell">Email</Th>
               <Th>Rôle</Th>
-              <Th>Créé le</Th>
+              <Th className="hidden md:table-cell">Créé le</Th>
               <Th>Statut</Th>
               <Th></Th>
             </tr>
@@ -41,9 +41,9 @@ export function UtilisateursListe() {
             {utilisateurs.map((u) => (
               <Tr key={u.id}>
                 <Td className="font-medium text-[var(--color-ink)]">{u.nom}</Td>
-                <Td>{u.email}</Td>
+                <Td className="hidden sm:table-cell">{u.email}</Td>
                 <Td>{labelRole[u.role]}</Td>
-                <Td>{formatDate(u.creeLe)}</Td>
+                <Td className="hidden md:table-cell">{formatDate(u.creeLe)}</Td>
                 <Td>
                   <Badge tone={u.actif ? 'success' : 'neutral'}>{u.actif ? 'Actif' : 'Désactivé'}</Badge>
                 </Td>

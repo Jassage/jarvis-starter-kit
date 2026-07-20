@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
@@ -25,42 +27,74 @@
   --color-violet-bg: var(--color-violet-bg);
 
   --shadow-card: var(--shadow-card);
+  --shadow-card-hover: var(--shadow-card-hover);
   --radius-card: var(--radius-card);
 
   --font-sans: var(--font-sans);
 }
 
 :root {
-  --color-bg: #f4f7f3;
+  --color-bg: #f6f5fb;
   --color-surface: #ffffff;
-  --color-ink: #16241b;
-  --color-muted: #5c6b60;
-  --color-border: #dde5da;
+  --color-ink: #1e1b3a;
+  --color-muted: #6b6785;
+  --color-border: #e4e2f0;
 
-  /* Vert émeraude (épargne/croissance) + or (cagnotte/tontine) */
-  --color-brand: #0f7a4f;
-  --color-brand-dark: #0a5c3b;
-  --color-brand-light: #e4f3ea;
-  --color-gold: #c8952a;
-  --color-gold-dark: #9c7220;
+  /* Indigo profond (identité premium) + or (valeur/cagnotte) — plus aucun vert de marque */
+  --color-brand: #4338ca;
+  --color-brand-dark: #2e2a86;
+  --color-brand-light: #ece9fb;
+  --color-gold: #b8860b;
+  --color-gold-dark: #8a6608;
 
-  --color-success: #12805a;
-  --color-success-bg: #e2f3ea;
-  --color-danger: #c0362c;
-  --color-danger-bg: #fbe7e5;
-  --color-warning: #b3791b;
-  --color-warning-bg: #fbeecf;
-  --color-info: #2563a8;
-  --color-info-bg: #e5eefa;
-  --color-violet: #6d4fa8;
-  --color-violet-bg: #ede7f6;
+  --color-success: #15803d;
+  --color-success-bg: #e7f5ec;
+  --color-danger: #b91c1c;
+  --color-danger-bg: #fbe9e9;
+  --color-warning: #b45309;
+  --color-warning-bg: #fdf1e3;
+  --color-info: #1d4ed8;
+  --color-info-bg: #e7edfc;
+  --color-violet: #7c3aed;
+  --color-violet-bg: #f1e9fd;
 
-  --shadow-card: 0 1px 2px rgba(22, 36, 27, 0.06), 0 8px 24px -12px rgba(22, 36, 27, 0.18);
-  --radius-card: 14px;
+  --shadow-card: 0 1px 3px rgba(30, 27, 58, 0.06), 0 14px 32px -16px rgba(30, 27, 58, 0.26);
+  --shadow-card-hover: 0 4px 8px rgba(30, 27, 58, 0.08), 0 20px 40px -16px rgba(30, 27, 58, 0.32);
+  --radius-card: 16px;
 
   --font-sans: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
 
   color-scheme: light;
+}
+
+.dark {
+  --color-bg: #0e0c1b;
+  --color-surface: #191629;
+  --color-ink: #f2f0fb;
+  --color-muted: #9d98bd;
+  --color-border: #322e4d;
+
+  --color-brand: #7c6cf0;
+  --color-brand-dark: #b7ace8;
+  --color-brand-light: #272149;
+  --color-gold: #e6b84f;
+  --color-gold-dark: #f0cc7a;
+
+  --color-success: #4ade80;
+  --color-success-bg: #163a26;
+  --color-danger: #f87171;
+  --color-danger-bg: #3d1b1b;
+  --color-warning: #fbbf24;
+  --color-warning-bg: #3b2c0f;
+  --color-info: #60a5fa;
+  --color-info-bg: #182742;
+  --color-violet: #b39ef8;
+  --color-violet-bg: #29234a;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 36px -16px rgba(0, 0, 0, 0.55);
+  --shadow-card-hover: 0 4px 10px rgba(0, 0, 0, 0.5), 0 22px 44px -16px rgba(0, 0, 0, 0.65);
+
+  color-scheme: dark;
 }
 
 * {
@@ -72,8 +106,55 @@ body {
   font-family: var(--font-sans);
   background: var(--color-bg);
   color: var(--color-ink);
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 #root {
   min-height: 100svh;
+}
+
+/* Fond décoratif derrière la sidebar/le header en verre — sans lui, le flou n'a rien à révéler. */
+.fond-decoratif {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+.fond-decoratif::before,
+.fond-decoratif::after {
+  content: "";
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  opacity: 0.35;
+}
+
+.fond-decoratif::before {
+  top: -12%;
+  left: -8%;
+  width: 42vw;
+  height: 42vw;
+  background: var(--color-brand);
+}
+
+.fond-decoratif::after {
+  bottom: -18%;
+  right: -10%;
+  width: 38vw;
+  height: 38vw;
+  background: var(--color-gold);
+  opacity: 0.22;
+}
+
+.dark .fond-decoratif::before,
+.dark .fond-decoratif::after {
+  opacity: 0.28;
+}
+
+.verre {
+  background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
 }

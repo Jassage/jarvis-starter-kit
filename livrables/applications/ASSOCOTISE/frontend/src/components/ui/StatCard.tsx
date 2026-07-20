@@ -30,13 +30,13 @@ export function StatCard({
 }) {
   return (
     <div
-      className="rounded-[var(--radius-card)] p-[1px] shadow-[var(--shadow-card)]"
+      className="rounded-[var(--radius-card)] p-[1px] shadow-[var(--shadow-card)] transition-shadow duration-200 hover:shadow-[var(--shadow-card-hover)]"
       style={{ background: 'var(--color-border)' }}
     >
       <div className={`rounded-[calc(var(--radius-card)-1px)] bg-[var(--color-surface)] ${compact ? 'p-4' : 'p-5'}`}>
         <div className="flex items-start justify-between">
           <div
-            className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br text-white ${themeClasses[theme]}`}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-sm ${themeClasses[theme]}`}
           >
             {icon}
           </div>

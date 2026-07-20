@@ -16,22 +16,6 @@
         { "fieldPath": "mois", "order": "ASCENDING" },
         { "fieldPath": "saisiLe", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "tontinePayments",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "cycleId", "order": "ASCENDING" },
-        { "fieldPath": "periode", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "tontineParticipants",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "cycleId", "order": "ASCENDING" },
-        { "fieldPath": "position", "order": "ASCENDING" }
-      ]
     }
   ],
   "fieldOverrides": []

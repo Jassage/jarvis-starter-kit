@@ -1,8 +1,17 @@
-import { addDoc, collection, getDocs, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { addDoc, collection, doc, getDocs, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../lib/firebase';
+import { omitUndefined } from '../lib/firestoreUtils';
 import type { Cotisation } from '../types';
 
 const cotisationsRef = collection(db, 'contributions');
+
+export async function uploaderPreuveCotisation(fichier: File): Promise<string> {
+  const chemin = `preuves/${Date.now()}-${fichier.name}`;
+  const storageRef = ref(storage, chemin);
+  await uploadBytes(storageRef, fichier);
+  return getDownloadURL(storageRef);
+}
 
 export function ecouterCotisationsDuMois(mois: string, cb: (cotisations: Cotisation[]) => void) {
   const q = query(cotisationsRef, where('mois', '==', mois), orderBy('saisiLe', 'desc'));
@@ -30,13 +39,26 @@ export async function listerCotisationsMembre(memberId: string): Promise<Cotisat
  * complet reste donc consultable, jamais écrasé.
  */
 export async function saisirCotisation(data: Omit<Cotisation, 'id' | 'saisiLe'>) {
-  return addDoc(cotisationsRef, { ...data, saisiLe: new Date().toISOString() });
+  return addDoc(cotisationsRef, omitUndefined({ ...data, saisiLe: new Date().toISOString() }));
 }
 
-/** Regroupe une liste de cotisations pour ne garder que la plus récente par (memberId, mois). */
+/**
+ * Annule une cotisation (append-only : jamais de suppression ni de modification des montants).
+ * Les règles Firestore n'autorisent la modification que du champ `annulee`, rien d'autre.
+ */
+export async function annulerCotisation(id: string, annulee: boolean) {
+  return updateDoc(doc(db, 'contributions', id), { annulee });
+}
+
+/**
+ * Regroupe une liste de cotisations pour ne garder que la plus récente, non annulée,
+ * par (memberId, mois). Annuler la dernière correction fait naturellement réapparaître
+ * la précédente (ou "non payé" s'il n'y en a aucune) sans jamais réécrire l'historique.
+ */
 export function valeursCourantes(cotisations: Cotisation[]): Map<string, Cotisation> {
   const parCle = new Map<string, Cotisation>();
   for (const c of cotisations) {
+    if (c.annulee) continue;
     const cle = `${c.memberId}__${c.mois}`;
     const existante = parCle.get(cle);
     if (!existante || new Date(c.saisiLe) > new Date(existante.saisiLe)) {

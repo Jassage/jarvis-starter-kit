@@ -34,5 +34,13 @@ service firebase.storage {
                    && request.resource.size < 5 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
     }
+
+    // Preuves de paiement des cotisations : upload par tout le bureau (secrétaire ou responsable)
+    match /preuves/{fileName} {
+      allow read: if estActif();
+      allow write: if estActif()
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*|application/pdf');
+    }
   }
 }

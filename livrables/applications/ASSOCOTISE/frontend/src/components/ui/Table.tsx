@@ -8,9 +8,11 @@ export function Table({ children }: { children: ReactNode }) {
   );
 }
 
-export function Th({ children }: { children?: ReactNode }) {
+export function Th({ children, className = '' }: { children?: ReactNode; className?: string }) {
   return (
-    <th className="border-b border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+    <th
+      className={`border-b border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)] ${className}`}
+    >
       {children}
     </th>
   );

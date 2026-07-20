@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react';
+import { FileText } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Field, Input, Select } from '../ui/Field';
-import { creerDepense, uploaderJustificatif } from '../../services/depenses.service';
+import { creerDepense, modifierDepense, uploaderJustificatif } from '../../services/depenses.service';
 import { useAuth } from '../../contexts/AuthContext';
-import type { CategorieDepense } from '../../types';
+import type { CategorieDepense, Depense } from '../../types';
 
 const labelCategorie: Record<CategorieDepense, string> = {
   materiel: 'Matériel',
@@ -13,12 +14,22 @@ const labelCategorie: Record<CategorieDepense, string> = {
   autre: 'Autre',
 };
 
-export function DepenseModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function DepenseModal({
+  open,
+  onClose,
+  depense,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Dépense à modifier ; si absent, le formulaire crée une nouvelle dépense. */
+  depense?: Depense;
+}) {
   const { profil } = useAuth();
-  const [description, setDescription] = useState('');
-  const [categorie, setCategorie] = useState<CategorieDepense>('materiel');
-  const [montant, setMontant] = useState(0);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const modification = !!depense;
+  const [description, setDescription] = useState(depense?.description ?? '');
+  const [categorie, setCategorie] = useState<CategorieDepense>(depense?.categorie ?? 'materiel');
+  const [montant, setMontant] = useState(depense?.montant ?? 0);
+  const [date, setDate] = useState(depense?.date ?? new Date().toISOString().slice(0, 10));
   const [fichier, setFichier] = useState<File | null>(null);
   const [envoi, setEnvoi] = useState(false);
 
@@ -27,15 +38,12 @@ export function DepenseModal({ open, onClose }: { open: boolean; onClose: () => 
     if (!profil) return;
     setEnvoi(true);
     try {
-      const justificatifUrl = fichier ? await uploaderJustificatif(fichier) : undefined;
-      await creerDepense({
-        description,
-        categorie,
-        montant,
-        date,
-        justificatifUrl,
-        saisiPar: profil.id,
-      });
+      const justificatifUrl = fichier ? await uploaderJustificatif(fichier) : depense?.justificatifUrl;
+      if (modification && depense) {
+        await modifierDepense(depense.id, { description, categorie, montant, date, justificatifUrl });
+      } else {
+        await creerDepense({ description, categorie, montant, date, justificatifUrl, saisiPar: profil.id });
+      }
       onClose();
     } finally {
       setEnvoi(false);
@@ -43,7 +51,7 @@ export function DepenseModal({ open, onClose }: { open: boolean; onClose: () => 
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Nouvelle dépense">
+    <Modal open={open} onClose={onClose} title={modification ? 'Modifier la dépense' : 'Nouvelle dépense'}>
       <form onSubmit={onSubmit}>
         <Field label="Description" required>
           <Input required value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -69,7 +77,17 @@ export function DepenseModal({ open, onClose }: { open: boolean; onClose: () => 
         <Field label="Date" required>
           <Input type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
-        <Field label="Justificatif (image ou PDF)">
+        <Field label={modification ? 'Remplacer le justificatif (image ou PDF)' : 'Justificatif (image ou PDF)'}>
+          {depense?.justificatifUrl && (
+            <a
+              href={depense.justificatifUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mb-2 flex items-center gap-1 text-xs text-[var(--color-brand)] hover:underline"
+            >
+              <FileText size={14} /> Voir le justificatif actuel
+            </a>
+          )}
           <input
             type="file"
             accept="image/*,application/pdf"

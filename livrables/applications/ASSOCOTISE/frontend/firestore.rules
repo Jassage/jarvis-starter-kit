@@ -47,38 +47,21 @@ service cloud.firestore {
       allow delete: if false; // désactivation via champ statut, jamais de suppression définitive
     }
 
-    // Cotisations : append-only, aucune correction n'écrase un document existant
+    // Cotisations : append-only, aucune correction n'écrase un document existant.
+    // Seule exception : le champ `annulee`, réservé au responsable finances (aucun autre champ modifiable).
     match /contributions/{contribId} {
       allow read: if estMembreDuBureau();
       allow create: if estMembreDuBureau()
                     && request.resource.data.saisiPar == request.auth.uid;
-      allow update, delete: if false;
+      allow update: if estResponsableFinances()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['annulee']);
+      allow delete: if false;
     }
 
     // Dépenses : réservées au responsable finances
     match /expenses/{expenseId} {
       allow read: if estMembreDuBureau();
       allow create, update: if estResponsableFinances();
-      allow delete: if false;
-    }
-
-    // Cycles de tontine : création/modification réservées au responsable finances
-    match /tontineCycles/{cycleId} {
-      allow read: if estMembreDuBureau();
-      allow create, update: if estResponsableFinances();
-      allow delete: if false;
-    }
-
-    match /tontineParticipants/{participantId} {
-      allow read: if estMembreDuBureau();
-      allow create, update: if estResponsableFinances();
-      allow delete: if false;
-    }
-
-    // Paiements de tontine : les deux rôles peuvent saisir
-    match /tontinePayments/{paymentId} {
-      allow read: if estMembreDuBureau();
-      allow create, update: if estMembreDuBureau();
       allow delete: if false;
     }
   }

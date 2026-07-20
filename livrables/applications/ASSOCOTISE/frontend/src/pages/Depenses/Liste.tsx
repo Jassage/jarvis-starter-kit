@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Receipt, FileText } from 'lucide-react';
+import { Receipt, FileText, Pencil, Ban, RotateCcw } from 'lucide-react';
 import { PageToolbar } from '../../components/ui/PageToolbar';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Table, Th, Td, Tr } from '../../components/ui/Table';
 import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
 import { Select } from '../../components/ui/Field';
 import { DepenseModal } from '../../components/depenses/DepenseModal';
-import { ecouterDepenses } from '../../services/depenses.service';
+import { ecouterDepenses, annulerDepense } from '../../services/depenses.service';
 import { formatDate, formatMontant } from '../../lib/format';
 import type { CategorieDepense, Depense } from '../../types';
 
@@ -22,6 +23,7 @@ export function DepensesListe() {
   const [depenses, setDepenses] = useState<Depense[]>([]);
   const [filtreCategorie, setFiltreCategorie] = useState<'toutes' | CategorieDepense>('toutes');
   const [modalOuverte, setModalOuverte] = useState(false);
+  const [depenseEnEdition, setDepenseEnEdition] = useState<Depense | undefined>(undefined);
 
   useEffect(() => ecouterDepenses(setDepenses), []);
 
@@ -33,15 +35,34 @@ export function DepensesListe() {
   const totalMois = useMemo(() => {
     const moisCourant = new Date().toISOString().slice(0, 7);
     return depenses
-      .filter((d) => d.date.startsWith(moisCourant))
+      .filter((d) => !d.annulee && d.date.startsWith(moisCourant))
       .reduce((sum, d) => sum + d.montant, 0);
   }, [depenses]);
+
+  function ouvrirCreation() {
+    setDepenseEnEdition(undefined);
+    setModalOuverte(true);
+  }
+
+  function ouvrirEdition(d: Depense) {
+    setDepenseEnEdition(d);
+    setModalOuverte(true);
+  }
+
+  async function onAnnuler(d: Depense) {
+    if (d.annulee) {
+      await annulerDepense(d.id, false);
+      return;
+    }
+    if (!confirm('Annuler cette dépense ? Elle restera visible mais ne comptera plus dans les totaux.')) return;
+    await annulerDepense(d.id, true);
+  }
 
   return (
     <div className="space-y-4">
       <PageToolbar
         actionLabel="Nouvelle dépense"
-        onAction={() => setModalOuverte(true)}
+        onAction={ouvrirCreation}
         extra={
           <Select
             value={filtreCategorie}
@@ -70,20 +91,30 @@ export function DepensesListe() {
           <thead>
             <tr>
               <Th>Description</Th>
-              <Th>Catégorie</Th>
-              <Th>Date</Th>
+              <Th className="hidden sm:table-cell">Catégorie</Th>
+              <Th className="hidden sm:table-cell">Date</Th>
               <Th>Montant</Th>
-              <Th>Justificatif</Th>
+              <Th className="hidden sm:table-cell">Justificatif</Th>
+              <Th></Th>
             </tr>
           </thead>
           <tbody>
             {depensesFiltrees.map((d) => (
               <Tr key={d.id}>
-                <Td className="font-medium text-[var(--color-ink)]">{d.description}</Td>
-                <Td>{labelCategorie[d.categorie]}</Td>
-                <Td>{formatDate(d.date)}</Td>
-                <Td>{formatMontant(d.montant)}</Td>
-                <Td>
+                <Td className="font-medium text-[var(--color-ink)]">
+                  <span className={d.annulee ? 'text-[var(--color-muted)] line-through' : ''}>{d.description}</span>
+                  {d.annulee && (
+                    <Badge tone="neutral" >
+                      Annulée
+                    </Badge>
+                  )}
+                </Td>
+                <Td className="hidden sm:table-cell">{labelCategorie[d.categorie]}</Td>
+                <Td className="hidden sm:table-cell">{formatDate(d.date)}</Td>
+                <Td className={d.annulee ? 'text-[var(--color-muted)] line-through' : ''}>
+                  {formatMontant(d.montant)}
+                </Td>
+                <Td className="hidden sm:table-cell">
                   {d.justificatifUrl ? (
                     <a
                       href={d.justificatifUrl}
@@ -97,13 +128,41 @@ export function DepensesListe() {
                     <span className="text-xs text-[var(--color-muted)]">—</span>
                   )}
                 </Td>
+                <Td>
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      onClick={() => ouvrirEdition(d)}
+                      className="flex items-center gap-1 text-xs font-medium text-[var(--color-brand)] hover:underline"
+                    >
+                      <Pencil size={13} /> Modifier
+                    </button>
+                    <button
+                      onClick={() => onAnnuler(d)}
+                      className={`flex items-center gap-1 text-xs font-medium hover:underline ${
+                        d.annulee ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'
+                      }`}
+                    >
+                      {d.annulee ? (
+                        <>
+                          <RotateCcw size={13} /> Réactiver
+                        </>
+                      ) : (
+                        <>
+                          <Ban size={13} /> Annuler
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </Td>
               </Tr>
             ))}
           </tbody>
         </Table>
       )}
 
-      <DepenseModal open={modalOuverte} onClose={() => setModalOuverte(false)} />
+      {modalOuverte && (
+        <DepenseModal open={modalOuverte} onClose={() => setModalOuverte(false)} depense={depenseEnEdition} />
+      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -6,7 +7,6 @@ const titresParChemin: Array<[prefix: string, titre: string]> = [
   ['/membres', 'Membres'],
   ['/cotisations', 'Cotisations'],
   ['/depenses', 'Dépenses'],
-  ['/tontine', 'Tontine'],
   ['/utilisateurs', 'Gestion des utilisateurs'],
 ];
 
@@ -17,13 +17,17 @@ function titrePourChemin(pathname: string): string {
 
 export function AppLayout() {
   const location = useLocation();
+  const [sidebarOuverte, setSidebarOuverte] = useState(false);
+
+  useEffect(() => setSidebarOuverte(false), [location.pathname]);
 
   return (
-    <div className="flex min-h-svh">
-      <Sidebar />
-      <div className="flex flex-1 flex-col">
-        <Topbar titre={titrePourChemin(location.pathname)} />
-        <main className="flex-1 overflow-y-auto bg-[var(--color-bg)] p-6">
+    <div className="flex h-svh overflow-hidden">
+      <div className="fond-decoratif" aria-hidden="true" />
+      <Sidebar open={sidebarOuverte} onClose={() => setSidebarOuverte(false)} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Topbar titre={titrePourChemin(location.pathname)} onOuvrirMenu={() => setSidebarOuverte(true)} />
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           <Outlet />
         </main>
       </div>

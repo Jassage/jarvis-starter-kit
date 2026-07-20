@@ -1,6 +1,7 @@
-import { addDoc, collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { addDoc, collection, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../lib/firebase';
+import { omitUndefined } from '../lib/firestoreUtils';
 import type { Depense } from '../types';
 
 const depensesRef = collection(db, 'expenses');
@@ -20,5 +21,13 @@ export async function uploaderJustificatif(fichier: File): Promise<string> {
 }
 
 export async function creerDepense(data: Omit<Depense, 'id' | 'saisiLe'>) {
-  return addDoc(depensesRef, { ...data, saisiLe: new Date().toISOString() });
+  return addDoc(depensesRef, omitUndefined({ ...data, saisiLe: new Date().toISOString() }));
+}
+
+export async function modifierDepense(id: string, data: Partial<Omit<Depense, 'id' | 'saisiLe' | 'saisiPar'>>) {
+  return updateDoc(doc(db, 'expenses', id), omitUndefined({ ...data, modifieLe: new Date().toISOString() }));
+}
+
+export async function annulerDepense(id: string, annulee: boolean) {
+  return updateDoc(doc(db, 'expenses', id), { annulee });
 }

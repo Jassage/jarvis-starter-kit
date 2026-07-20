@@ -9,6 +9,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { omitUndefined } from '../lib/firestoreUtils';
 import type { Membre, StatutMembre } from '../types';
 
 const membresRef = collection(db, 'members');
@@ -26,11 +27,11 @@ export async function listerMembres(): Promise<Membre[]> {
 }
 
 export async function creerMembre(data: Omit<Membre, 'id'>) {
-  return addDoc(membresRef, data);
+  return addDoc(membresRef, omitUndefined(data));
 }
 
 export async function modifierMembre(id: string, data: Partial<Omit<Membre, 'id'>>) {
-  return updateDoc(doc(db, 'members', id), data);
+  return updateDoc(doc(db, 'members', id), omitUndefined(data));
 }
 
 export async function changerStatutMembre(id: string, statut: StatutMembre) {

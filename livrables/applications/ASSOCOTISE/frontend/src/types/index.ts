@@ -32,6 +32,8 @@ export interface Cotisation {
   date: string;
   moyenPaiement: MoyenPaiement;
   note?: string;
+  preuveUrl?: string;
+  annulee?: boolean;
   saisiPar: string;
   saisiLe: string;
   corrige?: string; // id de la cotisation que ce document corrige, s'il y a lieu
@@ -46,43 +48,9 @@ export interface Depense {
   montant: number;
   date: string;
   justificatifUrl?: string;
+  annulee?: boolean;
   saisiPar: string;
   saisiLe: string;
+  modifieLe?: string;
 }
 
-export type MethodeOrdreTontine = 'fixe' | 'aleatoire' | 'anciennete';
-export type StatutCycleTontine = 'en_cours' | 'clos';
-
-export interface CycleTontine {
-  id: string;
-  nom: string;
-  dateDebut: string;
-  montantCotisation: number;
-  methodeOrdre: MethodeOrdreTontine;
-  statut: StatutCycleTontine;
-  creePar: string;
-  creeLe: string;
-}
-
-export interface ParticipantTontine {
-  id: string;
-  cycleId: string;
-  memberId: string;
-  position: number;
-  dateReceptionPrevue: string;
-  aRecuSonTour: boolean;
-  dateReception?: string;
-}
-
-export type StatutPaiementTontine = 'paye' | 'retard';
-
-export interface PaiementTontine {
-  id: string;
-  cycleId: string;
-  periode: number; // index du tour (1-based)
-  memberId: string;
-  montant: number;
-  date: string;
-  statut: StatutPaiementTontine;
-  saisiPar: string;
-}

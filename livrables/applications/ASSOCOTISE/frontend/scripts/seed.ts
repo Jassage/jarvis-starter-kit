@@ -9,13 +9,13 @@ process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
 process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199';
 
-import { initializeApp, cert } from 'firebase-admin/app';
+import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
 const PROJECT_ID = 'assocotise-dev';
 
-const app = initializeApp({ projectId: PROJECT_ID, credential: cert({ projectId: PROJECT_ID } as never) });
+const app = initializeApp({ projectId: PROJECT_ID });
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -148,74 +148,6 @@ async function main() {
     });
   }
   console.log(`${depenses.length} dépenses créées.`);
-
-  // Cycle de tontine en cours : 6 des membres, ordre fixe, 2 tours déjà passés.
-  const participantsCycle = membreIds.slice(0, 6);
-  const dateDebutCycle = new Date();
-  dateDebutCycle.setMonth(dateDebutCycle.getMonth() - 2);
-  const cycleRef = await db.collection('tontineCycles').add({
-    nom: 'Sol 2026 — Groupe A',
-    dateDebut: dateDebutCycle.toISOString().slice(0, 10),
-    montantCotisation: 500,
-    methodeOrdre: 'fixe',
-    statut: 'en_cours',
-    creePar: responsableUid,
-    creeLe: dateDebutCycle.toISOString(),
-  });
-
-  for (const [index, memberId] of participantsCycle.entries()) {
-    const dateReceptionPrevue = new Date(dateDebutCycle);
-    dateReceptionPrevue.setMonth(dateReceptionPrevue.getMonth() + index);
-    const aRecuSonTour = index < 2;
-    await db.collection('tontineParticipants').add({
-      cycleId: cycleRef.id,
-      memberId,
-      position: index + 1,
-      dateReceptionPrevue: dateReceptionPrevue.toISOString(),
-      aRecuSonTour,
-      ...(aRecuSonTour ? { dateReception: dateReceptionPrevue.toISOString().slice(0, 10) } : {}),
-    });
-  }
-
-  // Paiements des 2 premiers tours (tous payés), tour 3 en cours avec 1 retard.
-  for (let periode = 1; periode <= 2; periode++) {
-    for (const memberId of participantsCycle) {
-      await db.collection('tontinePayments').add({
-        cycleId: cycleRef.id,
-        periode,
-        memberId,
-        montant: 500,
-        date: dateDebutCycle.toISOString().slice(0, 10),
-        statut: 'paye',
-        saisiPar: secretaireUid,
-      });
-    }
-  }
-  for (const [index, memberId] of participantsCycle.entries()) {
-    if (index === 3) {
-      await db.collection('tontinePayments').add({
-        cycleId: cycleRef.id,
-        periode: 3,
-        memberId,
-        montant: 200,
-        date: new Date().toISOString().slice(0, 10),
-        statut: 'retard',
-        saisiPar: secretaireUid,
-      });
-      continue;
-    }
-    if (index === 2) continue; // n'a rien payé du tout ce tour, reste "à saisir"
-    await db.collection('tontinePayments').add({
-      cycleId: cycleRef.id,
-      periode: 3,
-      memberId,
-      montant: 500,
-      date: new Date().toISOString().slice(0, 10),
-      statut: 'paye',
-      saisiPar: secretaireUid,
-    });
-  }
-  console.log('Cycle de tontine créé avec 6 participants et 3 tours de paiements.');
 
   console.log('\nSeed terminé.');
   console.log('Connexion secrétaire   : secretaire@assocotise.ht / Secretaire123!');

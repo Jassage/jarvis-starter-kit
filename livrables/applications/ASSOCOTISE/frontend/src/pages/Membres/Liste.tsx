@@ -5,6 +5,7 @@ import { PageToolbar } from '../../components/ui/PageToolbar';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Table, Th, Td, Tr } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
+import { Select } from '../../components/ui/Field';
 import { MembreModal } from '../../components/membres/MembreModal';
 import { ecouterMembres } from '../../services/membres.service';
 import { ecouterCotisationsDuMois, valeursCourantes } from '../../services/cotisations.service';
@@ -52,15 +53,15 @@ export function MembresListe() {
         actionLabel="Nouveau membre"
         onAction={() => setModalOuverte(true)}
         extra={
-          <select
+          <Select
             value={filtreStatut}
             onChange={(e) => setFiltreStatut(e.target.value as typeof filtreStatut)}
-            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none"
+            className="w-44"
           >
             <option value="tous">Tous les statuts</option>
             <option value="actif">Actifs</option>
             <option value="inactif">Inactifs</option>
-          </select>
+          </Select>
         }
       />
 
@@ -71,8 +72,8 @@ export function MembresListe() {
           <thead>
             <tr>
               <Th>Nom</Th>
-              <Th>Téléphone</Th>
-              <Th>Adhésion</Th>
+              <Th className="hidden sm:table-cell">Téléphone</Th>
+              <Th className="hidden md:table-cell">Adhésion</Th>
               <Th>Statut</Th>
               <Th>Ce mois-ci</Th>
             </tr>
@@ -85,8 +86,8 @@ export function MembresListe() {
                     {m.nom}
                   </Link>
                 </Td>
-                <Td>{m.telephone}</Td>
-                <Td>{formatDate(m.dateAdhesion)}</Td>
+                <Td className="hidden sm:table-cell">{m.telephone}</Td>
+                <Td className="hidden md:table-cell">{formatDate(m.dateAdhesion)}</Td>
                 <Td>
                   <Badge tone={m.statut === 'actif' ? 'success' : 'neutral'}>
                     {m.statut === 'actif' ? 'Actif' : 'Inactif'}
