@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Copy, Pencil, Trash2, UploadCloud } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Copy, Pencil, Trash2, UploadCloud, Shield, ShieldAlert, RadioTower } from 'lucide-react';
 import { useGrilleStore, Creneau } from '@/stores/grilleStore';
 import Badge from '@/components/ui/Badge';
 import PageToolbar from '@/components/ui/PageToolbar';
@@ -26,7 +26,7 @@ function formatHeure(iso: string) {
 }
 
 export default function GrillePage() {
-  const { creneaux, brouillons, isLoading, fetchCreneaux, createCreneau, updateCreneau, deleteCreneau, dupliquerCreneau, synchroniserCreneau } = useGrilleStore();
+  const { creneaux, brouillons, isLoading, trous, totalMinutesTrous, contenuRepli, fetchCreneaux, fetchContinuite, createCreneau, updateCreneau, deleteCreneau, dupliquerCreneau, synchroniserCreneau } = useGrilleStore();
   const [jourStr, setJourStr] = useState(todayInputValue());
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Creneau | null>(null);
@@ -35,18 +35,26 @@ export default function GrillePage() {
 
   const jour = useMemo(() => new Date(`${jourStr}T00:00:00`), [jourStr]);
 
-  useEffect(() => {
+  const reload = useCallback(async () => {
     const from = new Date(jour);
     const to = new Date(jour);
     to.setHours(23, 59, 59, 999);
-    fetchCreneaux(from.toISOString(), to.toISOString());
-  }, [jour, fetchCreneaux]);
+    await Promise.all([
+      fetchCreneaux(from.toISOString(), to.toISOString()),
+      fetchContinuite(from.toISOString(), to.toISOString()),
+    ]);
+  }, [jour, fetchCreneaux, fetchContinuite]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   const handleDelete = async (c: Creneau) => {
     if (!confirm('Supprimer ce créneau ?')) return;
     setErreur('');
     try {
       await deleteCreneau(c.id);
+      await reload();
     } catch (err: any) {
       setErreur(err.response?.data?.message || 'Suppression impossible');
     }
@@ -56,6 +64,7 @@ export default function GrillePage() {
     setErreur('');
     try {
       await synchroniserCreneau(c.id);
+      await reload();
     } catch (err: any) {
       setErreur(err.response?.data?.message || 'Erreur');
     }
@@ -86,6 +95,52 @@ export default function GrillePage() {
             <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: 'var(--color-success)' }} />
             <p className="text-sm font-semibold" style={{ color: 'var(--color-success)' }}>Grille entièrement synchronisée.</p>
           </>
+        )}
+      </div>
+
+      {/* Continuité d'antenne : repli actif + trous de grille (dead-air potentiel) sur le jour affiché */}
+      <div className="card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <RadioTower className="w-4 h-4" style={{ color: 'var(--color-brand)' }} />
+          <p className="text-xs font-bold tracking-widest" style={{ color: 'var(--color-ink-3)' }}>CONTINUITÉ D'ANTENNE</p>
+        </div>
+
+        <div className="flex items-center gap-2 text-sm">
+          {contenuRepli ? (
+            <>
+              <Shield className="w-4 h-4 shrink-0" style={{ color: 'var(--color-success)' }} />
+              <span style={{ color: 'var(--color-ink-2)' }}>Repli actif : </span>
+              <span className="font-semibold" style={{ color: 'var(--color-ink)' }}>{contenuRepli.titre}</span>
+            </>
+          ) : (
+            <>
+              <ShieldAlert className="w-4 h-4 shrink-0" style={{ color: 'var(--color-warning)' }} />
+              <span style={{ color: 'var(--color-warning)' }}>Aucun contenu de repli désigné — un trou de grille passera en « Hors antenne ». Désignez un VIDEO_BOUCLE dans Contenus.</span>
+            </>
+          )}
+        </div>
+
+        {trous.length === 0 ? (
+          <div className="flex items-center gap-2 text-sm">
+            <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: 'var(--color-success)' }} />
+            <span style={{ color: 'var(--color-success)' }}>Aucun trou dans la grille synchronisée ce jour-là.</span>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-sm">
+              <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: 'var(--color-warning)' }} />
+              <span className="font-semibold" style={{ color: 'var(--color-warning)' }}>
+                {trous.length} trou{trous.length > 1 ? 's' : ''} de grille — {totalMinutesTrous} min sans programme synchronisé.
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {trous.map((t, i) => (
+                <span key={i} className="text-xs font-mono px-2 py-1 rounded-lg" style={{ background: 'var(--color-surface-2)', color: 'var(--color-ink-2)' }}>
+                  {formatHeure(t.debut)} – {formatHeure(t.fin)} ({t.dureeMinutes} min)
+                </span>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
@@ -180,6 +235,7 @@ export default function GrillePage() {
         onSubmit={async (data) => {
           if (editing) await updateCreneau(editing.id, data);
           else await createCreneau(data);
+          await reload();
         }}
       />
 
@@ -189,6 +245,7 @@ export default function GrillePage() {
         creneau={dupliquerCible}
         onSubmit={async (dateHeureDebut) => {
           if (dupliquerCible) await dupliquerCreneau(dupliquerCible.id, dateHeureDebut);
+          await reload();
         }}
       />
     </div>

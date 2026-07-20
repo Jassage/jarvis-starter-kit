@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Tv } from 'lucide-react';
+import Link from 'next/link';
+import { Tv, CalendarDays } from 'lucide-react';
 import HlsPlayer from '@/components/player/HlsPlayer';
 import Overlay from '@/components/player/Overlay';
 import EpgPanel from '@/components/player/EpgPanel';
@@ -10,6 +11,7 @@ interface EpgResponse {
   enCours: any | null;
   aSuivre: any[];
   cdnBaseUrl: string | null;
+  configChaine: { nomChaine: string; logoUrl: string; logoPosition: any; logoOpacite: number } | null;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -35,8 +37,11 @@ export default function RegarderPage() {
   }, []);
 
   const enDirect = epg?.enCours?.typeCreneau === 'MATCH_DIRECT';
+  const estRepli = !!epg?.enCours?.estRepli;
   const incrustations = (epg?.enCours?.incrustations || []).filter((i: any) => i.actif);
   const bandeaux = (epg?.enCours?.bandeaux || []).filter((b: any) => b.actif);
+  const logoChaine = epg?.configChaine || null;
+  const nomChaine = epg?.configChaine?.nomChaine || 'ANTENN';
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
@@ -45,15 +50,20 @@ export default function RegarderPage() {
           <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
             <Tv className="w-4.5 h-4.5" style={{ color: '#001018' }} />
           </div>
-          <span className="font-extrabold text-lg tracking-tight" style={{ color: 'var(--color-ink)' }}>ANTENN</span>
+          <span className="font-extrabold text-lg tracking-tight" style={{ color: 'var(--color-ink)' }}>{nomChaine}</span>
         </div>
-        <NetworkIndicator />
+        <div className="flex items-center gap-4">
+          <Link href="/guide" className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>
+            <CalendarDays className="w-4 h-4" /> Guide des programmes
+          </Link>
+          <NetworkIndicator />
+        </div>
       </header>
 
       <main className="max-w-6xl mx-auto p-4 sm:p-8 grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
         <div className="relative">
-          <HlsPlayer enDirect={enDirect} />
-          <Overlay incrustations={incrustations} bandeaux={bandeaux} />
+          <HlsPlayer enDirect={enDirect} estRepli={estRepli} />
+          <Overlay incrustations={incrustations} bandeaux={bandeaux} logoChaine={logoChaine} />
         </div>
 
         <EpgPanel enCours={epg?.enCours || null} aSuivre={epg?.aSuivre || []} />

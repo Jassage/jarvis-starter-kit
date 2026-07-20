@@ -40,3 +40,9 @@ export async function synchroniser(req: Request, res: Response) {
   const creneau = await service.marquerSynchronise(req.params.id);
   sendSuccess(res, { creneau }, 'Créneau marqué comme synchronisé');
 }
+
+export async function trous(req: Request, res: Response) {
+  const { from, to } = req.query as { from?: string; to?: string };
+  const resultat = await service.detecterTrous(from, to);
+  sendSuccess(res, resultat);
+}

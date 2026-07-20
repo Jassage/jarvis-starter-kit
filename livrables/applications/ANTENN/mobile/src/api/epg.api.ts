@@ -26,23 +26,47 @@ export interface Bandeau {
 }
 
 export interface CreneauEpg {
-  id: string;
-  dateHeureDebut: string;
-  dateHeureFin: string;
+  id: string | null;
+  dateHeureDebut: string | null;
+  dateHeureFin: string | null;
   typeCreneau: TypeCreneau;
+  estRepli?: boolean;
   contenu?: { titre: string; sponsor?: { nomSponsor: string } | null } | null;
   match?: { nomEvenement: string; equipes: string; sponsorPrincipal?: { nomSponsor: string } | null } | null;
   incrustations: Incrustation[];
   bandeaux: Bandeau[];
 }
 
+export interface ConfigChaine {
+  nomChaine: string;
+  logoUrl: string;
+  logoPosition: PositionOverlay;
+  logoOpacite: number;
+}
+
 export interface EpgResponse {
   enCours: CreneauEpg | null;
   aSuivre: CreneauEpg[];
   cdnBaseUrl: string | null;
+  configChaine: ConfigChaine | null;
+}
+
+export interface JourGuide {
+  date: string;
+  creneaux: CreneauEpg[];
+}
+
+export interface GuideResponse {
+  jours: JourGuide[];
+  configChaine: ConfigChaine | null;
 }
 
 export async function getEpg(): Promise<EpgResponse> {
   const { data } = await api.get('/epg');
+  return data.data;
+}
+
+export async function getGuide(jours = 5): Promise<GuideResponse> {
+  const { data } = await api.get('/epg/guide', { params: { jours } });
   return data.data;
 }

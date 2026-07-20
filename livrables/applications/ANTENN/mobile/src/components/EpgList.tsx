@@ -8,6 +8,7 @@ function titre(c: CreneauEpg): string {
 }
 
 function horaire(c: CreneauEpg): string {
+  if (!c.dateHeureDebut || !c.dateHeureFin) return '';
   const debut = new Date(c.dateHeureDebut).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const fin = new Date(c.dateHeureFin).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   return `${debut} – ${fin}`;
@@ -19,13 +20,21 @@ export default function EpgList({ enCours, aSuivre }: { enCours: CreneauEpg | nu
       <Text style={styles.sectionLabel}>EN CE MOMENT</Text>
       {enCours ? (
         <View style={[styles.card, styles.cardCurrent]}>
-          {enCours.typeCreneau === 'MATCH_DIRECT' && (
+          {enCours.estRepli ? (
+            <View style={styles.repliTag}>
+              <Text style={styles.repliTagText}>PROGRAMMATION CONTINUE</Text>
+            </View>
+          ) : enCours.typeCreneau === 'MATCH_DIRECT' ? (
             <View style={styles.liveTag}>
               <Text style={styles.liveTagText}>DIRECT</Text>
             </View>
-          )}
+          ) : null}
           <Text style={styles.cardTitle}>{titre(enCours)}</Text>
-          <Text style={styles.cardHoraire}>{horaire(enCours)}</Text>
+          {enCours.estRepli ? (
+            <Text style={styles.cardHoraire}>En continu, hors programmation dédiée</Text>
+          ) : (
+            <Text style={styles.cardHoraire}>{horaire(enCours)}</Text>
+          )}
         </View>
       ) : (
         <Text style={styles.emptyText}>Aucun programme en cours.</Text>
@@ -106,6 +115,19 @@ const styles = StyleSheet.create({
   },
   liveTagText: {
     color: colors.live,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  repliTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primarySoft,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 6,
+  },
+  repliTagText: {
+    color: colors.primary,
     fontSize: 10,
     fontWeight: '800',
   },

@@ -6,5 +6,6 @@ import * as ctrl from './epg.controller';
 const router = Router();
 
 router.get('/', asyncHandler(ctrl.getEpg));
+router.get('/guide', asyncHandler(ctrl.getGuide));
 
 export default router;

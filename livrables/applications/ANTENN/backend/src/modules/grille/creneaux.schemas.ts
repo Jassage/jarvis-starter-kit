@@ -39,6 +39,13 @@ export const updateCreneauSchema = z.object({
   }),
 });
 
+export const trousSchema = z.object({
+  query: z.object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+  }),
+});
+
 export const idParamSchema = z.object({
   params: z.object({ id: z.string() }),
 });

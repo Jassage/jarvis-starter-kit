@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Film, Pencil, Trash2 } from 'lucide-react';
+import { Film, Pencil, Trash2, Shield, ShieldOff } from 'lucide-react';
 import { useContenuStore, Contenu } from '@/stores/contenuStore';
 import Badge from '@/components/ui/Badge';
 import PageToolbar from '@/components/ui/PageToolbar';
@@ -21,7 +21,7 @@ function formatDuree(s: number) {
 }
 
 export default function ContenusPage() {
-  const { contenus, isLoading, fetchContenus, createContenu, updateContenu, deleteContenu } = useContenuStore();
+  const { contenus, isLoading, fetchContenus, createContenu, updateContenu, deleteContenu, definirRepli, retirerRepli } = useContenuStore();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Contenu | null>(null);
   const [erreur, setErreur] = useState('');
@@ -37,6 +37,16 @@ export default function ContenusPage() {
       await deleteContenu(c.id);
     } catch (err: any) {
       setErreur(err.response?.data?.message || 'Suppression impossible');
+    }
+  };
+
+  const handleRepli = async (c: Contenu) => {
+    setErreur('');
+    try {
+      if (c.estContenuDeRepli) await retirerRepli(c.id);
+      else await definirRepli(c.id);
+    } catch (err: any) {
+      setErreur(err.response?.data?.message || 'Action impossible');
     }
   };
 
@@ -65,12 +75,27 @@ export default function ContenusPage() {
             <tbody>
               {contenus.map((c) => (
                 <tr key={c.id}>
-                  <td className="font-semibold" style={{ color: 'var(--color-ink)' }}>{c.titre}</td>
+                  <td className="font-semibold" style={{ color: 'var(--color-ink)' }}>
+                    <div className="flex items-center gap-2">
+                      <span>{c.titre}</span>
+                      {c.estContenuDeRepli && <Badge tone="success">Repli d'antenne</Badge>}
+                    </div>
+                  </td>
                   <td><Badge tone={c.typeContenu === 'SPOT_PUBLICITAIRE' ? 'gold' : c.typeContenu === 'HABILLAGE_LOGO' ? 'violet' : 'brand'}>{TYPE_LABEL[c.typeContenu]}</Badge></td>
                   <td>{c.sponsor?.nomSponsor || '—'}</td>
                   <td className="font-mono">{formatDuree(c.dureeSecondes)}</td>
                   <td>
                     <div className="flex justify-end gap-1.5">
+                      {c.typeContenu === 'VIDEO_BOUCLE' && (
+                        <button
+                          title={c.estContenuDeRepli ? 'Retirer du repli d\'antenne' : 'Définir comme repli d\'antenne (anti-écran-noir)'}
+                          onClick={() => handleRepli(c)}
+                          className="p-2 rounded-lg"
+                          style={{ color: c.estContenuDeRepli ? 'var(--color-success)' : 'var(--color-ink-3)' }}
+                        >
+                          {c.estContenuDeRepli ? <ShieldOff className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
+                        </button>
+                      )}
                       <button title="Éditer" onClick={() => { setEditing(c); setModalOpen(true); }} className="p-2 rounded-lg" style={{ color: 'var(--color-ink-2)' }}>
                         <Pencil className="w-4 h-4" />
                       </button>

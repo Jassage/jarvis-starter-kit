@@ -7,7 +7,7 @@ import { Tv, WifiOff } from 'lucide-react';
 // codé en dur — cf. discussion CDN_BASE_URL côté backend (Bunny Stream / Cloudflare
 // Stream). Aucun flux réel n'est disponible dans cet environnement de dev : la
 // variable est vide et le player affiche un état "hors antenne" propre.
-export default function HlsPlayer({ enDirect }: { enDirect: boolean }) {
+export default function HlsPlayer({ enDirect, estRepli = false }: { enDirect: boolean; estRepli?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [erreur, setErreur] = useState(false);
   const streamUrl = process.env.NEXT_PUBLIC_CDN_STREAM_URL;
@@ -47,7 +47,7 @@ export default function HlsPlayer({ enDirect }: { enDirect: boolean }) {
       <div className="w-full aspect-video rounded-2xl flex flex-col items-center justify-center gap-3" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-line)' }}>
         <Tv className="w-10 h-10" style={{ color: 'var(--color-ink-3)' }} />
         <p className="text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>
-          {enDirect ? 'Direct en préparation...' : 'Hors antenne'}
+          {enDirect ? 'Direct en préparation...' : estRepli ? 'Programmation continue' : 'Hors antenne'}
         </p>
         <p className="text-xs max-w-xs text-center" style={{ color: 'var(--color-ink-3)' }}>
           Aucun flux CDN configuré (NEXT_PUBLIC_CDN_STREAM_URL). Le player s'activera dès que le CDN de diffusion sera provisionné.

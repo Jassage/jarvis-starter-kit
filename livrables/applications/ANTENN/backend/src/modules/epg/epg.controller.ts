@@ -7,3 +7,9 @@ export async function getEpg(_req: Request, res: Response) {
   const epg = await service.getEpg();
   sendSuccess(res, { ...epg, cdnBaseUrl: env.CDN_BASE_URL || null });
 }
+
+export async function getGuide(req: Request, res: Response) {
+  const jours = req.query.jours ? Number(req.query.jours) : 3;
+  const guide = await service.getGuide(jours);
+  sendSuccess(res, guide);
+}

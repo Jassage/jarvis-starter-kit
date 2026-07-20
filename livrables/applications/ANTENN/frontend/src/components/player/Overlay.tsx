@@ -43,6 +43,12 @@ interface BandeauData {
   vitesseDefilement: number;
 }
 
+interface LogoChaine {
+  logoUrl: string;
+  logoPosition: 'HAUT_GAUCHE' | 'HAUT_DROITE' | 'BAS_GAUCHE' | 'BAS_DROITE';
+  logoOpacite: number;
+}
+
 const POSITION_STYLE: Record<string, React.CSSProperties> = {
   HAUT_GAUCHE: { top: '4%', left: '3%' },
   HAUT_DROITE: { top: '4%', right: '3%' },
@@ -50,11 +56,23 @@ const POSITION_STYLE: Record<string, React.CSSProperties> = {
   BAS_DROITE: { bottom: '10%', right: '3%' },
 };
 
-export default function Overlay({ incrustations, bandeaux }: { incrustations: IncrustationData[]; bandeaux: BandeauData[] }) {
+export default function Overlay({ incrustations, bandeaux, logoChaine }: { incrustations: IncrustationData[]; bandeaux: BandeauData[]; logoChaine?: LogoChaine | null }) {
   const texteBandeau = bandeaux.flatMap((b) => b.items.map((i) => i.texte)).join('     •     ');
 
   return (
     <div className="absolute inset-0 pointer-events-none">
+      {/* Logo d'identité de la chaîne — rendu en permanence, indépendamment du
+          programme, du repli et des habillages sponsors (le "bug" de la chaîne). */}
+      {logoChaine && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logoChaine.logoUrl}
+          alt=""
+          className="absolute h-9 sm:h-12 w-auto"
+          style={{ ...POSITION_STYLE[logoChaine.logoPosition], opacity: logoChaine.logoOpacite }}
+        />
+      )}
+
       {incrustations.map((inc) => (
         // eslint-disable-next-line @next/next/no-img-element
         <img

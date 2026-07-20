@@ -184,6 +184,36 @@ async function main() {
     },
   });
 
+  // Identité de la chaîne (singleton) — logo à uploader depuis la régie.
+  await prisma.configChaine.create({
+    data: { nomChaine: 'ANTENN Télé', logoActif: true },
+  });
+
+  // Grille synchronisée sur J+1 et J+2 pour peupler le guide des programmes multi-jours.
+  const jourBase = new Date();
+  jourBase.setHours(0, 0, 0, 0);
+  const programmesGuide = [
+    { jour: 1, h: 19, dureeMin: 60, contenuId: contenuProgramme1.id },
+    { jour: 1, h: 20, dureeMin: 45, contenuId: contenuProgramme2.id },
+    { jour: 2, h: 18, dureeMin: 90, contenuId: contenuProgramme2.id },
+  ];
+  for (const p of programmesGuide) {
+    const debut = new Date(jourBase);
+    debut.setDate(debut.getDate() + p.jour);
+    debut.setHours(p.h, 0, 0, 0);
+    const fin = new Date(debut.getTime() + p.dureeMin * 60 * 1000);
+    await prisma.creneauGrille.create({
+      data: {
+        dateHeureDebut: debut,
+        dateHeureFin: fin,
+        typeCreneau: TypeCreneau.PROGRAMME,
+        contenuId: p.contenuId,
+        syncStatus: 'SYNCHRONISE',
+        syncedAt: new Date(),
+      },
+    });
+  }
+
   console.log('✅ Seed ANTENN terminé');
   console.log(`   Admin      : admin@antenn.ht / Antenn@123`);
   console.log(`   Opérateur  : operateur@antenn.ht / Antenn@123`);

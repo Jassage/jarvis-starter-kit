@@ -7,6 +7,7 @@ import {
   listCreneauxSchema,
   createCreneauSchema,
   updateCreneauSchema,
+  trousSchema,
   idParamSchema,
 } from './creneaux.schemas';
 
@@ -16,6 +17,8 @@ const router = Router();
 router.use(requireAuth);
 
 router.get('/', validate(listCreneauxSchema), asyncHandler(ctrl.list));
+// Monté avant /:id pour ne pas être capturé comme un identifiant de créneau.
+router.get('/trous', validate(trousSchema), asyncHandler(ctrl.trous));
 router.get('/:id', validate(idParamSchema), asyncHandler(ctrl.getOne));
 router.post('/', validate(createCreneauSchema), asyncHandler(ctrl.create));
 router.patch('/:id', validate(updateCreneauSchema), asyncHandler(ctrl.update));

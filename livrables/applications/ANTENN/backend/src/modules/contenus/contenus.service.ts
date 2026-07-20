@@ -45,3 +45,28 @@ export async function deleteContenu(id: string) {
   }
   await prisma.contenu.delete({ where: { id } });
 }
+
+// Contenu de repli (continuité d'antenne) : au plus un actif à la fois.
+export async function getContenuDeRepli() {
+  return prisma.contenu.findFirst({ where: { estContenuDeRepli: true }, include: { sponsor: true } });
+}
+
+export async function definirContenuDeRepli(id: string) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.contenu.findUnique({ where: { id } });
+    if (!existing) throw new AppError('Contenu non trouvé', 404);
+    // Un repli doit pouvoir tourner en boucle pour combler un trou de durée
+    // arbitraire : un spot pub de 30 s ou un habillage ne conviennent pas.
+    if (existing.typeContenu !== 'VIDEO_BOUCLE') {
+      throw new AppError('Seul un contenu de type VIDEO_BOUCLE peut servir de repli d\'antenne', 400);
+    }
+    await tx.contenu.updateMany({ where: { estContenuDeRepli: true }, data: { estContenuDeRepli: false } });
+    return tx.contenu.update({ where: { id }, data: { estContenuDeRepli: true }, include: { sponsor: true } });
+  });
+}
+
+export async function retirerContenuDeRepli(id: string) {
+  const existing = await prisma.contenu.findUnique({ where: { id } });
+  if (!existing) throw new AppError('Contenu non trouvé', 404);
+  return prisma.contenu.update({ where: { id }, data: { estContenuDeRepli: false }, include: { sponsor: true } });
+}

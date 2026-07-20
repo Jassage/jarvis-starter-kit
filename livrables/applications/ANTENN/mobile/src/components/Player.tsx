@@ -7,7 +7,7 @@ import { colors } from '../theme/colors';
 // Lecture HLS native (AVPlayer sur iOS, ExoPlayer sur Android via expo-video) —
 // généralement plus fiable que le HLS natif d'un navigateur desktop (cf. le bug
 // de démuxage Chrome rencontré et corrigé côté player web, HlsPlayer.tsx).
-export default function Player({ enDirect }: { enDirect: boolean }) {
+export default function Player({ enDirect, estRepli = false }: { enDirect: boolean; estRepli?: boolean }) {
   const streamUrl = env.cdnStreamUrl;
 
   const player = useVideoPlayer(streamUrl || null, (p) => {
@@ -22,7 +22,7 @@ export default function Player({ enDirect }: { enDirect: boolean }) {
     return (
       <View style={[styles.container, styles.empty]}>
         <Ionicons name="tv-outline" size={40} color={colors.ink3} />
-        <Text style={styles.emptyTitle}>{enDirect ? 'Direct en préparation...' : 'Hors antenne'}</Text>
+        <Text style={styles.emptyTitle}>{enDirect ? 'Direct en préparation...' : estRepli ? 'Programmation continue' : 'Hors antenne'}</Text>
         <Text style={styles.emptyHint}>
           Aucun flux CDN configuré (EXPO_PUBLIC_CDN_STREAM_URL). Le player s'activera dès que le CDN de diffusion sera provisionné.
         </Text>

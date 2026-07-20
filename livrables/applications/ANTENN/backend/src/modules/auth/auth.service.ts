@@ -1,10 +1,18 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../../config/database';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../utils/jwt';
 import { AppError } from '../../middlewares/errorHandler.middleware';
 
 const SALT_ROUNDS = 12;
+
+// Le refresh token n'est jamais stocké en clair : une fuite de la base ne doit pas
+// livrer des tokens rejouables. On persiste un SHA-256 (le token JWT est déjà un
+// secret à haute entropie, pas besoin de sel/bcrypt ici) et on cherche par ce hash.
+function hashRefreshToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 async function generateTokens(user: { id: string; email: string; nom: string; role: 'ADMINISTRATEUR' | 'OPERATEUR_REGIE' }) {
   const tokenId = uuidv4();
@@ -16,7 +24,7 @@ async function generateTokens(user: { id: string; email: string; nom: string; ro
   expiresAt.setDate(expiresAt.getDate() + 30);
 
   await prisma.refreshToken.create({
-    data: { token: refreshToken, userId: user.id, expiresAt },
+    data: { token: hashRefreshToken(refreshToken), userId: user.id, expiresAt },
   });
 
   return {
@@ -45,7 +53,7 @@ export async function refresh(refreshTokenValue: string) {
   const payload = verifyRefreshToken(refreshTokenValue);
 
   const tokenRecord = await prisma.refreshToken.findUnique({
-    where: { token: refreshTokenValue },
+    where: { token: hashRefreshToken(refreshTokenValue) },
     include: { user: { select: { id: true, email: true, nom: true, role: true, isActive: true } } },
   });
 
@@ -66,7 +74,7 @@ export async function refresh(refreshTokenValue: string) {
 }
 
 export async function logout(refreshTokenValue: string) {
-  await prisma.refreshToken.deleteMany({ where: { token: refreshTokenValue } });
+  await prisma.refreshToken.deleteMany({ where: { token: hashRefreshToken(refreshTokenValue) } });
 }
 
 export async function getMe(userId: string) {

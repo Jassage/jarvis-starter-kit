@@ -12,6 +12,7 @@ export interface Contenu {
   dureeSecondes: number;
   sponsorId: string | null;
   sponsor?: { id: string; nomSponsor: string } | null;
+  estContenuDeRepli?: boolean;
 }
 
 export interface ContenuInput {
@@ -29,6 +30,8 @@ interface ContenuState {
   createContenu: (data: ContenuInput) => Promise<void>;
   updateContenu: (id: string, data: Partial<ContenuInput>) => Promise<void>;
   deleteContenu: (id: string) => Promise<void>;
+  definirRepli: (id: string) => Promise<void>;
+  retirerRepli: (id: string) => Promise<void>;
 }
 
 export const useContenuStore = create<ContenuState>((set, get) => ({
@@ -58,6 +61,16 @@ export const useContenuStore = create<ContenuState>((set, get) => ({
 
   deleteContenu: async (id) => {
     await api.delete(`/contenus/${id}`);
+    await get().fetchContenus();
+  },
+
+  definirRepli: async (id) => {
+    await api.post(`/contenus/${id}/repli`);
+    await get().fetchContenus();
+  },
+
+  retirerRepli: async (id) => {
+    await api.delete(`/contenus/${id}/repli`);
     await get().fetchContenus();
   },
 }));

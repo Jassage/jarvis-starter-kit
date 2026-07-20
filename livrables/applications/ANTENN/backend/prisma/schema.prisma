@@ -58,6 +58,26 @@ enum PositionOverlay {
 }
 
 // ─────────────────────────────────────────
+// CONFIGURATION DE LA CHAÎNE (singleton)
+// ─────────────────────────────────────────
+
+// Identité de la chaîne : nom + logo permanent affiché en continu par le player,
+// indépendamment du programme (le "bug" d'une vraie chaîne TV). Une seule ligne
+// (singleton géré en service via getOrCreate).
+model ConfigChaine {
+  id           String          @id @default(cuid())
+  nomChaine    String          @default("ANTENN")
+  logoUrl      String?
+  logoPosition PositionOverlay @default(HAUT_DROITE)
+  logoOpacite  Float           @default(0.9)
+  logoActif    Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@map("config_chaine")
+}
+
+// ─────────────────────────────────────────
 // AUTH
 // ─────────────────────────────────────────
 
@@ -123,6 +143,9 @@ model Contenu {
   dureeSecondes  Int
   sponsorId      String?
   sponsor        Sponsor?    @relation(fields: [sponsorId], references: [id], onDelete: SetNull)
+  // Contenu de repli (filet anti-écran-noir) : rejoué comme "à l'antenne" quand la
+  // grille synchronisée a un trou. Au plus un actif à la fois (invariant en service).
+  estContenuDeRepli Boolean  @default(false)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 

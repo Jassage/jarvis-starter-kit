@@ -70,11 +70,13 @@ export async function updateLogo(id: string, logoUrl: string) {
 export async function deleteSponsor(id: string) {
   const existing = await prisma.sponsor.findUnique({
     where: { id },
-    include: { contenus: true, matchsTitre: true },
+    include: { contenus: true, matchsTitre: true, incrustations: true },
   });
   if (!existing) throw new AppError('Sponsor non trouvé', 404);
-  if (existing.contenus.length > 0 || existing.matchsTitre.length > 0) {
-    throw new AppError('Ce sponsor est référencé par des contenus ou des matchs et ne peut pas être supprimé', 409);
+  // On protège aussi les incrustations : sans ce garde, la cascade Prisma les
+  // supprimerait silencieusement, effaçant des expositions déjà comptabilisées.
+  if (existing.contenus.length > 0 || existing.matchsTitre.length > 0 || existing.incrustations.length > 0) {
+    throw new AppError('Ce sponsor est référencé par des contenus, des matchs ou des incrustations et ne peut pas être supprimé', 409);
   }
   await prisma.sponsor.delete({ where: { id } });
 }

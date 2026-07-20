@@ -15,4 +15,8 @@ router.post('/', validate(createContenuSchema), asyncHandler(ctrl.create));
 router.patch('/:id', validate(updateContenuSchema), asyncHandler(ctrl.update));
 router.delete('/:id', validate(idParamSchema), asyncHandler(ctrl.remove));
 
+// Repli d'antenne (continuité) : les deux rôles gèrent la grille au quotidien
+router.post('/:id/repli', validate(idParamSchema), asyncHandler(ctrl.definirRepli));
+router.delete('/:id/repli', validate(idParamSchema), asyncHandler(ctrl.retirerRepli));
+
 export default router;

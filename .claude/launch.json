@@ -109,6 +109,13 @@
       "runtimeArgs": ["--prefix", "livrables/applications/ANTENN/frontend", "run", "dev"],
       "port": 3007,
       "autoPort": false
+    },
+    {
+      "name": "associotise-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/ASSOCOTISE/frontend", "run", "dev"],
+      "port": 3010,
+      "autoPort": false
     }
   ]
 }

@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarClock, Trophy, Handshake, Film, Sparkles, BarChart3, X, Tv } from 'lucide-react';
+import { CalendarClock, Trophy, Handshake, Film, Sparkles, BarChart3, RadioTower, X, Tv } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -12,6 +12,7 @@ const NAV = [
   { href: '/contenus', label: 'Contenus', icon: Film },
   { href: '/habillage', label: 'Habillage', icon: Sparkles },
   { href: '/rapports', label: 'Rapports', icon: BarChart3 },
+  { href: '/parametres', label: 'Chaîne', icon: RadioTower },
 ];
 
 export default function Sidebar() {

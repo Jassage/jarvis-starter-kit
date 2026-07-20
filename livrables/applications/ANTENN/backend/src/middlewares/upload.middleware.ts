@@ -2,6 +2,7 @@ import multer from 'multer';
 import path from 'path';
 import crypto from 'crypto';
 import fs from 'fs';
+import { AppError } from './errorHandler.middleware';
 
 // Stockage local sur disque (pas de compte cloud requis dans cet environnement) —
 // servi statiquement via /uploads (voir app.ts). urlFichier des Contenus reste un
@@ -9,25 +10,44 @@ import fs from 'fs';
 const sponsorsDir = path.join(__dirname, '../../uploads/sponsors');
 fs.mkdirSync(sponsorsDir, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, sponsorsDir),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${crypto.randomUUID()}${ext}`);
-  },
-});
+const chaineDir = path.join(__dirname, '../../uploads/chaine');
+fs.mkdirSync(chaineDir, { recursive: true });
+
+function diskStorageIn(dir: string) {
+  return multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, dir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `${crypto.randomUUID()}${ext}`);
+    },
+  });
+}
+
+const storage = diskStorageIn(sponsorsDir);
 
 function imageFilter(_req: unknown, file: Express.Multer.File, cb: multer.FileFilterCallback) {
-  const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/svg+xml'];
+  // SVG volontairement exclu : un SVG peut embarquer du JavaScript inline et le
+  // dossier /uploads est servi statiquement sans authentification — vecteur de XSS
+  // stocké. Les logos rasterisés (PNG/WebP/JPEG) couvrent le besoin sponsor.
+  const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
   if (allowed.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Format image non supporté. Utilisez JPEG, PNG, WebP ou SVG.'));
+    // AppError (extends Error) : remonte en 400 via errorHandler plutôt qu'en 500
+    // générique — un format refusé est une erreur du client, pas du serveur.
+    cb(new AppError('Format image non supporté. Utilisez JPEG, PNG ou WebP.', 400));
   }
 }
 
 export const uploadLogo = multer({
   storage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+// Logo d'identité de la chaîne (stockage séparé de celui des sponsors).
+export const uploadLogoChaine = multer({
+  storage: diskStorageIn(chaineDir),
   fileFilter: imageFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
