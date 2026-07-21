@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Tv, Radio, PlayCircle } from 'lucide-react';
+import { Tv, Radio, PlayCircle, History } from 'lucide-react';
 import Badge from '@/components/ui/Badge';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -56,9 +56,14 @@ export default function GuidePage() {
           </div>
           <span className="font-extrabold text-lg tracking-tight" style={{ color: 'var(--color-ink)' }}>{nomChaine}</span>
         </div>
-        <Link href="/regarder" className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-primary)' }}>
-          <PlayCircle className="w-4 h-4" /> Regarder le direct
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/replay" className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>
+            <History className="w-4 h-4" /> Replay
+          </Link>
+          <Link href="/regarder" className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-primary)' }}>
+            <PlayCircle className="w-4 h-4" /> Regarder le direct
+          </Link>
+        </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-4 sm:p-8">

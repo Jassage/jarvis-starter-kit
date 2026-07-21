@@ -50,6 +50,15 @@ enum SyncStatus {
   SYNCHRONISE
 }
 
+// Un replay n'est jamais public par accident : il naît BROUILLON et un opérateur le
+// publie explicitement (droits VOD à vérifier, URL d'enregistrement à saisir pour un
+// match). RETIRE conserve la fiche sans l'exposer.
+enum StatutReplay {
+  BROUILLON
+  PUBLIE
+  RETIRE
+}
+
 enum PositionOverlay {
   HAUT_GAUCHE
   HAUT_DROITE
@@ -66,6 +75,11 @@ enum PositionOverlay {
 // (singleton géré en service via getOrCreate).
 model ConfigChaine {
   id           String          @id @default(cuid())
+  // Verrou du singleton au niveau base : toujours `true`, contrainte d'unicité.
+  // Sans lui, deux appels concurrents à getConfig() sur une base neuve créent
+  // chacun leur ligne (findFirst ne voit rien, les deux insèrent) et le logo de
+  // chaîne apparaît ou disparaît selon la ligne que findFirst renvoie ensuite.
+  singleton    Boolean         @unique @default(true)
   nomChaine    String          @default("ANTENN")
   logoUrl      String?
   logoPosition PositionOverlay @default(HAUT_DROITE)
@@ -174,6 +188,7 @@ model Match {
   incrustations    IncrustationLogo[]
   bandeaux         BandeauSponsor[]
   diffusionLogs    DiffusionLog[]
+  replays          Replay[]
 
   @@map("matchs")
 }
@@ -199,6 +214,7 @@ model CreneauGrille {
   incrustations  IncrustationLogo[]
   bandeaux       BandeauSponsor[]
   diffusionLogs  DiffusionLog[]
+  replay         Replay?
 
   @@index([dateHeureDebut])
   @@index([dateHeureFin])
@@ -260,4 +276,39 @@ model DiffusionLog {
   @@index([creneauId])
   @@index([matchId])
   @@map("diffusion_logs")
+}
+
+// ─────────────────────────────────────────
+// REPLAY / VOD
+// ─────────────────────────────────────────
+
+// Ré-écoute à la demande d'un programme déjà passé à l'antenne. Comme pour Contenu,
+// ANTENN ne stocke ni ne transcode la vidéo : `urlVod` pointe vers un fichier déjà
+// hébergé (CDN pour un programme, enregistrement MediaMTX pour un match direct).
+// `creneauId` garde le lien avec ce qui a réellement été diffusé — c'est lui qui
+// permet de rejouer l'habillage sponsor du créneau d'origine sur le replay.
+model Replay {
+  id            String        @id @default(cuid())
+  titre         String
+  description   String?
+  urlVod        String
+  vignetteUrl   String?
+  dureeSecondes Int
+  statut        StatutReplay  @default(BROUILLON)
+  // Fenêtre de droits de diffusion (bornes optionnelles) : hors fenêtre, le replay
+  // disparaît du catalogue public de lui-même, sans intervention d'un opérateur.
+  disponibleDu  DateTime?
+  disponibleAu  DateTime?
+  nombreVues    Int           @default(0)
+  publieAt      DateTime?
+  // Un seul replay par créneau diffusé (les NULL multiples restent permis en Postgres).
+  creneauId     String?        @unique
+  creneau       CreneauGrille? @relation(fields: [creneauId], references: [id], onDelete: SetNull)
+  matchId       String?
+  match         Match?         @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([statut])
+  @@map("replays")
 }

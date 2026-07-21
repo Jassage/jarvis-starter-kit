@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Tv, CalendarDays } from 'lucide-react';
+import { Tv, CalendarDays, History } from 'lucide-react';
 import HlsPlayer from '@/components/player/HlsPlayer';
 import Overlay from '@/components/player/Overlay';
 import EpgPanel from '@/components/player/EpgPanel';
@@ -53,7 +53,10 @@ export default function RegarderPage() {
           <span className="font-extrabold text-lg tracking-tight" style={{ color: 'var(--color-ink)' }}>{nomChaine}</span>
         </div>
         <div className="flex items-center gap-4">
-          <Link href="/guide" className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>
+          <Link href="/replay" className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>
+            <History className="w-4 h-4" /> Replay
+          </Link>
+          <Link href="/guide" className="hidden sm:flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>
             <CalendarDays className="w-4 h-4" /> Guide des programmes
           </Link>
           <NetworkIndicator />

@@ -68,6 +68,8 @@ export default function RapportsPage() {
                 <th>Diffusions</th>
                 <th>Durée d'exposition</th>
                 <th>Vues estimées</th>
+                <th>Replays publiés</th>
+                <th>Vues replay</th>
               </tr>
             </thead>
             <tbody>
@@ -78,6 +80,10 @@ export default function RapportsPage() {
                   <td className="font-mono">{r.nombreDiffusions}</td>
                   <td className="font-mono">{formatDuree(r.dureeExpositionSecondes)}</td>
                   <td className="font-mono">{r.nombreVuesEstimees.toLocaleString('fr-FR')}</td>
+                  {/* Exposition replay comptée à part : une vue à la demande n'est pas
+                      une diffusion linéaire, les deux ne se valorisent pas pareil. */}
+                  <td className="font-mono">{(r.nombreReplaysPublies ?? 0).toLocaleString('fr-FR')}</td>
+                  <td className="font-mono">{(r.vuesReplay ?? 0).toLocaleString('fr-FR')}</td>
                 </tr>
               ))}
             </tbody>

@@ -184,9 +184,39 @@ async function main() {
     },
   });
 
-  // Identité de la chaîne (singleton) — logo à uploader depuis la régie.
-  await prisma.configChaine.create({
-    data: { nomChaine: 'ANTENN Télé', logoActif: true },
+  // Catalogue replay : un programme déjà diffusé publié en VOD (avec sa fenêtre de
+  // droits ouverte) et un brouillon pas encore arbitré par la régie.
+  await prisma.replay.create({
+    data: {
+      titre: 'Journal du soir — Rediffusion',
+      description: 'L\'édition du soir, disponible en rattrapage.',
+      urlVod: contenuProgramme1.urlFichier,
+      dureeSecondes: 1800,
+      statut: 'PUBLIE',
+      publieAt: new Date(startOfHour.getTime() - 30 * 60 * 1000),
+      disponibleAu: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+      nombreVues: 128,
+      creneauId: creneauPasse.id,
+    },
+  });
+
+  await prisma.replay.create({
+    data: {
+      titre: 'Magazine culturel Ayiti — Épisode précédent',
+      description: 'En attente de validation des droits VOD.',
+      urlVod: contenuProgramme2.urlFichier,
+      dureeSecondes: 2700,
+      statut: 'BROUILLON',
+    },
+  });
+
+  // Identité de la chaîne (singleton) — logo à uploader depuis la régie. Upsert sur
+  // le verrou `singleton` : la config a pu être auto-créée par un premier appel API
+  // avant le passage du seed, auquel cas on met à jour au lieu d'ajouter une ligne.
+  await prisma.configChaine.upsert({
+    where: { singleton: true },
+    update: { nomChaine: 'ANTENN Télé', logoActif: true },
+    create: { nomChaine: 'ANTENN Télé', logoActif: true },
   });
 
   // Grille synchronisée sur J+1 et J+2 pour peupler le guide des programmes multi-jours.

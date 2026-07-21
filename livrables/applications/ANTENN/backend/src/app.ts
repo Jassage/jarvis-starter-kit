@@ -18,6 +18,7 @@ import habillageRoutes from './modules/habillage/habillage.routes';
 import rapportsRoutes from './modules/rapports/rapports.routes';
 import epgRoutes from './modules/epg/epg.routes';
 import configRoutes from './modules/config/config.routes';
+import replayRoutes from './modules/replay/replay.routes';
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use('/api/habillage', habillageRoutes);
 app.use('/api/rapports', rapportsRoutes);
 app.use('/api/epg', epgRoutes);
 app.use('/api/config', configRoutes);
+app.use('/api/replay', replayRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'ANTENN API', version: '1.0.0', timestamp: new Date().toISOString() });

@@ -13,6 +13,9 @@ fs.mkdirSync(sponsorsDir, { recursive: true });
 const chaineDir = path.join(__dirname, '../../uploads/chaine');
 fs.mkdirSync(chaineDir, { recursive: true });
 
+const replayDir = path.join(__dirname, '../../uploads/replay');
+fs.mkdirSync(replayDir, { recursive: true });
+
 function diskStorageIn(dir: string) {
   return multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, dir),
@@ -48,6 +51,14 @@ export const uploadLogo = multer({
 // Logo d'identité de la chaîne (stockage séparé de celui des sponsors).
 export const uploadLogoChaine = multer({
   storage: diskStorageIn(chaineDir),
+  fileFilter: imageFilter,
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+// Vignette de replay (image d'illustration du catalogue VOD). Même filtre image que
+// les logos — la vidéo elle-même n'est jamais uploadée ici, seule son URL est stockée.
+export const uploadVignette = multer({
+  storage: diskStorageIn(replayDir),
   fileFilter: imageFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });

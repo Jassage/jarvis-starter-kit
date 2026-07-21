@@ -41,6 +41,23 @@ export async function getRapportSponsors(from?: string, to?: string) {
       const dureeExpositionSecondes = logs.reduce((sum, l) => sum + l.dureeVisionneeEstimee, 0);
       const nombreVuesEstimees = logs.reduce((sum, l) => sum + l.nombreVuesEstimees, 0);
 
+      // Exposition en replay : les vues à la demande des programmes publiés portant
+      // une exposition de ce sponsor. Comptée à part, jamais additionnée aux vues
+      // antenne — une vue VOD et une diffusion linéaire ne se valorisent pas pareil.
+      const replays = await prisma.replay.findMany({
+        where: {
+          statut: 'PUBLIE',
+          OR: [
+            { creneau: { contenuId: { in: contenuIds } } },
+            { creneauId: { in: creneauIdsIncrustation } },
+            { matchId: { in: matchIds } },
+          ],
+        },
+        select: { nombreVues: true },
+      });
+      const nombreReplaysPublies = replays.length;
+      const vuesReplay = replays.reduce((sum, r) => sum + r.nombreVues, 0);
+
       return {
         sponsorId: sponsor.id,
         nomSponsor: sponsor.nomSponsor,
@@ -48,6 +65,8 @@ export async function getRapportSponsors(from?: string, to?: string) {
         nombreDiffusions,
         dureeExpositionSecondes,
         nombreVuesEstimees,
+        nombreReplaysPublies,
+        vuesReplay,
       };
     })
   );

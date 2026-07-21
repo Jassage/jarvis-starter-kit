@@ -9,6 +9,9 @@ export interface RapportSponsor {
   nombreDiffusions: number;
   dureeExpositionSecondes: number;
   nombreVuesEstimees: number;
+  // Exposition en replay, tenue à part des vues antenne (jamais additionnées).
+  nombreReplaysPublies: number;
+  vuesReplay: number;
 }
 
 interface RapportState {

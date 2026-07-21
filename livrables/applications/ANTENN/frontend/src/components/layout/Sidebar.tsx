@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarClock, Trophy, Handshake, Film, Sparkles, BarChart3, RadioTower, X, Tv } from 'lucide-react';
+import { CalendarClock, Trophy, Handshake, Film, Sparkles, BarChart3, RadioTower, History, X, Tv } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -11,6 +11,9 @@ const NAV = [
   { href: '/sponsors', label: 'Sponsors', icon: Handshake },
   { href: '/contenus', label: 'Contenus', icon: Film },
   { href: '/habillage', label: 'Habillage', icon: Sparkles },
+  // Route régie distincte de la page publique /replay (deux pages ne peuvent pas
+  // résoudre le même chemin, même dans des groupes de routes différents).
+  { href: '/catalogue', label: 'Replay', icon: History },
   { href: '/rapports', label: 'Rapports', icon: BarChart3 },
   { href: '/parametres', label: 'Chaîne', icon: RadioTower },
 ];

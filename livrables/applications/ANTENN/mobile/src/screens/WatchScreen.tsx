@@ -12,13 +12,14 @@ import BandeauOverlay from '../components/BandeauOverlay';
 import EpgList from '../components/EpgList';
 import NetworkIndicator from '../components/NetworkIndicator';
 import GuideScreen from './GuideScreen';
+import ReplayScreen from './ReplayScreen';
 
 const REFRESH_INTERVAL_MS = 60_000;
 
 export default function WatchScreen() {
   const [epg, setEpg] = useState<EpgResponse | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [vue, setVue] = useState<'direct' | 'guide'>('direct');
+  const [vue, setVue] = useState<'direct' | 'guide' | 'replay'>('direct');
 
   const fetchEpg = useCallback(async () => {
     try {
@@ -48,6 +49,9 @@ export default function WatchScreen() {
   if (vue === 'guide') {
     return <GuideScreen onBack={() => setVue('direct')} />;
   }
+  if (vue === 'replay') {
+    return <ReplayScreen onBack={() => setVue('direct')} />;
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -61,6 +65,10 @@ export default function WatchScreen() {
             <Text style={styles.brandText}>{nomChaine}</Text>
           </View>
           <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.guideBtn} onPress={() => setVue('replay')}>
+              <Ionicons name="time-outline" size={16} color={colors.ink2} />
+              <Text style={styles.guideBtnText}>Replay</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.guideBtn} onPress={() => setVue('guide')}>
               <Ionicons name="calendar-outline" size={16} color={colors.ink2} />
               <Text style={styles.guideBtnText}>Guide</Text>

@@ -11,7 +11,9 @@ const PAGES: Record<string, { title: string; subtitle: string }> = {
   '/sponsors': { title: 'Sponsors', subtitle: 'Contrats, packages et contacts' },
   '/contenus': { title: 'Contenus', subtitle: 'Vidéos, spots publicitaires et habillages' },
   '/habillage': { title: 'Habillage publicitaire', subtitle: 'Incrustations logo et bandeaux déroulants' },
+  '/catalogue': { title: 'Replay / VOD', subtitle: 'Catalogue de rattrapage des programmes déjà diffusés' },
   '/rapports': { title: 'Rapports de diffusion', subtitle: 'Exposition par sponsor, à des fins de facturation' },
+  '/parametres': { title: 'Chaîne', subtitle: 'Identité de la chaîne et logo permanent à l\'antenne' },
 };
 
 export default function Header() {
