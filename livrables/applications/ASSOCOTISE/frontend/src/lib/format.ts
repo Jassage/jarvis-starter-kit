@@ -2,15 +2,28 @@ const montantFormatter = new Intl.NumberFormat('fr-HT', { maximumFractionDigits:
 const dateFormatter = new Intl.DateTimeFormat('fr-HT', { day: '2-digit', month: 'short', year: 'numeric' });
 const moisFormatter = new Intl.DateTimeFormat('fr-HT', { month: 'long', year: 'numeric' });
 
+/**
+ * Devise affichée par `formatMontant`. Tenue à jour par le ParametresContext plutôt
+ * que passée en argument à chacun des ~40 appels de formatage de l'application :
+ * une instance ne sert qu'une seule association, donc une seule devise à la fois.
+ * Les composants se re-rendent au changement de paramètres et relisent donc la
+ * nouvelle valeur.
+ */
+let deviseCourante = 'HTG';
+
+export function definirDeviseCourante(devise: string) {
+  deviseCourante = devise || 'HTG';
+}
+
 export function formatMontant(value: number): string {
-  return `${montantFormatter.format(value)} HTG`;
+  return `${montantFormatter.format(value)} ${deviseCourante}`;
 }
 
 export function formatMontantCompact(value: number): string {
   const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) return `${montantFormatter.format(value / 1_000_000_000)} Md HTG`;
-  if (abs >= 1_000_000) return `${montantFormatter.format(value / 1_000_000)} M HTG`;
-  if (abs >= 1_000) return `${montantFormatter.format(value / 1_000)} K HTG`;
+  if (abs >= 1_000_000_000) return `${montantFormatter.format(value / 1_000_000_000)} Md ${deviseCourante}`;
+  if (abs >= 1_000_000) return `${montantFormatter.format(value / 1_000_000)} M ${deviseCourante}`;
+  if (abs >= 1_000) return `${montantFormatter.format(value / 1_000)} K ${deviseCourante}`;
   return formatMontant(value);
 }
 

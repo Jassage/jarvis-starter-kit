@@ -4,9 +4,9 @@ import { Modal } from '../ui/Modal';
 import { Field, Input, Select, Textarea } from '../ui/Field';
 import { saisirCotisation, uploaderPreuveCotisation } from '../../services/cotisations.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { useParametres } from '../../contexts/ParametresContext';
+import { formatMontant } from '../../lib/format';
 import type { Cotisation, Membre, MoyenPaiement } from '../../types';
-
-const MONTANT_MINIMUM = 500;
 
 export function CotisationModal({
   open,
@@ -25,10 +25,11 @@ export function CotisationModal({
   valeursActuelles?: Cotisation;
 }) {
   const { profil } = useAuth();
+  const { montantCotisation, devise } = useParametres();
   const correction = !!valeursActuelles;
   const [memberId, setMemberId] = useState(membreParDefaut ?? '');
   const [mois, setMois] = useState(moisParDefaut);
-  const [montant, setMontant] = useState(valeursActuelles?.montant ?? MONTANT_MINIMUM);
+  const [montant, setMontant] = useState(valeursActuelles?.montant ?? montantCotisation);
   const [date, setDate] = useState(valeursActuelles?.date ?? new Date().toISOString().slice(0, 10));
   const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiement>(valeursActuelles?.moyenPaiement ?? 'cash');
   const [note, setNote] = useState(valeursActuelles?.note ?? '');
@@ -39,8 +40,8 @@ export function CotisationModal({
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setErreur(null);
-    if (montant < MONTANT_MINIMUM) {
-      setErreur(`Le montant minimum est de ${MONTANT_MINIMUM} HTG.`);
+    if (montant < montantCotisation) {
+      setErreur(`Le montant minimum est de ${formatMontant(montantCotisation)}.`);
       return;
     }
     if (!profil) return;
@@ -90,16 +91,16 @@ export function CotisationModal({
         <Field label="Mois concerné" required>
           <Input type="month" required value={mois} onChange={(e) => setMois(e.target.value)} />
         </Field>
-        <Field label="Montant payé (HTG)" required>
+        <Field label={`Montant payé (${devise})`} required>
           <Input
             type="number"
-            min={0}
+            min={1}
             step="1"
             required
             value={montant}
             onChange={(e) => setMontant(Number(e.target.value))}
           />
-          <p className="mt-1 text-xs text-[var(--color-muted)]">Minimum {MONTANT_MINIMUM} HTG.</p>
+          <p className="mt-1 text-xs text-[var(--color-muted)]">Minimum {formatMontant(montantCotisation)}.</p>
         </Field>
         <Field label="Date du paiement" required>
           <Input type="date" required value={date} onChange={(e) => setDate(e.target.value)} />

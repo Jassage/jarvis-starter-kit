@@ -13,15 +13,31 @@ import type { UtilisateurBureau } from '../../types';
 const labelRole = { secretaire: 'Secrétaire', responsable_finances: 'Responsable Finances' };
 
 export function UtilisateursListe() {
-  const { profil } = useAuth();
+  const { profil, envoyerReinitialisation } = useAuth();
   const [utilisateurs, setUtilisateurs] = useState<UtilisateurBureau[]>([]);
   const [modalOuverte, setModalOuverte] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => ecouterUtilisateurs(setUtilisateurs), []);
+
+  async function onReinitialiser(u: UtilisateurBureau) {
+    if (!confirm(`Envoyer un lien de réinitialisation de mot de passe à ${u.email} ?`)) return;
+    setMessage(null);
+    try {
+      await envoyerReinitialisation(u.email);
+      setMessage(`Lien de réinitialisation envoyé à ${u.email}.`);
+    } catch {
+      setMessage(`Envoi impossible pour ${u.email}.`);
+    }
+  }
 
   return (
     <div className="space-y-4">
       <PageToolbar actionLabel="Nouveau compte" onAction={() => setModalOuverte(true)} />
+
+      {message && (
+        <p className="rounded-lg bg-[var(--color-info-bg)] px-3 py-2 text-sm text-[var(--color-info)]">{message}</p>
+      )}
 
       {utilisateurs.length === 0 ? (
         <EmptyState icon={<UserCog size={32} />} title="Aucun compte du bureau" />
@@ -48,14 +64,22 @@ export function UtilisateursListe() {
                   <Badge tone={u.actif ? 'success' : 'neutral'}>{u.actif ? 'Actif' : 'Désactivé'}</Badge>
                 </Td>
                 <Td>
-                  {u.id !== profil?.id && (
+                  <div className="flex items-center justify-end gap-3">
                     <button
-                      onClick={() => changerStatutUtilisateur(u.id, !u.actif)}
+                      onClick={() => onReinitialiser(u)}
                       className="text-xs font-medium text-[var(--color-brand)] hover:underline"
                     >
-                      {u.actif ? 'Désactiver' : 'Réactiver'}
+                      Réinitialiser le mot de passe
                     </button>
-                  )}
+                    {u.id !== profil?.id && (
+                      <button
+                        onClick={() => changerStatutUtilisateur(u.id, !u.actif)}
+                        className="text-xs font-medium text-[var(--color-brand)] hover:underline"
+                      >
+                        {u.actif ? 'Désactiver' : 'Réactiver'}
+                      </button>
+                    )}
+                  </div>
                 </Td>
               </Tr>
             ))}

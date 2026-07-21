@@ -6,11 +6,12 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Input } from '../components/ui/Field';
 
 export function Login() {
-  const { connecter, erreurCompteInactif, profil } = useAuth();
+  const { connecter, envoyerReinitialisation, erreurCompteInactif, profil } = useAuth();
   const { theme, basculer } = useTheme();
   const [email, setEmail] = useState('');
   const [motDePasse, setMotDePasse] = useState('');
   const [erreur, setErreur] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [envoi, setEnvoi] = useState(false);
 
   if (profil) return <Navigate to="/" replace />;
@@ -18,6 +19,7 @@ export function Login() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setErreur(null);
+    setInfo(null);
     setEnvoi(true);
     try {
       await connecter(email, motDePasse);
@@ -26,6 +28,24 @@ export function Login() {
     } finally {
       setEnvoi(false);
     }
+  }
+
+  async function onMotDePasseOublie() {
+    setErreur(null);
+    setInfo(null);
+    if (!email) {
+      setErreur("Saisis d'abord ton email, puis clique sur « Mot de passe oublié ».");
+      return;
+    }
+    setEnvoi(true);
+    try {
+      await envoyerReinitialisation(email);
+    } finally {
+      setEnvoi(false);
+    }
+    // Message identique que le compte existe ou non : ne jamais révéler quels emails
+    // sont enregistrés dans l'association.
+    setInfo('Si un compte existe pour cet email, un lien de réinitialisation vient d\'être envoyé.');
   }
 
   return (
@@ -64,6 +84,9 @@ export function Login() {
         {erreur && (
           <p className="mb-4 rounded-lg border border-red-300/30 bg-red-500/20 px-3 py-2 text-sm text-white">{erreur}</p>
         )}
+        {info && (
+          <p className="mb-4 rounded-lg border border-white/25 bg-white/15 px-3 py-2 text-sm text-white">{info}</p>
+        )}
 
         <form onSubmit={onSubmit}>
           <div className="mb-4">
@@ -94,6 +117,15 @@ export function Login() {
             {envoi ? 'Connexion…' : 'Se connecter'}
           </button>
         </form>
+
+        <button
+          type="button"
+          onClick={onMotDePasseOublie}
+          disabled={envoi}
+          className="mt-4 w-full text-center text-xs text-white/70 underline-offset-2 transition hover:text-white hover:underline disabled:opacity-60"
+        >
+          Mot de passe oublié ?
+        </button>
       </div>
     </div>
   );

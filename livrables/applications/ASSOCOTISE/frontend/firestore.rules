@@ -31,37 +31,264 @@ service cloud.firestore {
       return estSecretaire() || estResponsableFinances();
     }
 
+    // --- Validation des données -------------------------------------------------
+    // L'application n'a aucun backend : n'importe qui disposant d'un compte du bureau
+    // peut écrire directement via le SDK sans passer par les formulaires React.
+    // Ces fonctions sont donc le seul endroit où la forme des documents est réellement
+    // garantie (le montant minimum, lui, est un paramètre métier configurable et reste
+    // vérifié côté application — voir settings/association).
+
+    function texteNonVide(valeur, maxLongueur) {
+      return valeur is string && valeur.size() > 0 && valeur.size() <= maxLongueur;
+    }
+
+    function estDateIso(valeur) {
+      return valeur is string && valeur.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function estMoisIso(valeur) {
+      return valeur is string && valeur.matches('^[0-9]{4}-[0-9]{2}$');
+    }
+
+    function estMontant(valeur) {
+      return valeur is number && valeur > 0 && valeur <= 100000000;
+    }
+
+    function estUrlHttps(valeur) {
+      return valeur is string && valeur.matches('^https?://.*');
+    }
+
+    // Un exercice clôturé fige définitivement son année : plus aucune écriture, correction
+    // ou annulation n'y est possible. Une année sans document d'exercice est ouverte.
+    function exerciceOuvert(annee) {
+      return !exists(/databases/$(database)/documents/exercices/$(annee))
+             || get(/databases/$(database)/documents/exercices/$(annee)).data.statut != 'cloture';
+    }
+
     // Comptes internes du bureau (secretaire / responsable_finances)
+    function donneesUtilisateurValides(d) {
+      return d.keys().hasAll(['nom', 'email', 'role', 'actif', 'creePar', 'creeLe'])
+             && d.keys().hasOnly(['nom', 'email', 'role', 'actif', 'creePar', 'creeLe'])
+             && texteNonVide(d.nom, 120)
+             && texteNonVide(d.email, 200)
+             && d.role in ['secretaire', 'responsable_finances']
+             && d.actif is bool
+             && texteNonVide(d.creePar, 128)
+             && texteNonVide(d.creeLe, 40);
+    }
+
     match /users/{uid} {
       allow read: if utilisateurConnecte() && (request.auth.uid == uid || estMembreDuBureau());
-      allow create: if estResponsableFinances();
+
+      allow create: if estResponsableFinances()
+                    && donneesUtilisateurValides(request.resource.data)
+                    && request.resource.data.creePar == request.auth.uid;
+
+      // Seuls le nom, le rôle et l'activation sont modifiables. Un responsable ne peut
+      // ni changer son propre rôle ni se désactiver lui-même (anti auto-verrouillage :
+      // il resterait sinon possible de laisser l'association sans aucun administrateur).
       allow update: if estResponsableFinances()
-                    && !('role' in request.resource.data.diff(resource.data).affectedKeys() && uid == request.auth.uid);
+                    && donneesUtilisateurValides(request.resource.data)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nom', 'role', 'actif'])
+                    && (uid != request.auth.uid
+                        || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'actif']));
+
       allow delete: if false;
     }
 
     // Membres cotisants
+    function donneesMembreValides(d) {
+      return d.keys().hasAll(['nom', 'telephone', 'dateAdhesion', 'statut'])
+             && d.keys().hasOnly(['nom', 'telephone', 'email', 'dateAdhesion', 'statut', 'photoUrl'])
+             && texteNonVide(d.nom, 120)
+             && texteNonVide(d.telephone, 40)
+             && (!('email' in d) || d.email is string)
+             && estDateIso(d.dateAdhesion)
+             && d.statut in ['actif', 'inactif']
+             && (!('photoUrl' in d) || estUrlHttps(d.photoUrl));
+    }
+
     match /members/{memberId} {
       allow read: if estMembreDuBureau();
-      allow create, update: if estMembreDuBureau();
+      allow create, update: if estMembreDuBureau() && donneesMembreValides(request.resource.data);
       allow delete: if false; // désactivation via champ statut, jamais de suppression définitive
     }
 
     // Cotisations : append-only, aucune correction n'écrase un document existant.
     // Seule exception : le champ `annulee`, réservé au responsable finances (aucun autre champ modifiable).
+    function donneesCotisationValides(d) {
+      return d.keys().hasAll(['memberId', 'mois', 'montant', 'date', 'moyenPaiement', 'saisiPar', 'saisiLe'])
+             && d.keys().hasOnly(['memberId', 'mois', 'montant', 'date', 'moyenPaiement', 'note',
+                                  'preuveUrl', 'annulee', 'annuleePar', 'annuleeLe',
+                                  'saisiPar', 'saisiLe', 'corrige'])
+             && texteNonVide(d.memberId, 128)
+             && exists(/databases/$(database)/documents/members/$(d.memberId))
+             && estMoisIso(d.mois)
+             && estMontant(d.montant)
+             && estDateIso(d.date)
+             && d.moyenPaiement in ['cash', 'moncash', 'natcash', 'virement']
+             && (!('note' in d) || (d.note is string && d.note.size() <= 500))
+             && (!('preuveUrl' in d) || estUrlHttps(d.preuveUrl))
+             && (!('annulee' in d) || d.annulee is bool)
+             && texteNonVide(d.saisiLe, 40)
+             && (!('corrige' in d) || texteNonVide(d.corrige, 128));
+    }
+
     match /contributions/{contribId} {
       allow read: if estMembreDuBureau();
+
       allow create: if estMembreDuBureau()
-                    && request.resource.data.saisiPar == request.auth.uid;
+                    && donneesCotisationValides(request.resource.data)
+                    && request.resource.data.saisiPar == request.auth.uid
+                    && exerciceOuvert(request.resource.data.mois[0:4]);
+
+      // Une annulation doit toujours dire qui l'a faite et quand, pour être lisible dans
+      // le journal d'audit (le seul champ `annulee` ne portait aucune trace).
       allow update: if estResponsableFinances()
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['annulee']);
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['annulee', 'annuleePar', 'annuleeLe'])
+                    && request.resource.data.annulee is bool
+                    && request.resource.data.annuleePar == request.auth.uid
+                    && texteNonVide(request.resource.data.annuleeLe, 40)
+                    && exerciceOuvert(resource.data.mois[0:4]);
+
       allow delete: if false;
     }
 
-    // Dépenses : réservées au responsable finances
+    // Dépenses : réservées au responsable finances.
+    // Modifiables (contrairement aux cotisations, qui engagent un tiers), mais l'auteur et
+    // l'horodatage de la saisie d'origine ne peuvent jamais être réécrits, et toute
+    // modification de fond doit porter un `modifieLe`.
+    function donneesDepenseValides(d) {
+      return d.keys().hasAll(['description', 'categorie', 'montant', 'date', 'saisiPar', 'saisiLe'])
+             && d.keys().hasOnly(['description', 'categorie', 'montant', 'date', 'justificatifUrl',
+                                  'annulee', 'annuleePar', 'annuleeLe',
+                                  'saisiPar', 'saisiLe', 'modifieLe'])
+             && texteNonVide(d.description, 300)
+             && d.categorie in ['materiel', 'logistique', 'administratif', 'projet_business', 'autre']
+             && estMontant(d.montant)
+             && estDateIso(d.date)
+             && (!('justificatifUrl' in d) || estUrlHttps(d.justificatifUrl))
+             && (!('annulee' in d) || d.annulee is bool)
+             && texteNonVide(d.saisiLe, 40)
+             && (!('modifieLe' in d) || texteNonVide(d.modifieLe, 40));
+    }
+
     match /expenses/{expenseId} {
       allow read: if estMembreDuBureau();
-      allow create, update: if estResponsableFinances();
+
+      allow create: if estResponsableFinances()
+                    && donneesDepenseValides(request.resource.data)
+                    && request.resource.data.saisiPar == request.auth.uid
+                    && exerciceOuvert(request.resource.data.date[0:4]);
+
+      allow update: if estResponsableFinances()
+                    && donneesDepenseValides(request.resource.data)
+                    && request.resource.data.saisiPar == resource.data.saisiPar
+                    && request.resource.data.saisiLe == resource.data.saisiLe
+                    && exerciceOuvert(resource.data.date[0:4])
+                    && exerciceOuvert(request.resource.data.date[0:4])
+                    && (
+                      // annulation ou réactivation : toujours signée et datée
+                      (request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['annulee', 'annuleePar', 'annuleeLe'])
+                       && request.resource.data.annuleePar == request.auth.uid
+                       && texteNonVide(request.resource.data.annuleeLe, 40))
+                      // correction de fond : doit laisser une trace
+                      || request.resource.data.diff(resource.data).affectedKeys().hasAny(['modifieLe'])
+                    );
+
+      allow delete: if false;
+    }
+
+    // Paramètres de l'association : document unique `settings/association`.
+    // Lisible par tout le bureau (le montant de cotisation pilote l'affichage des retards),
+    // modifiable par le seul responsable finances.
+    function donneesParametresValides(d) {
+      return d.keys().hasAll(['nomAssociation', 'montantCotisation', 'devise', 'indicatifPays',
+                              'modeleRelance', 'majPar', 'majLe'])
+             && d.keys().hasOnly(['nomAssociation', 'montantCotisation', 'devise', 'indicatifPays',
+                                  'modeleRelance', 'majPar', 'majLe'])
+             && texteNonVide(d.nomAssociation, 120)
+             && estMontant(d.montantCotisation)
+             && texteNonVide(d.devise, 8)
+             && d.indicatifPays.matches('^[0-9]{1,4}$')
+             && texteNonVide(d.modeleRelance, 1000)
+             && texteNonVide(d.majPar, 128)
+             && texteNonVide(d.majLe, 40);
+    }
+
+    // Relances : journal append-only de ce qui a été envoyé (l'envoi lui-même se fait via
+    // WhatsApp ou le client mail, hors application). Rien n'est jamais modifié ni supprimé,
+    // pour que l'historique des rappels reste opposable en assemblée.
+    function donneesRelanceValides(d) {
+      return d.keys().hasAll(['memberId', 'mois', 'canal', 'envoyeePar', 'envoyeeLe'])
+             && d.keys().hasOnly(['memberId', 'mois', 'canal', 'envoyeePar', 'envoyeeLe'])
+             && texteNonVide(d.memberId, 128)
+             && exists(/databases/$(database)/documents/members/$(d.memberId))
+             && estMoisIso(d.mois)
+             && d.canal in ['whatsapp', 'email']
+             && texteNonVide(d.envoyeeLe, 40);
+    }
+
+    match /reminders/{relanceId} {
+      allow read: if estMembreDuBureau();
+      allow create: if estMembreDuBureau()
+                    && donneesRelanceValides(request.resource.data)
+                    && request.resource.data.envoyeePar == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Exercices comptables annuels. Clôturer fige l'année (voir exerciceOuvert) et reporte
+    // le solde final sur l'exercice suivant.
+    function donneesExerciceValides(d, annee) {
+      return d.keys().hasAll(['annee', 'statut', 'soldeReporte'])
+             && d.keys().hasOnly(['annee', 'statut', 'soldeReporte', 'totalCotise', 'totalDepense',
+                                  'soldeFinal', 'clotureLe', 'cloturePar', 'rouvertLe', 'rouvertPar'])
+             && d.annee == annee
+             && d.annee.matches('^[0-9]{4}$')
+             && d.statut in ['ouvert', 'cloture']
+             && d.soldeReporte is number
+             && (!('totalCotise' in d) || d.totalCotise is number)
+             && (!('totalDepense' in d) || d.totalDepense is number)
+             && (!('soldeFinal' in d) || d.soldeFinal is number)
+             && (!('clotureLe' in d) || texteNonVide(d.clotureLe, 40))
+             && (!('rouvertLe' in d) || texteNonVide(d.rouvertLe, 40));
+    }
+
+    match /exercices/{annee} {
+      allow read: if estMembreDuBureau();
+
+      // Une clôture doit toujours être signée par celui qui la prononce, de même qu'une
+      // réouverture : ce sont les deux opérations les plus lourdes de conséquence de l'app.
+      // Les signatures antérieures restent en place et ne sont vérifiées que si elles changent,
+      // sinon un second responsable ne pourrait plus toucher un exercice signé par un autre.
+      allow create: if estResponsableFinances()
+                    && donneesExerciceValides(request.resource.data, annee)
+                    && !('rouvertPar' in request.resource.data)
+                    && (request.resource.data.statut != 'cloture'
+                        || (request.resource.data.cloturePar == request.auth.uid
+                            && texteNonVide(request.resource.data.clotureLe, 40)));
+
+      allow update: if estResponsableFinances()
+                    && donneesExerciceValides(request.resource.data, annee)
+                    && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['cloturePar'])
+                        || request.resource.data.cloturePar == request.auth.uid)
+                    && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['rouvertPar'])
+                        || request.resource.data.rouvertPar == request.auth.uid)
+                    && (request.resource.data.statut != 'cloture'
+                        || (request.resource.data.cloturePar == request.auth.uid
+                            && texteNonVide(request.resource.data.clotureLe, 40)));
+
+      allow delete: if false;
+    }
+
+    match /settings/{docId} {
+      allow read: if estMembreDuBureau();
+      allow create, update: if estResponsableFinances()
+                            && docId == 'association'
+                            && donneesParametresValides(request.resource.data)
+                            && request.resource.data.majPar == request.auth.uid;
       allow delete: if false;
     }
   }

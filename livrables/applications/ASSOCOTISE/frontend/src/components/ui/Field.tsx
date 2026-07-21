@@ -1,10 +1,20 @@
-import { Children, isValidElement, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useId,
+  type InputHTMLAttributes,
+  type ReactElement,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from 'react';
 import { Listbox, Transition } from '@headlessui/react';
 import { Check, ChevronDown } from 'lucide-react';
 
-function Label({ label, required }: { label: string; required?: boolean }) {
+function Label({ id, label, required }: { id: string; label: string; required?: boolean }) {
   return (
-    <label className="mb-1.5 block text-sm font-medium text-[var(--color-ink)]">
+    <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-[var(--color-ink)]">
       {label} {required && <span className="text-[var(--color-danger)]">*</span>}
     </label>
   );
@@ -22,10 +32,29 @@ export function Field({
   required?: boolean;
   children: ReactNode;
 }) {
+  const id = useId();
+
+  // Le libellé est rattaché au premier champ natif rendu par le Field (aucun ne portait
+  // d'identifiant auparavant : cliquer sur un libellé ne focalisait rien et les lecteurs
+  // d'écran annonçaient un champ anonyme). Un enfant qui fixe déjà son propre `id` est
+  // laissé intact, et les enfants non natifs (Select Headless UI) sont ignorés.
+  let idAttribue = false;
+  const enfants = Children.map(children, (enfant) => {
+    if (idAttribue || !isValidElement(enfant)) return enfant;
+    const props = enfant.props as { id?: string };
+    if (props.id) {
+      idAttribue = true;
+      return enfant;
+    }
+    if (enfant.type !== Input && enfant.type !== Textarea) return enfant;
+    idAttribue = true;
+    return cloneElement(enfant as ReactElement<{ id?: string }>, { id });
+  });
+
   return (
     <div className="mb-4">
-      <Label label={label} required={required} />
-      {children}
+      <Label id={id} label={label} required={required} />
+      {enfants}
     </div>
   );
 }

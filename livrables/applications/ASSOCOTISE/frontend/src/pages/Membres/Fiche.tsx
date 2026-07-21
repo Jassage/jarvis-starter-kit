@@ -6,16 +6,16 @@ import { Badge } from '../../components/ui/Badge';
 import { Table, Th, Td, Tr } from '../../components/ui/Table';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { MembreModal } from '../../components/membres/MembreModal';
+import { useParametres } from '../../contexts/ParametresContext';
 import { ecouterMembres, changerStatutMembre } from '../../services/membres.service';
-import { listerCotisationsMembre } from '../../services/cotisations.service';
+import { ecouterCotisationsMembre } from '../../services/cotisations.service';
 import { formatDate, formatMoisLabel, formatMontant, moisCourant } from '../../lib/format';
 import type { Cotisation, Membre } from '../../types';
-
-const MONTANT_MINIMUM = 500;
 
 export function MembreFiche() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { montantCotisation } = useParametres();
   const [membres, setMembres] = useState<Membre[]>([]);
   const [cotisations, setCotisations] = useState<Cotisation[]>([]);
   const [modalOuverte, setModalOuverte] = useState(false);
@@ -23,11 +23,14 @@ export function MembreFiche() {
 
   useEffect(() => ecouterMembres(setMembres), []);
 
+  // Écoute temps réel (et non un chargement unique) : une cotisation saisie depuis
+  // un autre écran doit apparaître ici sans rechargement de la page.
   useEffect(() => {
     if (!id) return;
-    listerCotisationsMembre(id)
-      .then(setCotisations)
-      .finally(() => setChargement(false));
+    return ecouterCotisationsMembre(id, (liste) => {
+      setCotisations(liste);
+      setChargement(false);
+    });
   }, [id]);
 
   const membre = membres.find((m) => m.id === id);
@@ -54,7 +57,7 @@ export function MembreFiche() {
   const cotisationCourante = (liste: Cotisation[]) => liste.find((c) => !c.annulee);
   const aJourCeMois = parMois.find(([mois]) => mois === moisCourant());
   const montantCeMois = aJourCeMois ? cotisationCourante(aJourCeMois[1])?.montant ?? 0 : 0;
-  const estAJour = montantCeMois >= MONTANT_MINIMUM;
+  const estAJour = montantCeMois >= montantCotisation;
 
   if (chargement) return <p className="text-[var(--color-muted)]">Chargement…</p>;
   if (!membre) return <EmptyState title="Membre introuvable" />;
@@ -133,9 +136,9 @@ export function MembreFiche() {
                       {courant ? (
                         <>
                           {formatMontant(courant.montant)}
-                          {courant.montant > MONTANT_MINIMUM && (
+                          {courant.montant > montantCotisation && (
                             <span className="ml-1 text-xs text-[var(--color-brand)]">
-                              (+{formatMontant(courant.montant - MONTANT_MINIMUM)} de surplus)
+                              (+{formatMontant(courant.montant - montantCotisation)} de surplus)
                             </span>
                           )}
                         </>

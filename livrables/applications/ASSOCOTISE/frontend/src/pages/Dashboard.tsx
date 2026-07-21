@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Wallet, Receipt, PiggyBank, AlertTriangle, Trophy, Download, FileDown } from 'lucide-react';
 import { StatCard } from '../components/ui/StatCard';
@@ -6,36 +7,64 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useAuth } from '../contexts/AuthContext';
+import { useParametres } from '../contexts/ParametresContext';
 import { ecouterMembres } from '../services/membres.service';
-import { ecouterToutesCotisations, ecouterCotisationsDuMois, valeursCourantes } from '../services/cotisations.service';
-import { ecouterDepenses } from '../services/depenses.service';
+import { ecouterCotisationsPlage, ecouterCotisationsDuMois, valeursCourantes } from '../services/cotisations.service';
+import { ecouterDepensesPlage } from '../services/depenses.service';
+import { anneeCourante, ecouterExercices } from '../services/exercices.service';
 import { ajouterMois, formatMoisLabel, formatMontant, moisCourant } from '../lib/format';
 import { telechargerCsv } from '../lib/csv';
 import { telechargerRapportPdf } from '../lib/pdf';
-import type { Cotisation, Depense, Membre } from '../types';
+import type { Cotisation, Depense, Exercice, Membre } from '../types';
 
-const MONTANT_MINIMUM = 500;
+/**
+ * Fenêtre de lecture du tableau de bord. Elle couvre l'exercice en cours (pour les totaux)
+ * et les 6 derniers mois (pour le graphe), qui débordent sur l'année précédente en début
+ * d'année. Le tableau de bord lisait auparavant la totalité de l'historique, dont le volume
+ * croît indéfiniment avec les années.
+ */
+function fenetreDeLecture() {
+  const debutExercice = `${anneeCourante()}-01`;
+  const debutGraphe = ajouterMois(moisCourant(), -5);
+  return { moisDebut: debutGraphe < debutExercice ? debutGraphe : debutExercice, moisFin: moisCourant() };
+}
 
 export function Dashboard() {
   const { profil } = useAuth();
+  const { montantCotisation, nomAssociation, devise } = useParametres();
   const [membres, setMembres] = useState<Membre[]>([]);
   const [cotisations, setCotisations] = useState<Cotisation[]>([]);
   const [cotisationsMois, setCotisationsMois] = useState<Cotisation[]>([]);
   const [depenses, setDepenses] = useState<Depense[]>([]);
+  const [exercices, setExercices] = useState<Exercice[]>([]);
+
+  const { moisDebut, moisFin } = useMemo(fenetreDeLecture, []);
 
   useEffect(() => ecouterMembres(setMembres), []);
-  useEffect(() => ecouterToutesCotisations(setCotisations), []);
+  useEffect(() => ecouterCotisationsPlage(moisDebut, moisFin, setCotisations), [moisDebut, moisFin]);
   useEffect(() => ecouterCotisationsDuMois(moisCourant(), setCotisationsMois), []);
-  useEffect(() => ecouterDepenses(setDepenses), []);
+  useEffect(() => ecouterDepensesPlage(`${moisDebut}-01`, `${moisFin}-31`, setDepenses), [moisDebut, moisFin]);
+  useEffect(() => ecouterExercices(setExercices), []);
 
-  const courantesParCle = useMemo(() => valeursCourantes(cotisations), [cotisations]);
+  const soldeReporte = exercices.find((e) => e.annee === anneeCourante())?.soldeReporte ?? 0;
+
+  // Les totaux portent sur l'exercice en cours et non sur « toutes périodes » : c'est la
+  // lecture juste dès lors qu'un exercice clôturé reporte son solde sur le suivant.
+  const cotisationsExercice = useMemo(
+    () => cotisations.filter((c) => c.mois.startsWith(anneeCourante())),
+    [cotisations]
+  );
+  const courantesParCle = useMemo(() => valeursCourantes(cotisationsExercice), [cotisationsExercice]);
   const totalCotisationClassique = useMemo(
     () => [...courantesParCle.values()].reduce((sum, c) => sum + c.montant, 0),
     [courantesParCle]
   );
   const depensesActives = useMemo(() => depenses.filter((d) => !d.annulee), [depenses]);
-  const totalDepenses = useMemo(() => depensesActives.reduce((sum, d) => sum + d.montant, 0), [depensesActives]);
-  const soldeNet = totalCotisationClassique - totalDepenses;
+  const totalDepenses = useMemo(
+    () => depensesActives.filter((d) => d.date.startsWith(anneeCourante())).reduce((sum, d) => sum + d.montant, 0),
+    [depensesActives]
+  );
+  const soldeNet = soldeReporte + totalCotisationClassique - totalDepenses;
 
   const evolutionMensuelle = useMemo(() => {
     const mois6derniers = Array.from({ length: 6 }, (_, i) => ajouterMois(moisCourant(), -(5 - i)));
@@ -58,8 +87,8 @@ export function Dashboard() {
   }, [courantesDuMois]);
 
   const membresEnRetardCotisation = useMemo(
-    () => membresActifs.filter((m) => (courantesDuMoisParMembre.get(m.id)?.montant ?? 0) < MONTANT_MINIMUM),
-    [membresActifs, courantesDuMoisParMembre]
+    () => membresActifs.filter((m) => (courantesDuMoisParMembre.get(m.id)?.montant ?? 0) < montantCotisation),
+    [membresActifs, courantesDuMoisParMembre, montantCotisation]
   );
 
   const cotisationsDuMoisTotal = useMemo(
@@ -78,17 +107,17 @@ export function Dashboard() {
     }
     return [...totalParMembre.entries()]
       .map(([memberId, total]) => ({ membre: membres.find((m) => m.id === memberId), total }))
-      .filter((x): x is { membre: Membre; total: number } => !!x.membre && x.total > MONTANT_MINIMUM)
+      .filter((x): x is { membre: Membre; total: number } => !!x.membre && x.total > montantCotisation)
       .sort((a, b) => b.total - a.total)
       .slice(0, 5);
-  }, [courantesParCle, membres]);
+  }, [courantesParCle, membres, montantCotisation]);
 
   const [genereEnCours, setGenereEnCours] = useState(false);
 
   function exporterCsv() {
     telechargerCsv(
       `assocotise-rapport-${moisCourant()}.csv`,
-      ['Mois', 'Cotisations classiques (HTG)', 'Dépenses (HTG)'],
+      ['Mois', `Cotisations (${devise})`, `Dépenses (${devise})`],
       evolutionMensuelle.map((e) => [e.mois, e.cotisations, e.depenses])
     );
   }
@@ -97,6 +126,8 @@ export function Dashboard() {
     setGenereEnCours(true);
     try {
       await telechargerRapportPdf(`assocotise-rapport-${moisCourant()}.pdf`, {
+        nomAssociation,
+        devise,
         periodeLabel: formatMoisLabel(moisCourant()),
         cotisationsDuMois: cotisationsDuMoisTotal,
         depensesDuMois: depensesDuMoisTotal,
@@ -123,7 +154,14 @@ export function Dashboard() {
           </p>
         </Card>
         <div>
-          <h3 className="mb-2 text-sm font-semibold text-[var(--color-ink)]">Membres en retard ce mois-ci</h3>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-[var(--color-ink)]">Membres en retard ce mois-ci</h3>
+            {membresEnRetardCotisation.length > 0 && (
+              <Link to="/relances" className="text-xs font-medium text-[var(--color-brand)] hover:underline">
+                Relancer
+              </Link>
+            )}
+          </div>
           {membresEnRetardCotisation.length === 0 ? (
             <EmptyState title="Tous les membres actifs sont à jour" />
           ) : (
@@ -149,21 +187,21 @@ export function Dashboard() {
           theme="brand"
           label="Total cotisé"
           value={formatMontant(totalCotisationClassique)}
-          sub="Toutes périodes"
+          sub={`Exercice ${anneeCourante()}`}
         />
         <StatCard
           icon={<Receipt size={18} />}
           theme="rose"
           label="Total dépensé"
           value={formatMontant(totalDepenses)}
-          sub="Toutes périodes"
+          sub={`Exercice ${anneeCourante()}`}
         />
         <StatCard
           icon={<PiggyBank size={18} />}
           theme="gold"
           label="Solde net disponible"
           value={formatMontant(soldeNet)}
-          sub="Cagnotte projet business · cumul"
+          sub={soldeReporte !== 0 ? `Dont ${formatMontant(soldeReporte)} reportés` : 'Exercice en cours'}
         />
       </div>
 
@@ -212,9 +250,16 @@ export function Dashboard() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div>
-          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-[var(--color-ink)]">
-            <AlertTriangle size={15} /> Membres en retard ce mois-ci
-          </h3>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-[var(--color-ink)]">
+              <AlertTriangle size={15} /> Membres en retard ce mois-ci
+            </h3>
+            {membresEnRetardCotisation.length > 0 && (
+              <Link to="/relances" className="text-xs font-medium text-[var(--color-brand)] hover:underline">
+                Relancer
+              </Link>
+            )}
+          </div>
           <Card className="divide-y divide-[var(--color-border)]">
             {membresEnRetardCotisation.length === 0 ? (
               <div className="p-4">

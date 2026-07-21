@@ -4,7 +4,6 @@ const INDIGO = '#4338ca';
 const INDIGO_DARK = '#241f5c';
 const INDIGO_SOFT = '#ece9fb';
 const GOLD = '#b8860b';
-const GOLD_SOFT = '#faf3e0';
 const ROSE = '#b91c1c';
 const ROSE_SOFT = '#fbeaea';
 const MUTED = '#6b6785';
@@ -18,12 +17,12 @@ const ZEBRA = '#faf9fd';
  * n'existe pas dans la police Helvetica intégrée à react-pdf : elle s'affichait en "/" à
  * l'impression (ex. "4/300 HTG"). On reformate ici avec un espace ASCII classique.
  */
-function formatMontantPdf(value: number): string {
+function formaterMontantPdf(value: number, devise: string): string {
   const arrondi = Math.round(value);
   const negatif = arrondi < 0;
   const chiffres = Math.abs(arrondi).toString();
   const groupes = chiffres.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-  return `${negatif ? '-' : ''}${groupes} HTG`;
+  return `${negatif ? '-' : ''}${groupes} ${devise}`;
 }
 
 const styles = StyleSheet.create({
@@ -104,6 +103,8 @@ function PiggyIcon() {
 }
 
 export interface RapportPDFProps {
+  nomAssociation: string;
+  devise: string;
   periodeLabel: string;
   cotisationsDuMois: number;
   depensesDuMois: number;
@@ -113,9 +114,16 @@ export interface RapportPDFProps {
   evolutionMensuelle: { mois: string; cotisations: number; depenses: number }[];
   topContributeurs: { nom: string; total: number }[];
   membresEnRetard: string[];
+  /** Libellés adaptables : le même document sert le tableau de bord et les rapports par période. */
+  libelleActivite?: string;
+  sousTitreCumul?: string;
+  libelleEvolution?: string;
+  depensesParCategorie?: { categorie: string; montant: number }[];
 }
 
 export function RapportPDF({
+  nomAssociation,
+  devise,
   periodeLabel,
   cotisationsDuMois,
   depensesDuMois,
@@ -125,12 +133,17 @@ export function RapportPDF({
   evolutionMensuelle,
   topContributeurs,
   membresEnRetard,
+  libelleActivite = 'Activité du mois',
+  sousTitreCumul = "Cumul de l'exercice",
+  libelleEvolution = 'Évolution mensuelle',
+  depensesParCategorie = [],
 }: RapportPDFProps) {
   const genereLe = new Intl.DateTimeFormat('fr-HT', { dateStyle: 'long', timeStyle: 'short' }).format(new Date());
   const soldeDuMois = cotisationsDuMois - depensesDuMois;
+  const formatMontantPdf = (value: number) => formaterMontantPdf(value, devise);
 
   return (
-    <Document title={`AssoCotise — Rapport ${periodeLabel}`}>
+    <Document title={`${nomAssociation} — Rapport ${periodeLabel}`}>
       <Page size="A4" style={styles.page}>
         <View style={styles.bandeau}>
           <View style={styles.bandeauAccent} />
@@ -139,7 +152,7 @@ export function RapportPDF({
               <PiggyIcon />
             </View>
             <View>
-              <Text style={styles.bandeauTitre}>AssoCotise</Text>
+              <Text style={styles.bandeauTitre}>{nomAssociation}</Text>
             </View>
           </View>
           <Text style={styles.bandeauSousTitre}>Rapport financier — {periodeLabel}</Text>
@@ -147,7 +160,9 @@ export function RapportPDF({
 
         <View style={styles.corps}>
           <View style={styles.blocEntete}>
-            <Text style={styles.blocLabel}>Activité du mois — {periodeLabel}</Text>
+            <Text style={styles.blocLabel}>
+              {libelleActivite} — {periodeLabel}
+            </Text>
           </View>
           <View style={styles.ligneCartes}>
             <View style={styles.carte}>
@@ -167,7 +182,7 @@ export function RapportPDF({
             <View style={styles.carte}>
               <View style={[styles.carteAccent, { backgroundColor: GOLD }]} />
               <View style={styles.carteCorps}>
-                <Text style={styles.carteLabel}>Solde du mois</Text>
+                <Text style={styles.carteLabel}>Solde de la période</Text>
                 <Text style={[styles.carteValeur, { color: soldeDuMois < 0 ? ROSE : GOLD }]}>
                   {formatMontantPdf(soldeDuMois)}
                 </Text>
@@ -177,7 +192,7 @@ export function RapportPDF({
 
           <View style={[styles.blocEntete, { marginTop: 20 }]}>
             <Text style={styles.blocLabel}>Trésorerie de l'association</Text>
-            <Text style={styles.blocSousLabel}>Cumul depuis la création</Text>
+            <Text style={styles.blocSousLabel}>{sousTitreCumul}</Text>
           </View>
           <View style={styles.ligneCartes}>
             <View style={styles.carteCumul}>
@@ -197,7 +212,7 @@ export function RapportPDF({
           <View style={styles.section}>
             <View style={styles.sectionTitreLigne}>
               <View style={styles.sectionPastille} />
-              <Text style={styles.sectionTitre}>Évolution mensuelle — 6 derniers mois</Text>
+              <Text style={styles.sectionTitre}>{libelleEvolution}</Text>
             </View>
             <View style={styles.table}>
               <View style={styles.tableRowHeader}>
@@ -219,10 +234,35 @@ export function RapportPDF({
             </View>
           </View>
 
+          {depensesParCategorie.length > 0 && (
+            <View style={styles.section} wrap={false}>
+              <View style={styles.sectionTitreLigne}>
+                <View style={[styles.sectionPastille, { backgroundColor: ROSE }]} />
+                <Text style={[styles.sectionTitre, { color: ROSE }]}>Répartition des dépenses</Text>
+              </View>
+              <View style={styles.table}>
+                <View style={styles.tableRowHeader}>
+                  <Text style={[styles.th, { flex: 3 }]}>Catégorie</Text>
+                  <Text style={styles.th}>Montant</Text>
+                  <Text style={styles.th}>Part</Text>
+                </View>
+                {depensesParCategorie.map((c, i) => (
+                  <View style={i % 2 === 1 ? styles.tableRowZebra : styles.tableRow} key={c.categorie}>
+                    <Text style={[styles.td, { flex: 3 }]}>{c.categorie}</Text>
+                    <Text style={styles.tdBold}>{formatMontantPdf(c.montant)}</Text>
+                    <Text style={styles.td}>
+                      {depensesDuMois > 0 ? `${Math.round((c.montant / depensesDuMois) * 100)} %` : '—'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
           <View style={styles.section} wrap={false}>
             <View style={styles.sectionTitreLigne}>
               <View style={styles.sectionPastille} />
-              <Text style={styles.sectionTitre}>Top contributeurs — toutes périodes</Text>
+              <Text style={styles.sectionTitre}>Top contributeurs</Text>
             </View>
             <View style={styles.table}>
               <View style={styles.tableRowHeader}>
@@ -265,7 +305,7 @@ export function RapportPDF({
         </View>
 
         <View style={styles.pied} fixed>
-          <Text>AssoCotise — Gestion financière associative</Text>
+          <Text>{nomAssociation} — Gestion financière associative</Text>
           <Text
             render={({ pageNumber, totalPages }) => `Page ${pageNumber}/${totalPages} · Généré le ${genereLe}`}
           />

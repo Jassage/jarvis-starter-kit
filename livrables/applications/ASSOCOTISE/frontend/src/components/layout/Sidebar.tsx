@@ -1,16 +1,35 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, Wallet, Receipt, UserCog, PiggyBank, X } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Users,
+  Wallet,
+  Receipt,
+  UserCog,
+  PiggyBank,
+  Settings,
+  BellRing,
+  ScrollText,
+  CalendarCheck,
+  FileBarChart,
+  X,
+} from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useParametres } from '../../contexts/ParametresContext';
 
 const liensBase = [
   { to: '/', label: 'Tableau de bord', icon: LayoutDashboard },
   { to: '/membres', label: 'Membres', icon: Users },
   { to: '/cotisations', label: 'Cotisations', icon: Wallet },
+  { to: '/relances', label: 'Relances', icon: BellRing },
 ];
 
 const liensResponsable = [
   { to: '/depenses', label: 'Dépenses', icon: Receipt },
   { to: '/utilisateurs', label: 'Utilisateurs', icon: UserCog },
+  { to: '/rapports', label: 'Rapports', icon: FileBarChart },
+  { to: '/exercices', label: 'Exercices', icon: CalendarCheck },
+  { to: '/journal', label: 'Journal', icon: ScrollText },
+  { to: '/parametres', label: 'Paramètres', icon: Settings },
 ];
 
 const labelRole: Record<string, string> = {
@@ -20,6 +39,7 @@ const labelRole: Record<string, string> = {
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { profil } = useAuth();
+  const { nomAssociation } = useParametres();
   const liens = profil?.role === 'responsable_finances' ? [...liensBase, ...liensResponsable] : liensBase;
 
   return (
@@ -33,7 +53,9 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--color-brand)] to-[var(--color-brand-dark)] text-white shadow-[var(--shadow-card)]">
               <PiggyBank size={18} />
             </div>
-            <span className="text-[15px] font-semibold tracking-tight text-[var(--color-ink)]">AssoCotise</span>
+            <span className="truncate text-[15px] font-semibold tracking-tight text-[var(--color-ink)]">
+              {nomAssociation}
+            </span>
           </div>
           <button
             onClick={onClose}

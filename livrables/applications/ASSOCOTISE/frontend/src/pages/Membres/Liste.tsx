@@ -7,14 +7,14 @@ import { Table, Th, Td, Tr } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
 import { Select } from '../../components/ui/Field';
 import { MembreModal } from '../../components/membres/MembreModal';
+import { useParametres } from '../../contexts/ParametresContext';
 import { ecouterMembres } from '../../services/membres.service';
 import { ecouterCotisationsDuMois, valeursCourantes } from '../../services/cotisations.service';
 import { moisCourant, formatDate } from '../../lib/format';
 import type { Membre } from '../../types';
 
-const MONTANT_MINIMUM = 500;
-
 export function MembresListe() {
+  const { montantCotisation } = useParametres();
   const [membres, setMembres] = useState<Membre[]>([]);
   const [aJourParMembre, setAJourParMembre] = useState<Map<string, boolean>>(new Map());
   const [recherche, setRecherche] = useState('');
@@ -29,11 +29,11 @@ export function MembresListe() {
         const courantes = valeursCourantes(cotisations);
         const map = new Map<string, boolean>();
         for (const c of courantes.values()) {
-          map.set(c.memberId, c.montant >= MONTANT_MINIMUM);
+          map.set(c.memberId, c.montant >= montantCotisation);
         }
         setAJourParMembre(map);
       }),
-    []
+    [montantCotisation]
   );
 
   const membresFiltres = useMemo(() => {
@@ -94,7 +94,10 @@ export function MembresListe() {
                   </Badge>
                 </Td>
                 <Td>
-                  {aJourParMembre.get(m.id) ? (
+                  {/* Un membre inactif ne cotise plus : le marquer "En retard" serait faux. */}
+                  {m.statut !== 'actif' ? (
+                    <span className="text-xs text-[var(--color-muted)]">—</span>
+                  ) : aJourParMembre.get(m.id) ? (
                     <Badge tone="success">À jour</Badge>
                   ) : (
                     <Badge tone="danger">En retard</Badge>

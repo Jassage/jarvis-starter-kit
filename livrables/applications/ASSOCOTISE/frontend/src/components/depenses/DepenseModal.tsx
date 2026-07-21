@@ -4,6 +4,7 @@ import { Modal } from '../ui/Modal';
 import { Field, Input, Select } from '../ui/Field';
 import { creerDepense, modifierDepense, uploaderJustificatif } from '../../services/depenses.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { useParametres } from '../../contexts/ParametresContext';
 import type { CategorieDepense, Depense } from '../../types';
 
 const labelCategorie: Record<CategorieDepense, string> = {
@@ -25,16 +26,23 @@ export function DepenseModal({
   depense?: Depense;
 }) {
   const { profil } = useAuth();
+  const { devise } = useParametres();
   const modification = !!depense;
   const [description, setDescription] = useState(depense?.description ?? '');
   const [categorie, setCategorie] = useState<CategorieDepense>(depense?.categorie ?? 'materiel');
   const [montant, setMontant] = useState(depense?.montant ?? 0);
   const [date, setDate] = useState(depense?.date ?? new Date().toISOString().slice(0, 10));
   const [fichier, setFichier] = useState<File | null>(null);
+  const [erreur, setErreur] = useState<string | null>(null);
   const [envoi, setEnvoi] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    setErreur(null);
+    if (montant <= 0) {
+      setErreur('Le montant doit être supérieur à zéro.');
+      return;
+    }
     if (!profil) return;
     setEnvoi(true);
     try {
@@ -53,6 +61,11 @@ export function DepenseModal({
   return (
     <Modal open={open} onClose={onClose} title={modification ? 'Modifier la dépense' : 'Nouvelle dépense'}>
       <form onSubmit={onSubmit}>
+        {erreur && (
+          <p className="mb-4 rounded-lg bg-[var(--color-danger-bg)] px-3 py-2 text-sm text-[var(--color-danger)]">
+            {erreur}
+          </p>
+        )}
         <Field label="Description" required>
           <Input required value={description} onChange={(e) => setDescription(e.target.value)} />
         </Field>
@@ -65,10 +78,10 @@ export function DepenseModal({
             ))}
           </Select>
         </Field>
-        <Field label="Montant (HTG)" required>
+        <Field label={`Montant (${devise})`} required>
           <Input
             type="number"
-            min={0}
+            min={1}
             required
             value={montant}
             onChange={(e) => setMontant(Number(e.target.value))}

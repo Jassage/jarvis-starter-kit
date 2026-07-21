@@ -1,5 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth';
+import {
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+  type User,
+} from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { obtenirProfil } from '../services/users.service';
 import type { UtilisateurBureau } from '../types';
@@ -11,6 +17,7 @@ interface AuthContextValue {
   erreurCompteInactif: boolean;
   connecter: (email: string, motDePasse: string) => Promise<void>;
   deconnecter: () => Promise<void>;
+  envoyerReinitialisation: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -57,9 +64,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOut(auth);
   }
 
+  /**
+   * Envoi du lien de réinitialisation Firebase. Utilisé aussi bien depuis l'écran de
+   * connexion (membre du bureau qui a perdu son mot de passe) que depuis la gestion
+   * des utilisateurs (le responsable finances déclenche l'envoi pour quelqu'un d'autre).
+   */
+  async function envoyerReinitialisation(email: string) {
+    await sendPasswordResetEmail(auth, email);
+  }
+
   return (
     <AuthContext.Provider
-      value={{ utilisateurFirebase, profil, chargement, erreurCompteInactif, connecter, deconnecter }}
+      value={{
+        utilisateurFirebase,
+        profil,
+        chargement,
+        erreurCompteInactif,
+        connecter,
+        deconnecter,
+        envoyerReinitialisation,
+      }}
     >
       {children}
     </AuthContext.Provider>

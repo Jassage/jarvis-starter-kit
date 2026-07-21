@@ -16,6 +16,14 @@
         { "fieldPath": "mois", "order": "ASCENDING" },
         { "fieldPath": "saisiLe", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "reminders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "mois", "order": "ASCENDING" },
+        { "fieldPath": "envoyeeLe", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

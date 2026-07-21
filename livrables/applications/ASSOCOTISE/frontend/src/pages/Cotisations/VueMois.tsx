@@ -5,15 +5,15 @@ import { Badge } from '../../components/ui/Badge';
 import { Card } from '../../components/ui/Card';
 import { CotisationModal } from '../../components/cotisations/CotisationModal';
 import { useAuth } from '../../contexts/AuthContext';
+import { useParametres } from '../../contexts/ParametresContext';
 import { ecouterMembres } from '../../services/membres.service';
 import { ecouterCotisationsDuMois, valeursCourantes, annulerCotisation } from '../../services/cotisations.service';
 import { ajouterMois, formatMoisLabel, formatMontant, moisCourant } from '../../lib/format';
 import type { Cotisation, Membre } from '../../types';
 
-const MONTANT_MINIMUM = 500;
-
 export function VueMois() {
   const { profil } = useAuth();
+  const { montantCotisation } = useParametres();
   const peutAnnuler = profil?.role === 'responsable_finances';
   const [mois, setMois] = useState(moisCourant());
   const [membres, setMembres] = useState<Membre[]>([]);
@@ -47,8 +47,9 @@ export function VueMois() {
   }
 
   async function onAnnuler(c: Cotisation) {
+    if (!profil) return;
     if (!confirm('Annuler cette cotisation ? Elle restera visible dans l\'historique du membre mais ne comptera plus comme payée.')) return;
-    await annulerCotisation(c.id, true);
+    await annulerCotisation(c.id, true, profil.id);
   }
 
   return (
@@ -122,7 +123,7 @@ export function VueMois() {
                 </Td>
                 <Td>
                   {c ? formatMontant(c.montant) : '—'}
-                  {c && c.montant > MONTANT_MINIMUM && (
+                  {c && c.montant > montantCotisation && (
                     <span className="ml-1 text-xs text-[var(--color-brand)]">(surplus)</span>
                   )}
                 </Td>

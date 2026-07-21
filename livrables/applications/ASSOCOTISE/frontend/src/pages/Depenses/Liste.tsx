@@ -7,6 +7,7 @@ import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Select } from '../../components/ui/Field';
 import { DepenseModal } from '../../components/depenses/DepenseModal';
+import { useAuth } from '../../contexts/AuthContext';
 import { ecouterDepenses, annulerDepense } from '../../services/depenses.service';
 import { formatDate, formatMontant } from '../../lib/format';
 import type { CategorieDepense, Depense } from '../../types';
@@ -20,6 +21,7 @@ const labelCategorie: Record<CategorieDepense, string> = {
 };
 
 export function DepensesListe() {
+  const { profil } = useAuth();
   const [depenses, setDepenses] = useState<Depense[]>([]);
   const [filtreCategorie, setFiltreCategorie] = useState<'toutes' | CategorieDepense>('toutes');
   const [modalOuverte, setModalOuverte] = useState(false);
@@ -50,12 +52,13 @@ export function DepensesListe() {
   }
 
   async function onAnnuler(d: Depense) {
+    if (!profil) return;
     if (d.annulee) {
-      await annulerDepense(d.id, false);
+      await annulerDepense(d.id, false, profil.id);
       return;
     }
     if (!confirm('Annuler cette dépense ? Elle restera visible mais ne comptera plus dans les totaux.')) return;
-    await annulerDepense(d.id, true);
+    await annulerDepense(d.id, true, profil.id);
   }
 
   return (

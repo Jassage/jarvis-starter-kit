@@ -1,4 +1,14 @@
-import { addDoc, collection, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  doc,
+  limit as limiter,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../lib/firebase';
 import { omitUndefined } from '../lib/firestoreUtils';
@@ -8,6 +18,31 @@ const depensesRef = collection(db, 'expenses');
 
 export function ecouterDepenses(cb: (depenses: Depense[]) => void) {
   const q = query(depensesRef, orderBy('date', 'desc'));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Depense, 'id'>) })));
+  });
+}
+
+/** Dépenses d'une plage de dates inclusive (« 2026-01-01 » à « 2026-12-31 »). */
+export function ecouterDepensesPlage(
+  dateDebut: string,
+  dateFin: string,
+  cb: (depenses: Depense[]) => void
+) {
+  const q = query(
+    depensesRef,
+    where('date', '>=', dateDebut),
+    where('date', '<=', dateFin),
+    orderBy('date', 'desc')
+  );
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Depense, 'id'>) })));
+  });
+}
+
+/** Dernières dépenses saisies, pour le journal d'audit. */
+export function ecouterDernieresDepenses(limite: number, cb: (depenses: Depense[]) => void) {
+  const q = query(depensesRef, orderBy('saisiLe', 'desc'), limiter(limite));
   return onSnapshot(q, (snap) => {
     cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Depense, 'id'>) })));
   });
@@ -28,6 +63,10 @@ export async function modifierDepense(id: string, data: Partial<Omit<Depense, 'i
   return updateDoc(doc(db, 'expenses', id), omitUndefined({ ...data, modifieLe: new Date().toISOString() }));
 }
 
-export async function annulerDepense(id: string, annulee: boolean) {
-  return updateDoc(doc(db, 'expenses', id), { annulee });
+export async function annulerDepense(id: string, annulee: boolean, annuleePar: string) {
+  return updateDoc(doc(db, 'expenses', id), {
+    annulee,
+    annuleePar,
+    annuleeLe: new Date().toISOString(),
+  });
 }

@@ -1,4 +1,15 @@
-import { addDoc, collection, doc, getDocs, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  doc,
+  getDocs,
+  limit as limiter,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../lib/firebase';
 import { omitUndefined } from '../lib/firestoreUtils';
@@ -20,8 +31,30 @@ export function ecouterCotisationsDuMois(mois: string, cb: (cotisations: Cotisat
   });
 }
 
-export function ecouterToutesCotisations(cb: (cotisations: Cotisation[]) => void) {
-  const q = query(cotisationsRef, orderBy('saisiLe', 'desc'));
+/**
+ * Cotisations rattachées à une plage de mois inclusive (« 2026-01 » à « 2026-12 »).
+ * Remplace l'écoute de la collection entière : le volume croît indéfiniment avec les
+ * années, et aucun écran n'a réellement besoin de tout l'historique en mémoire.
+ */
+export function ecouterCotisationsPlage(
+  moisDebut: string,
+  moisFin: string,
+  cb: (cotisations: Cotisation[]) => void
+) {
+  const q = query(
+    cotisationsRef,
+    where('mois', '>=', moisDebut),
+    where('mois', '<=', moisFin),
+    orderBy('mois', 'desc')
+  );
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Cotisation, 'id'>) })));
+  });
+}
+
+/** Dernières cotisations saisies, pour le journal d'audit. */
+export function ecouterDernieresCotisations(limite: number, cb: (cotisations: Cotisation[]) => void) {
+  const q = query(cotisationsRef, orderBy('saisiLe', 'desc'), limiter(limite));
   return onSnapshot(q, (snap) => {
     cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Cotisation, 'id'>) })));
   });
@@ -31,6 +64,13 @@ export async function listerCotisationsMembre(memberId: string): Promise<Cotisat
   const q = query(cotisationsRef, where('memberId', '==', memberId), orderBy('saisiLe', 'desc'));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Cotisation, 'id'>) }));
+}
+
+export function ecouterCotisationsMembre(memberId: string, cb: (cotisations: Cotisation[]) => void) {
+  const q = query(cotisationsRef, where('memberId', '==', memberId), orderBy('saisiLe', 'desc'));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Cotisation, 'id'>) })));
+  });
 }
 
 /**
@@ -46,8 +86,12 @@ export async function saisirCotisation(data: Omit<Cotisation, 'id' | 'saisiLe'>)
  * Annule une cotisation (append-only : jamais de suppression ni de modification des montants).
  * Les règles Firestore n'autorisent la modification que du champ `annulee`, rien d'autre.
  */
-export async function annulerCotisation(id: string, annulee: boolean) {
-  return updateDoc(doc(db, 'contributions', id), { annulee });
+export async function annulerCotisation(id: string, annulee: boolean, annuleePar: string) {
+  return updateDoc(doc(db, 'contributions', id), {
+    annulee,
+    annuleePar,
+    annuleeLe: new Date().toISOString(),
+  });
 }
 
 /**

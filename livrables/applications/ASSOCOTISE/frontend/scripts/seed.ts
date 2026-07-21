@@ -82,7 +82,6 @@ async function main() {
       email: `${nom.toLowerCase().replace(/[^a-z]+/g, '.')}@example.ht`,
       dateAdhesion: dateAdhesion.toISOString().slice(0, 10),
       statut: index === 9 ? 'inactif' : 'actif',
-      saisiPar: 'seed',
     });
     membreIds.push(ref.id);
   }

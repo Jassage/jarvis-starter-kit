@@ -1,6 +1,11 @@
 import { initializeApp, getApps, deleteApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import {
+  connectFirestoreEmulator,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 const firebaseConfig = {
@@ -16,7 +21,16 @@ const useEmulator = import.meta.env.VITE_USE_EMULATOR === 'true';
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+/**
+ * Cache local persistant (IndexedDB) plutôt que le cache mémoire par défaut : les écrans
+ * restent consultables sans réseau et les écritures faites hors ligne sont rejouées à la
+ * reconnexion. `persistentMultipleTabManager` permet d'ouvrir plusieurs onglets sans que
+ * l'un d'eux perde la persistance.
+ */
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
 export const storage = getStorage(app);
 
 if (useEmulator) {
