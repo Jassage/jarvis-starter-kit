@@ -7,6 +7,52 @@
 
 ---
 
+## 2026-07-21 (suite)
+
+### ASSOCOTISE : journal d'audit, clôture d'exercice, rapports, tests des règles et PWA
+
+**Contexte :** sur « faire le reste », après l'entrée précédente du même jour. Le seul point non traitable sans Jaslin (créer le projet Firebase réel, qui demande son compte Google et une clé de service) a été écarté d'emblée et documenté plutôt que contourné.
+
+**Six chantiers livrés :**
+- **Journal d'audit** dérivé des traces portées par les documents eux-mêmes plutôt que d'une collection de log séparée. Raison : sans backend, un log écrit par le client pourrait tout simplement ne pas être écrit par qui voudrait dissimuler une action, ce qui donnerait une fausse garantie. Ajout au passage de `annuleePar`/`annuleeLe` : une annulation ne portait aucune trace, il était impossible de savoir qui avait annulé quoi.
+- **Clôture d'exercice** avec calcul et report du solde sur l'année suivante, le verrouillage étant appliqué par les règles Firestore et pas seulement par l'interface (aucune écriture, correction ni annulation possible sur une année clôturée).
+- **Rapports par période** avec presets et période personnalisée, taux de recouvrement, répartition par catégorie, export CSV détaillé ligne par ligne.
+- **Bornage du tableau de bord**, qui écoutait toute la collection depuis l'origine : exercice en cours plus 6 derniers mois, avec solde reporté.
+- **29 tests automatisés des règles** (Vitest + `@firebase/rules-unit-testing`), pérennisant ce qui était vérifié à la main dans la session précédente.
+- **PWA installable et hors-ligne** (service worker, cache Firestore persistant IndexedDB multi-onglets, bandeau explicite de perte de réseau).
+
+**Performance :** le bundle de 2,8 Mo d'un seul bloc bloquait le précache du service worker. Moteur PDF et écrans admin passés en chargement à la demande, bundle initial ramené à **347 kB (113 kB gzip)**, gain concret pour une connexion haïtienne.
+
+**Deux défauts de template jamais corrigés trouvés :** `index.html` était resté en `lang="en"` avec le titre « frontend », et le favicon était celui de Vite.
+
+**Vérifié en conditions réelles :** 29/29 tests de règles, **avec la preuve qu'ils mordent** (régression volontaire introduite sur la validation des montants, 2 tests tombent, puis repassent une fois la règle restaurée) ; 17/19 vérifications navigateur sur le serveur de dev, les 2 échecs étant des artefacts du mode dev (pas de service worker, chunks lazy non préchargés) et non des bugs produit ; **8/8 sur le build de production réellement servi**, dont navigation entre écrans sans réseau, données lisibles depuis le cache Firestore et rechargement complet hors ligne fonctionnels. Clôture de l'exercice 2025 effectuée réellement en navigateur avec report du solde. `tsc`, `build` et `lint` propres. Nettoyage : scripts de vérification supprimés, Playwright désinstallé, serveurs arrêtés par PID (et non par un `taskkill` large comme lors de la session précédente).
+
+**Reste :** le projet Firebase réel (procédure complète dans le README du projet), portail membre, tests d'interface. Rien commité en git.
+
+---
+
+## 2026-07-21
+
+### ASSOCOTISE : audit, durcissement des règles Firestore, paramétrage et module de relances
+
+**Contexte :** sur « on va terminer assocotise, dis-moi ce qui manque », premier audit du projet. ASSOCOTISE n'était documenté ni dans CONTEXT.md ni dans HISTORY.md : il n'existait que sous forme de 2 commits git, né dans une session antérieure jamais consignée. Audit mené par lecture intégrale du code (2 600 lignes, frontend seul).
+
+**Audit initial :** 4 bloquants pour une mise en service (aucun projet Firebase réel, pas de hosting configuré, aucun moyen de créer le premier compte, aucun mot de passe oublié), 2 failles de sécurité (les règles ne validaient aucune donnée alors qu'elles sont la seule défense d'une application sans backend, et une dépense pouvait être réécrite sans trace vérifiable), 7 trous produit et 5 points de dette technique. Ordre recommandé puis suivi : règles, mots de passe, paramètres, puis relances.
+
+**Quatre chantiers livrés** (détail complet dans `context/CONTEXT.md`) : règles Firestore durcies (validation des types et formats, champs bornés, existence réelle du membre référencé, immuabilité de `saisiPar`/`saisiLe`, garde anti auto-verrouillage) ; paramètres de l'association remplaçant un montant de cotisation codé en dur dans 5 fichiers ; mot de passe oublié plus script de bootstrap du premier responsable finances ; module de relances WhatsApp et email avec journal append-only.
+
+**Décision de conception centrale du module de relances :** l'application n'envoie rien elle-même. Sans backend, sans crédit SMS et sans API WhatsApp Business, tout envoi automatique serait soit impossible soit facturé. Elle ouvre donc `wa.me` ou le client mail avec un message déjà rédigé puis journalise la démarche, la trace attestant de l'envoi déclenché et non de la réception, ce qui est écrit explicitement dans l'interface. Même parti pris que l'invitation WhatsApp de REYINYON.
+
+**5 bugs trouvés et corrigés en chemin :** `npm run build` était **déjà cassé avant la session** (constante `GOLD_SOFT` inutilisée dans le PDF, donc le projet n'était pas buildable en l'état) ; aucun `label` du design system n'était rattaché à son champ (cliquer sur un libellé ne focalisait rien, un lecteur d'écran annonçait un champ anonyme), corrigé dans `Field.tsx` avec `useId` et clonage du premier enfant natif ; la fiche membre chargeait ses cotisations en une lecture unique alors que tout le reste écoute en temps réel ; un membre inactif s'affichait « En retard » ; le titre du header ne suivait pas les nouvelles pages.
+
+**Vérifié en conditions réelles :** 41 tests de règles Firestore exécutés avec le **SDK client** contre l'émulateur (donc les règles s'appliquent vraiment, contrairement au SDK Admin qui les contourne) : montant négatif ou en texte, mois mal formé, membre inexistant, champ inconnu injecté, auteur usurpé, modification ou suppression d'une relance, auto-désactivation, tous refusés ; 14 tests des helpers de relance (4 formats de numéro plus 3 cas invalides, substitution des variables, encodage des liens) ; 24 vérifications navigateur (Playwright, chromium en cache, installé sans toucher au `package.json`) avec zéro erreur console, dont l'interception réelle du lien WhatsApp construit et la trace apparaissant en temps réel. Cycle complet de réinitialisation de mot de passe vérifié bout en bout (lien généré, appliqué, ancien mot de passe refusé, nouveau accepté) et script de bootstrap exécuté réellement avec connexion confirmée. `tsc` et `npm run build` propres. Nettoyage : scripts de vérification supprimés, Playwright désinstallé, `package-lock.json` intact, émulateurs et serveur arrêtés.
+
+**Incident à retenir :** pour arrêter les serveurs, un `taskkill` trop large sur tous les processus `node.exe` a été lancé, susceptible d'avoir arrêté d'autres serveurs de dev en cours sur la machine. Signalé à Jaslin, et corrigé ensuite en ciblant les PID par port. À ne pas reproduire dans les sessions futures.
+
+**Reste bloquant :** créer le vrai projet Firebase, qui demande les credentials de Jaslin. La procédure complète est écrite dans le README du projet. Rien commité en git à ce stade.
+
+---
+
 ## 2026-07-20 (suite 3)
 
 ### ANTENN : parité mobile (continuité d'antenne + logo permanent + guide multi-jours)
