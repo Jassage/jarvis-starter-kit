@@ -7,6 +7,26 @@
 
 ---
 
+## 2026-07-21 (suite 2)
+
+### POSTA : audit sécurité + 2 correctifs (hash refresh tokens, réassignation du validate middleware)
+
+**Contexte :** sur « vérifiez POSTA et donnez-moi votre avis », premier audit de POSTA (le projet n'en avait jamais eu). Méthode : lecture intégrale du backend (petit et propre), pas d'agent. Verdict : **le projet le mieux tenu du portefeuille côté sécurité de base, aucune faille exploitable trouvée.** Deux points seulement valaient un correctif, dont un par cohérence avec le reste du portefeuille.
+
+**Ce qui a été confirmé solide (avant correctifs) :** isolation Postfix/Dovecot exemplaire (3 vues en lecture seule + `GRANT SELECT` colonne par colonne excluant le hash de mot de passe pour `postfix_ro` ; les rôles mail n'ont aucun accès aux tables applicatives), clé privée DKIM jamais en base (0600 sur disque), séparation correcte des hash (SHA512-CRYPT pour les boîtes, bcrypt pour le panel), contrôle de propriété `assertAccess` systématique sur domaines/boîtes/alias, Stripe (webhook monté avant `express.json` sur corps brut, signature vérifiée, idempotence par compare-and-swap) et MonCash approve/reject idempotents, reset mot de passe (jeton opaque haché SHA-256, usage unique, 1 h, révoque toutes les sessions, réponse neutre), `authLimiter` correctement câblé sur login/forgot/reset, secrets JWT ≥ 32 exigés au boot, pas d'auto-verrouillage possible, intercepteur frontend avec le verrou partagé `refreshPromise`.
+
+**Deux correctifs livrés et vérifiés en conditions réelles** (backend lancé sur la vraie base Postgres `posta`, pas juste lecture de code) :
+- **Refresh tokens stockés en clair → SHA-256.** POSTA (07/07) était antérieur au durcissement déjà fait sur BANKA/LAKAY/ANTENN. Un dump de base ou une fuite de backup livrait des jetons de session réutilisables 30 jours. Nouvelle fonction `hashRefreshToken`, hachage au `login`, lookup par hash au `refresh`/`logout`. **Vérifié :** le token en base = 64 hex = exactement le SHA-256 du JWT brut du cookie ; cycle refresh/logout/réutilisation 200/200/401 ; 17 anciens tokens bruts purgés.
+- **`validate.middleware.ts` ne réassignait pas le résultat parsé.** Même landmine que ANTENN (#1 mass assignment) et OTELA (coercion). **Inerte jusqu'ici sur POSTA** (tous les services prennent des paramètres nommés explicites, aucun ne dépend d'une coercion Zod), donc pas de faille exploitable, mais corrigée préventivement pour aligner le projet. Le body est désormais remplacé par la version validée et strippée, `query`/`params` fusionnés par `Object.assign` (pour ne pas casser les routes qui ne les valident pas). **Non-régression vérifiée :** création domaine 201 (champ forgé `statut:VERIFIE` resté sans effet), body invalide 422, boîte mail créée en 201 sur route imbriquée `/:domainId/mailboxes` (le cas délicat où `params` doit survivre), mot de passe court 422.
+
+**Points mineurs signalés, pas corrigés (documentés) :** pas de rotation du refresh token (jeton fixe 30 j), `moncash/initiate` peut créer des paiements EN_ATTENTE en série (spam de la liste admin), taux HTG→USD Stripe codé en dur (130), cookies `SameSite=Lax` à revoir si frontend et API sont cross-site en prod. Correction au passage d'une inexactitude dans CONTEXT.md (« refresh token rotatif » alors qu'il n'y a pas de rotation).
+
+**Le vrai blocage reste hors code : aucun VPS mail provisionné.** En l'état POSTA est un panneau de contrôle sans mail derrière. C'est le point n°1 avant un vrai client, déjà connu.
+
+**Vérification propre :** `tsc --noEmit` propre, données de test supprimées, base remise à 0 session, serveur arrêté par PID précis (pas de `taskkill` large), fichiers temporaires retirés. Les 2 correctifs de code commités (`25b63fd`) ; contexte mis à jour.
+
+---
+
 ## 2026-07-21 (suite)
 
 ### ASSOCOTISE : journal d'audit, clôture d'exercice, rapports, tests des règles et PWA
@@ -50,6 +70,24 @@
 **Incident à retenir :** pour arrêter les serveurs, un `taskkill` trop large sur tous les processus `node.exe` a été lancé, susceptible d'avoir arrêté d'autres serveurs de dev en cours sur la machine. Signalé à Jaslin, et corrigé ensuite en ciblant les PID par port. À ne pas reproduire dans les sessions futures.
 
 **Reste bloquant :** créer le vrai projet Firebase, qui demande les credentials de Jaslin. La procédure complète est écrite dans le README du projet. Rien commité en git à ce stade.
+
+---
+
+## 2026-07-21
+
+### ASSOCOTISE : déploiement en production
+
+**Contexte :** sur "maintenant deployons assocotise", premier déploiement réel du projet (découvert non documenté plus tôt dans la journée par une session distincte — voir mémoire `project-assocotise`). Aucun projet Firebase réel n'existait, `.firebaserc` pointait sur un nom de projet jamais créé. Deux clarifications tranchées par Jaslin avant de coder/exécuter (AskUserQuestion) : le projet Firebase était à créer de zéro (pas déjà existant) ; connexion CLI lancée par Claude mais authentifiée par Jaslin lui-même dans son navigateur.
+
+**Obstacle technique découvert et contourné :** `firebase login` et `firebase login:ci` refusent tous deux de s'exécuter en mode non-interactif — les outils Bash/PowerShell de cette session n'attachent pas de TTY réel, donc aucun flux OAuth interactif n'est possible depuis Claude. Résolu en demandant à Jaslin de lancer `npx firebase login` lui-même dans un terminal ouvert directement sur sa machine (hors Claude Code) ; le token stocké dans son profil Windows (`~/.config/configstore/firebase-tools.json`) est ensuite redevenu utilisable depuis les outils Bash de la session sans reconnexion, aucune action supplémentaire nécessaire de sa part pour la suite.
+
+**Livré :** projet Firebase réel `assocotise-dev` créé (`firebase apps:create`), Firestore provisionné en région `nam5` (multi-région US, la plus proche d'Haïti — aucune région Google Cloud en Caraïbes), règles et index Firestore déployés (`firebase deploy --only firestore:rules,firestore:indexes`), Hosting déployé après build (`npm run build` puis `firebase deploy --only hosting`) sur https://assocotise-dev.web.app. `.env.local` mis à jour avec la vraie config SDK du projet (`VITE_USE_EMULATOR=false`), suivant exactement la procédure déjà documentée dans le README du projet. Premier compte responsable finances créé via `scripts/creer-responsable.ts` (email `jslnoccius@gmail.com`, mot de passe généré aléatoirement et communiqué à Jaslin) en utilisant une clé de compte de service que Jaslin a générée dans la console et déposée dans le scratchpad de la session — jamais lue ni affichée par Claude, seulement référencée par chemin via `GOOGLE_APPLICATION_CREDENTIALS`, supprimée du disque immédiatement après usage.
+
+**Storage volontairement laissé de côté** : Firebase exige désormais le plan Blaze (paiement à l'usage) pour activer Cloud Storage (changement de politique Google d'octobre 2024), même si le quota gratuit suffit largement pour une petite association. Jaslin a préféré vérifier les coûts avant d'accepter ce changement de plan (décision à implication financière, non prise à sa place). Conséquence assumée et documentée : l'upload de justificatifs de dépenses (`depenses.service.ts`) échouera tant que Storage n'est pas activé, le reste de l'application (membres, cotisations, dashboard, rapports, exercices, relances) n'en dépend pas.
+
+**Vérifié en conditions réelles (navigateur, pas juste API) :** connexion réussie avec le compte responsable finances fraîchement créé sur l'URL de production, dashboard affichant les vraies données Firestore (vides, cohérent avec un projet neuf), aucune erreur console.
+
+**Reste à faire, à la main de Jaslin :** décider d'activer Storage (plan Blaze) une fois les coûts vérifiés — aucune action de mon côté tant qu'il n'a pas confirmé. Contexte du projet (`CONTEXT.md`) et mémoire (`project-assocotise.md`) mis à jour pour refléter le déploiement réel.
 
 ---
 
