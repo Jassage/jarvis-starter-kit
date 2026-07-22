@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../../config/database';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../utils/jwt';
-import { generateOpaqueToken, hashOpaqueToken } from '../../utils/crypt';
+import { generateOpaqueToken, hashOpaqueToken, hashRefreshToken } from '../../utils/crypt';
 import { sendMail } from '../../utils/mailer';
 import { env } from '../../config/env';
 import { AppError } from '../../types';
@@ -27,7 +27,7 @@ export async function login(email: string, motDePasse: string) {
 
   await prisma.refreshToken.create({
     data: {
-      token: refreshToken,
+      token: hashRefreshToken(refreshToken),
       userId: utilisateur.id,
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
     },
@@ -47,7 +47,9 @@ export async function login(email: string, motDePasse: string) {
 }
 
 export async function refresh(refreshToken: string) {
-  const stored = await prisma.refreshToken.findUnique({ where: { token: refreshToken } });
+  const stored = await prisma.refreshToken.findUnique({
+    where: { token: hashRefreshToken(refreshToken) },
+  });
   if (!stored || stored.expiresAt < new Date()) {
     throw new AppError(401, 'Session expirée, reconnectez-vous');
   }
@@ -66,8 +68,9 @@ export async function refresh(refreshToken: string) {
 }
 
 export async function logout(refreshToken: string): Promise<string | null> {
-  const stored = await prisma.refreshToken.findUnique({ where: { token: refreshToken } });
-  await prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
+  const tokenHash = hashRefreshToken(refreshToken);
+  const stored = await prisma.refreshToken.findUnique({ where: { token: tokenHash } });
+  await prisma.refreshToken.deleteMany({ where: { token: tokenHash } });
   return stored?.userId ?? null;
 }
 

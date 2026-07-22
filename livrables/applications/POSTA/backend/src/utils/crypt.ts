@@ -37,3 +37,10 @@ export function generateOpaqueToken(): string {
 export function hashOpaqueToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
+
+// Le refresh token est un JWT signé, mais on ne stocke jamais sa valeur brute en base :
+// seul son hash SHA-256 y figure. Un dump de base ou une fuite de backup ne livre donc
+// aucun jeton de session réutilisable (même durcissement que BANKA/LAKAY/ANTENN).
+export function hashRefreshToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
