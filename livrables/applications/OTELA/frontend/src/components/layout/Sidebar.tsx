@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarClock, CalendarDays, BedDouble, BarChart3, Building2, X, Hotel, DoorOpen, Sparkles, UtensilsCrossed, ChefHat, Sparkle, Settings, Wine, Shirt, Bell, Car, ConciergeBell, Users } from 'lucide-react';
+import { CalendarClock, CalendarDays, BedDouble, BarChart3, Building2, X, Hotel, DoorOpen, Sparkles, UtensilsCrossed, ChefHat, Sparkle, Settings, Wine, Shirt, Bell, Car, ConciergeBell, Users, ScrollText, Wrench, Receipt } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -23,6 +23,22 @@ const NAV_ETABLISSEMENT = [
   { href: '/chambres', label: 'Chambres & Tarifs', icon: BedDouble },
   { href: '/employes', label: 'Employés', icon: Users },
   { href: '/rapports', label: 'Rapports', icon: BarChart3 },
+  { href: '/parametres', label: 'Paramètres hôtel', icon: Settings },
+];
+
+const NAV_COMPTABLE = [
+  { href: '/reservations', label: 'Réservations', icon: CalendarClock },
+  { href: '/rapports', label: 'Rapports', icon: BarChart3 },
+];
+
+const NAV_MAINTENANCE = [
+  { href: '/chambres', label: 'Chambres', icon: Wrench },
+];
+
+const NAV_PROPRIETAIRE = [
+  { href: '/chaine', label: 'Vue chaîne', icon: BarChart3 },
+  { href: '/rapports', label: 'Rapports', icon: Receipt },
+  { href: '/journal', label: 'Journal d\'audit', icon: ScrollText },
 ];
 
 const NAV_RECEPTION = [
@@ -50,11 +66,15 @@ const NAV_CHAINE = [
   { href: '/chaine', label: 'Vue chaîne', icon: BarChart3 },
   { href: '/etablissements', label: 'Établissements', icon: Building2 },
   { href: '/employes', label: 'Employés', icon: Users },
+  { href: '/journal', label: 'Journal d\'audit', icon: ScrollText },
 ];
 
 const NAV_PAR_ROLE: Record<string, typeof NAV_ETABLISSEMENT> = {
   ADMINISTRATEUR_CHAINE: NAV_CHAINE,
   ADMINISTRATEUR_ETABLISSEMENT: NAV_ETABLISSEMENT,
+  PROPRIETAIRE: NAV_PROPRIETAIRE,
+  COMPTABLE: NAV_COMPTABLE,
+  MAINTENANCE: NAV_MAINTENANCE,
   RECEPTION: NAV_RECEPTION,
   MENAGE: NAV_MENAGE,
   SERVEUR: NAV_SERVEUR,
@@ -64,8 +84,11 @@ const ROLE_LABELS: Record<string, string> = {
   RECEPTION: 'Réception',
   MENAGE: 'Ménage',
   SERVEUR: 'Serveur',
-  ADMINISTRATEUR_ETABLISSEMENT: 'Admin établissement',
-  ADMINISTRATEUR_CHAINE: 'Admin chaîne',
+  MAINTENANCE: 'Maintenance',
+  COMPTABLE: 'Comptable',
+  PROPRIETAIRE: 'Propriétaire',
+  ADMINISTRATEUR_ETABLISSEMENT: 'Directeur',
+  ADMINISTRATEUR_CHAINE: 'Super administrateur',
 };
 
 export default function Sidebar() {

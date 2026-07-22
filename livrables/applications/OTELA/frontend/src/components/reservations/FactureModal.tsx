@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { Download } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
 import Badge from '@/components/ui/Badge';
+import api from '@/lib/api';
 import { useFacturesStore, MethodePaiement } from '@/stores/facturesStore';
 import { useFolioStore } from '@/stores/folioStore';
 
@@ -43,6 +45,7 @@ export default function FactureModal({ open, onClose, reservationId }: { open: b
   const [methode, setMethode] = useState<MethodePaiement>('ESPECES');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const [telechargement, setTelechargement] = useState(false);
 
   useEffect(() => {
     if (open && reservationId) {
@@ -60,6 +63,26 @@ export default function FactureModal({ open, onClose, reservationId }: { open: b
 
   const totalPaye = facture ? facture.paiements.reduce((s, p) => s + Number(p.montant), 0) : 0;
   const solde = facture ? Number(facture.montantTotal) - totalPaye : 0;
+
+  // Le PDF back-office est authentifié : on le récupère en blob via l'API (qui porte
+  // le token) plutôt que par un simple lien, puis on déclenche le téléchargement.
+  const telechargerPdf = async () => {
+    if (!reservationId) return;
+    setTelechargement(true);
+    try {
+      const { data } = await api.get(`/factures/${reservationId}/pdf`, { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `facture-${reservationId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setFormError('Impossible de générer le PDF');
+    } finally {
+      setTelechargement(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,6 +154,10 @@ export default function FactureModal({ open, onClose, reservationId }: { open: b
               </div>
             </div>
           )}
+
+          <button type="button" onClick={telechargerPdf} disabled={telechargement} className="btn btn-secondary w-full">
+            <Download className="w-4 h-4" /> {telechargement ? 'Génération...' : 'Télécharger la facture PDF'}
+          </button>
 
           {solde > 0 && (
             <form onSubmit={handleSubmit} className="pt-3 border-t space-y-3" style={{ borderColor: 'var(--color-line)' }}>

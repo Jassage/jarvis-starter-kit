@@ -24,14 +24,20 @@ const PAGES: Record<string, { title: string; subtitle: string }> = {
   '/rapports': { title: 'Rapports', subtitle: 'Occupation et revenu de l\'établissement' },
   '/chaine': { title: 'Vue chaîne', subtitle: 'Occupation et revenu consolidés par établissement' },
   '/etablissements': { title: 'Établissements', subtitle: 'Gestion des établissements de la chaîne' },
+  '/parametres': { title: 'Paramètres de l\'hôtel', subtitle: 'Fiche publique, logo, contacts, horaires et politiques' },
+  '/journal': { title: 'Journal d\'audit', subtitle: 'Traçabilité des actions sensibles du personnel' },
+  '/employes': { title: 'Employés', subtitle: 'Comptes du personnel et rôles' },
 };
 
 const ROLE_LABELS: Record<string, string> = {
   RECEPTION: 'Réception',
   MENAGE: 'Ménage',
   SERVEUR: 'Serveur',
-  ADMINISTRATEUR_ETABLISSEMENT: 'Admin établissement',
-  ADMINISTRATEUR_CHAINE: 'Admin chaîne',
+  MAINTENANCE: 'Maintenance',
+  COMPTABLE: 'Comptable',
+  PROPRIETAIRE: 'Propriétaire',
+  ADMINISTRATEUR_ETABLISSEMENT: 'Directeur',
+  ADMINISTRATEUR_CHAINE: 'Super administrateur',
 };
 
 export default function Header() {

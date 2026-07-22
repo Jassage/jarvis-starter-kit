@@ -12,6 +12,9 @@
 // optionnelle selon le module.
 // Extension 5 étoiles (tranche 4) : Room Service (CommandeRoomService, catalogue
 // MenuItem partagé avec Restaurant/Bar, toujours facturé au folio).
+// Tranche Fondations SaaS : fiche établissement complète (contacts, GPS, horaires,
+// politique), 3 rôles supplémentaires, galerie photo par type de chambre,
+// statut RESERVEE, ventilation adultes/enfants, journal d'audit.
 
 generator client {
   provider = "prisma-client-js"
@@ -26,10 +29,21 @@ datasource db {
 // ENUMS
 // ─────────────────────────────────────────
 
+// ADMINISTRATEUR_CHAINE est le « Super Administrateur » du cahier des charges et
+// ADMINISTRATEUR_ETABLISSEMENT son « Directeur » — seuls les libellés d'interface
+// diffèrent. Renommer ces valeurs imposerait une migration de données et la
+// relecture des ~49 déclarations requireRole du backend pour aucun gain.
+// SERVEUR n'est pas au cahier des charges mais reste indispensable au POS et au
+// room service déjà livrés.
 enum RoleEmploye {
   RECEPTION
   MENAGE
   SERVEUR
+  MAINTENANCE
+  COMPTABLE
+  // Lecture seule sur toute la chaîne : aucune écriture opérationnelle, aucune
+  // gestion d'employés. Le seul rôle en lecture pure du système.
+  PROPRIETAIRE
   ADMINISTRATEUR_ETABLISSEMENT
   ADMINISTRATEUR_CHAINE
 }
@@ -39,8 +53,15 @@ enum Devise {
   USD
 }
 
+// ATTENTION : seuls MAINTENANCE et NETTOYAGE_EN_COURS excluent une chambre d'une
+// recherche de disponibilité (cf. disponibilite.service.ts et
+// reservations.service.ts::trouverChambreDisponible). OCCUPEE et RESERVEE sont des
+// statuts d'affichage : le chevauchement de Reservation gère déjà le conflit de
+// dates, et les ajouter à l'exclusion rendrait des chambres invisibles à la vente
+// sur des dates futures pourtant libres.
 enum StatutChambre {
   DISPONIBLE
+  RESERVEE
   OCCUPEE
   MAINTENANCE
   NETTOYAGE_EN_COURS
@@ -173,10 +194,33 @@ model Etablissement {
   commune          String
   departement      String
   devisesAcceptees Devise[]
+  // Devise affichée par défaut sur le site public. Doit appartenir à
+  // devisesAcceptees — invariant appliqué dans etablissements.service.ts.
+  devisePrincipale Devise   @default(HTG)
   // Taxe locale en points de pourcentage, propre à chaque établissement — jamais de
   // taux global codé en dur (même principe que les tarifs par devise).
   tauxTaxe         Decimal  @default(10) @db.Decimal(5, 2)
   actif            Boolean  @default(true)
+
+  // Fiche publique — consommée par le site vitrine et le moteur de réservation.
+  // Tous ces champs sont destinés à être publics (GET /etablissements est ouvert).
+  logoUrl             String?
+  latitude            Decimal? @db.Decimal(10, 7)
+  longitude           Decimal? @db.Decimal(10, 7)
+  telephone           String?
+  email               String?
+  siteWeb             String?
+  description         String?
+  equipements         String[]
+  heureCheckIn        String   @default("14:00")
+  heureCheckOut       String   @default("12:00")
+  politiqueAnnulation String?
+  // Fuseau IANA, utilisé UNIQUEMENT pour l'affichage et les emails. Toute la logique
+  // de dates d'OTELA reste en UTC : la Phase 2 a corrigé un bug de décalage causé
+  // par un minuit calculé en heure locale serveur (cf. reservations.utils.ts et la
+  // vue du jour de la réception). Ne jamais s'en servir pour comparer des dates.
+  fuseauHoraire       String   @default("America/Port-au-Prince")
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -205,14 +249,36 @@ model TypeChambre {
   nom             String
   capaciteMax     Int
   description     String?
+  nombreLits      Int      @default(1)
+  equipements     String[]
+  superficie      Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   chambres Chambre[]
   tarifs   Tarif[]
+  photos   PhotoChambre[]
 
   @@index([etablissementId])
   @@map("types_chambres")
+}
+
+// Les photos sont portées par le TYPE de chambre, pas par la chambre individuelle :
+// le site public vend une catégorie ("Chambre Deluxe"), jamais la chambre 203.
+// Invariant « au plus une photo principale par type » appliqué en transaction dans
+// chambres.service.ts (même pattern que definirContenuDeRepli sur ANTENN).
+model PhotoChambre {
+  id            String      @id @default(cuid())
+  typeChambreId String
+  typeChambre   TypeChambre @relation(fields: [typeChambreId], references: [id], onDelete: Cascade)
+  url           String
+  legende       String?
+  ordre         Int         @default(0)
+  estPrincipale Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  @@index([typeChambreId])
+  @@map("photos_chambres")
 }
 
 model Chambre {
@@ -290,9 +356,21 @@ model Reservation {
   chambre         Chambre           @relation(fields: [chambreId], references: [id])
   clientId        String
   client          Client            @relation(fields: [clientId], references: [id])
+  // Référence courte communiquée au client (ex. OT-A1B2C3), sert à retrouver sa
+  // réservation en ligne sans compte (avec vérification de l'email). Nullable pour
+  // ne pas casser la migration sur les réservations antérieures ; toujours générée
+  // par le code à la création (cf. reservations.service.ts::genererReference).
+  // Postgres autorise plusieurs NULL sous une contrainte unique.
+  reference       String?           @unique
   dateArrivee     DateTime
   dateDepart      DateTime
   nombrePersonnes Int
+  // Ventilation du nombrePersonnes. Invariant nombreAdultes + nombreEnfants ===
+  // nombrePersonnes appliqué dans reservations.service.ts::creerReservation et non
+  // seulement en Zod : le service est partagé par le site public et le back-office.
+  // Défaut « tout en adultes » pour les réservations antérieures à la migration.
+  nombreAdultes   Int               @default(1)
+  nombreEnfants   Int               @default(0)
   devise          Devise
   // Persisté pour affichage/rapports — cf. rapports.service.ts (exclu du calcul
   // de nuitsOccupees, compté séparément dans sejoursJourCount).
@@ -764,4 +842,33 @@ model RefreshToken {
 
   @@index([employeId])
   @@map("refresh_tokens")
+}
+
+// Journal d'audit — écrit explicitement par les services sensibles via
+// audit.service.ts::journaliser(), jamais par un middleware global : un middleware
+// ne connaît ni l'entité touchée ni le résultat réel de l'opération, et journalise
+// autant les échecs de validation que les vraies actions.
+//
+// employeId est nullable pour les actions publiques (réservation depuis le site) et
+// pour les échecs de connexion, où aucun employé n'est authentifié. Pas de relation
+// Prisma vers Employe : une trace d'audit doit survivre à la suppression de son
+// auteur, l'identité est donc figée dans employeNom.
+model JournalAudit {
+  id              String   @id @default(cuid())
+  employeId       String?
+  employeNom      String?
+  employeRole     String?
+  etablissementId String?
+  action          String
+  entite          String
+  entiteId        String?
+  details         Json?
+  ip              String?
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([employeId])
+  @@index([etablissementId])
+  @@index([entite, entiteId])
+  @@map("journal_audit")
 }

@@ -9,8 +9,29 @@ export interface Etablissement {
   commune: string;
   departement: string;
   devisesAcceptees: ('HTG' | 'USD')[];
+  devisePrincipale?: 'HTG' | 'USD';
   actif: boolean;
+  logoUrl?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  telephone?: string | null;
+  email?: string | null;
+  siteWeb?: string | null;
+  description?: string | null;
+  equipements?: string[];
+  heureCheckIn?: string;
+  heureCheckOut?: string;
+  politiqueAnnulation?: string | null;
+  fuseauHoraire?: string;
 }
+
+// Champs modifiables de la fiche (hors nom/adresse gérés au niveau chaîne).
+export type FicheEtablissementInput = Partial<Pick<Etablissement,
+  'devisesAcceptees' | 'devisePrincipale' | 'telephone' | 'email' | 'siteWeb' | 'description' |
+  'equipements' | 'heureCheckIn' | 'heureCheckOut' | 'politiqueAnnulation' | 'fuseauHoraire'>> & {
+  latitude?: number | null;
+  longitude?: number | null;
+};
 
 interface EtablissementsState {
   etablissements: Etablissement[];
@@ -19,6 +40,8 @@ interface EtablissementsState {
   fetchAll: () => Promise<void>;
   creer: (data: { nom: string; adresse: string; commune: string; departement: string; devisesAcceptees: ('HTG' | 'USD')[] }) => Promise<void>;
   toggleActif: (id: string, actif: boolean) => Promise<void>;
+  majFiche: (id: string, data: FicheEtablissementInput) => Promise<Etablissement>;
+  uploadLogo: (id: string, file: File) => Promise<Etablissement>;
 }
 
 export const useEtablissementsStore = create<EtablissementsState>((set, get) => ({
@@ -44,5 +67,22 @@ export const useEtablissementsStore = create<EtablissementsState>((set, get) => 
   toggleActif: async (id, actif) => {
     await api.patch(`/etablissements/${id}`, { actif });
     await get().fetchAll();
+  },
+
+  majFiche: async (id, data) => {
+    const { data: res } = await api.patch(`/etablissements/${id}`, data);
+    await get().fetchAll();
+    return res.data.etablissement as Etablissement;
+  },
+
+  uploadLogo: async (id, file) => {
+    const form = new FormData();
+    form.append('logo', file);
+    // Content-Type multipart posé automatiquement par le navigateur (avec la boundary).
+    const { data: res } = await api.post(`/etablissements/${id}/logo`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    await get().fetchAll();
+    return res.data.etablissement as Etablissement;
   },
 }));

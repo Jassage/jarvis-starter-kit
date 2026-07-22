@@ -14,7 +14,8 @@ const FORM_INITIAL = {
   dateJour: '',
   heureArrivee: '10:00',
   heureDepart: '18:00',
-  nombrePersonnes: 2,
+  nombreAdultes: 2,
+  nombreEnfants: 0,
   devise: 'HTG' as 'HTG' | 'USD',
   nom: '',
   telephone: '',
@@ -30,7 +31,8 @@ export default function ReservationModal({ open, onClose }: { open: boolean; onC
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const typesEligibles = types.filter((t) => t.capaciteMax >= form.nombrePersonnes);
+  const nombrePersonnes = form.nombreAdultes + form.nombreEnfants;
+  const typesEligibles = types.filter((t) => t.capaciteMax >= nombrePersonnes);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +48,9 @@ export default function ReservationModal({ open, onClose }: { open: boolean; onC
         typeChambreId: form.typeChambreId,
         dateArrivee,
         dateDepart,
-        nombrePersonnes: form.nombrePersonnes,
+        nombrePersonnes,
+        nombreAdultes: form.nombreAdultes,
+        nombreEnfants: form.nombreEnfants,
         devise: form.devise,
         typeSejour: form.typeSejour,
         client: { nom: form.nom, telephone: form.telephone, email: form.email },
@@ -108,10 +112,14 @@ export default function ReservationModal({ open, onClose }: { open: boolean; onC
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-ink-2)' }}>Personnes</label>
-            <input type="number" min={1} max={20} required className="input" value={form.nombrePersonnes} onChange={(e) => setForm({ ...form, nombrePersonnes: Number(e.target.value) })} />
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-ink-2)' }}>Adultes</label>
+            <input type="number" min={1} max={20} required className="input" value={form.nombreAdultes} onChange={(e) => setForm({ ...form, nombreAdultes: Number(e.target.value) })} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-ink-2)' }}>Enfants</label>
+            <input type="number" min={0} max={20} required className="input" value={form.nombreEnfants} onChange={(e) => setForm({ ...form, nombreEnfants: Number(e.target.value) })} />
           </div>
           <div>
             <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-ink-2)' }}>Devise</label>

@@ -13,15 +13,27 @@ export interface Tarif {
   dateFinSaison: string;
 }
 
+export interface PhotoChambre {
+  id: string;
+  url: string;
+  legende: string | null;
+  ordre: number;
+  estPrincipale: boolean;
+}
+
 export interface TypeChambre {
   id: string;
   nom: string;
   capaciteMax: number;
   description: string | null;
+  nombreLits: number;
+  equipements: string[];
+  superficie: number | null;
   tarifs: Tarif[];
+  photos: PhotoChambre[];
 }
 
-export type StatutChambre = 'DISPONIBLE' | 'OCCUPEE' | 'MAINTENANCE' | 'NETTOYAGE_EN_COURS';
+export type StatutChambre = 'DISPONIBLE' | 'RESERVEE' | 'OCCUPEE' | 'MAINTENANCE' | 'NETTOYAGE_EN_COURS';
 
 export interface Chambre {
   id: string;
@@ -30,16 +42,29 @@ export interface Chambre {
   typeChambre: { id: string; nom: string };
 }
 
+interface TypeChambreInput {
+  nom: string;
+  capaciteMax: number;
+  description?: string;
+  nombreLits?: number;
+  equipements?: string[];
+  superficie?: number | null;
+}
+
 interface ChambresState {
   types: TypeChambre[];
   chambres: Chambre[];
   isLoading: boolean;
   error: string | null;
   fetchAll: () => Promise<void>;
-  creerType: (data: { nom: string; capaciteMax: number; description?: string }) => Promise<void>;
+  creerType: (data: TypeChambreInput) => Promise<void>;
+  majType: (id: string, data: Partial<TypeChambreInput>) => Promise<void>;
   creerTarif: (typeChambreId: string, data: { devise: 'HTG' | 'USD'; typeSejour: TypeSejour; montant: number; dateDebutSaison: string; dateFinSaison: string }) => Promise<void>;
   creerChambre: (data: { typeChambreId: string; numero: string }) => Promise<void>;
-  toggleMaintenance: (id: string, statut: 'DISPONIBLE' | 'MAINTENANCE') => Promise<void>;
+  toggleMaintenance: (id: string, enMaintenance: boolean) => Promise<void>;
+  ajouterPhotos: (typeChambreId: string, files: File[], legendes?: string[]) => Promise<void>;
+  modifierPhoto: (photoId: string, data: { legende?: string | null; ordre?: number; estPrincipale?: boolean }) => Promise<void>;
+  supprimerPhoto: (photoId: string) => Promise<void>;
 }
 
 export const useChambresStore = create<ChambresState>((set, get) => ({
@@ -66,6 +91,11 @@ export const useChambresStore = create<ChambresState>((set, get) => ({
     await get().fetchAll();
   },
 
+  majType: async (id, data) => {
+    await api.patch(`/chambres/types/${id}`, data);
+    await get().fetchAll();
+  },
+
   creerTarif: async (typeChambreId, data) => {
     await api.post(`/chambres/types/${typeChambreId}/tarifs`, data);
     await get().fetchAll();
@@ -76,8 +106,28 @@ export const useChambresStore = create<ChambresState>((set, get) => ({
     await get().fetchAll();
   },
 
-  toggleMaintenance: async (id, statut) => {
-    await api.patch(`/chambres/${id}`, { statut });
+  // Passe par l'endpoint dédié /maintenance (accessible au rôle MAINTENANCE), pas par
+  // le PATCH générique réservé à la direction.
+  toggleMaintenance: async (id, enMaintenance) => {
+    await api.patch(`/chambres/${id}/maintenance`, { enMaintenance });
+    await get().fetchAll();
+  },
+
+  ajouterPhotos: async (typeChambreId, files, legendes) => {
+    const form = new FormData();
+    files.forEach((f) => form.append('photos', f));
+    (legendes ?? []).forEach((l) => form.append('legendes', l));
+    await api.post(`/chambres/types/${typeChambreId}/photos`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    await get().fetchAll();
+  },
+
+  modifierPhoto: async (photoId, data) => {
+    await api.patch(`/chambres/photos/${photoId}`, data);
+    await get().fetchAll();
+  },
+
+  supprimerPhoto: async (photoId) => {
+    await api.delete(`/chambres/photos/${photoId}`);
     await get().fetchAll();
   },
 }));

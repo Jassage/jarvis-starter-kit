@@ -9,22 +9,29 @@ const ROLE_LABEL: Record<RoleEmploye, string> = {
   RECEPTION: 'Réception',
   MENAGE: 'Ménage',
   SERVEUR: 'Serveur',
-  ADMINISTRATEUR_ETABLISSEMENT: 'Admin établissement',
-  ADMINISTRATEUR_CHAINE: 'Admin chaîne',
+  MAINTENANCE: 'Maintenance',
+  COMPTABLE: 'Comptable',
+  PROPRIETAIRE: 'Propriétaire',
+  ADMINISTRATEUR_ETABLISSEMENT: 'Directeur',
+  ADMINISTRATEUR_CHAINE: 'Super administrateur',
 };
+
+// Rôles rattachés à la chaîne (sans établissement). Miroir de ROLES_CHAINE côté
+// backend : seul un admin chaîne peut les créer, et ils n'ont pas d'établissement.
+const ROLES_CHAINE: RoleEmploye[] = ['ADMINISTRATEUR_CHAINE', 'PROPRIETAIRE'];
 
 export default function EmployeModal({ open, onClose, estChaine }: { open: boolean; onClose: () => void; estChaine: boolean }) {
   const { creer } = useEmployesStore();
   const { etablissements } = useEtablissementsStore();
   const rolesDisponibles: RoleEmploye[] = estChaine
-    ? ['RECEPTION', 'MENAGE', 'SERVEUR', 'ADMINISTRATEUR_ETABLISSEMENT', 'ADMINISTRATEUR_CHAINE']
-    : ['RECEPTION', 'MENAGE', 'SERVEUR', 'ADMINISTRATEUR_ETABLISSEMENT'];
+    ? ['RECEPTION', 'MENAGE', 'SERVEUR', 'MAINTENANCE', 'COMPTABLE', 'ADMINISTRATEUR_ETABLISSEMENT', 'PROPRIETAIRE', 'ADMINISTRATEUR_CHAINE']
+    : ['RECEPTION', 'MENAGE', 'SERVEUR', 'MAINTENANCE', 'COMPTABLE', 'ADMINISTRATEUR_ETABLISSEMENT'];
 
   const [form, setForm] = useState({ nom: '', email: '', password: '', role: 'RECEPTION' as RoleEmploye, etablissementId: '' });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const besoinEtablissement = estChaine && form.role !== 'ADMINISTRATEUR_CHAINE';
+  const besoinEtablissement = estChaine && !ROLES_CHAINE.includes(form.role);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +47,7 @@ export default function EmployeModal({ open, onClose, estChaine }: { open: boole
         email: form.email,
         password: form.password,
         role: form.role,
-        etablissementId: form.role === 'ADMINISTRATEUR_CHAINE' ? null : (form.etablissementId || undefined),
+        etablissementId: ROLES_CHAINE.includes(form.role) ? null : (form.etablissementId || undefined),
       });
       onClose();
       setForm({ nom: '', email: '', password: '', role: 'RECEPTION', etablissementId: '' });

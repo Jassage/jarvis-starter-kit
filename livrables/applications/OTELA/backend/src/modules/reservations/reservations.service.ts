@@ -4,6 +4,8 @@ import { AppError } from '../../middlewares/errorHandler.middleware';
 import { differenceEnNuits, estMemeJourCalendaireUTC, assertModifiable, isExclusionViolation } from './reservations.utils';
 import { findOrCreateClient } from '../clients/clients.service';
 import { sendMail } from '../../utils/email';
+import { genererReference } from '../../utils/reference';
+import { qrDataUrl, urlConsultation } from '../../utils/qr';
 import logger from '../../utils/logger';
 
 export interface CreerReservationInput {
@@ -13,6 +15,8 @@ export interface CreerReservationInput {
   dateArrivee: Date;
   dateDepart: Date;
   nombrePersonnes: number;
+  nombreAdultes?: number;
+  nombreEnfants?: number;
   devise: Devise;
   typeSejour?: TypeSejour;
   client: { nom: string; telephone: string; email: string };
@@ -51,16 +55,51 @@ async function trouverTarifApplicable(typeChambreId: string, devise: Devise, dat
   });
 }
 
-async function envoyerConfirmation(reservation: { client: { nom: string; email: string }; etablissement: { nom: string }; dateArrivee: Date; dateDepart: Date; devise: Devise; montantTotal: unknown }) {
+async function envoyerConfirmation(reservation: {
+  reference: string | null;
+  client: { nom: string; email: string };
+  etablissement: { nom: string };
+  dateArrivee: Date;
+  dateDepart: Date;
+  devise: Devise;
+  montantTotal: unknown;
+}) {
   const arr = reservation.dateArrivee.toLocaleDateString('fr-FR');
   const dep = reservation.dateDepart.toLocaleDateString('fr-FR');
+  const ref = reservation.reference ?? '';
+  // QR + lien de consultation : le client retrouve et présente sa réservation sans
+  // compte. Le data URL s'affiche nativement dans l'email HTML.
+  const lien = urlConsultation(ref);
+  let qrImg = '';
+  try {
+    qrImg = `<img src="${await qrDataUrl(ref)}" alt="QR de réservation" width="180" height="180" />`;
+  } catch (err) {
+    logger.error(err, 'Échec génération QR pour email de confirmation');
+  }
+
   await sendMail(
     reservation.client.email,
-    `Confirmation de réservation — ${reservation.etablissement.nom}`,
+    `Confirmation de réservation ${ref} — ${reservation.etablissement.nom}`,
     `<p>Bonjour ${reservation.client.nom},</p>
      <p>Votre réservation à <strong>${reservation.etablissement.nom}</strong> est confirmée.</p>
-     <p>Arrivée : ${arr}<br/>Départ : ${dep}<br/>Total : ${reservation.montantTotal} ${reservation.devise}</p>`
+     <p>Votre référence : <strong style="font-size:18px">${ref}</strong></p>
+     <p>Arrivée : ${arr}<br/>Départ : ${dep}<br/>Total : ${reservation.montantTotal} ${reservation.devise}</p>
+     <p>Présentez ce QR code à votre arrivée, ou consultez votre réservation en ligne :</p>
+     ${qrImg}
+     <p><a href="${lien}">${lien}</a></p>`
   );
+}
+
+// Tire une référence non encore utilisée. La contrainte unique en base reste le
+// garde-fou réel sous concurrence ; ce pré-check évite juste l'échec dans le cas
+// (extrêmement rare) d'une collision.
+async function genererReferenceUnique(): Promise<string> {
+  for (let essai = 0; essai < 5; essai++) {
+    const ref = genererReference();
+    const existe = await prisma.reservation.findUnique({ where: { reference: ref }, select: { id: true } });
+    if (!existe) return ref;
+  }
+  throw new AppError('Impossible de générer une référence de réservation, réessayez', 500);
 }
 
 // Service unique utilisé par le site public ET la création manuelle back-office —
@@ -85,6 +124,19 @@ export async function creerReservation(input: CreerReservationInput) {
   const typeSejour = input.typeSejour ?? 'NUITEE';
   if (typeSejour === 'JOUR' && !estMemeJourCalendaireUTC(input.dateArrivee, input.dateDepart)) {
     throw new AppError('Un séjour day-use doit commencer et se terminer le même jour', 400);
+  }
+
+  // Ventilation adultes/enfants. Validée ici, dans le service, et non seulement en
+  // Zod : ce service est appelé à l'identique par le site public et le back-office,
+  // la règle doit tenir quel que soit le point d'entrée. Défaut « tout en adultes »
+  // quand seule la somme est fournie (compatibilité avec l'ancien formulaire).
+  const nombreAdultes = input.nombreAdultes ?? input.nombrePersonnes;
+  const nombreEnfants = input.nombreEnfants ?? 0;
+  if (nombreAdultes < 1) {
+    throw new AppError('Au moins un adulte est requis', 400);
+  }
+  if (nombreAdultes + nombreEnfants !== input.nombrePersonnes) {
+    throw new AppError('Le nombre d\'adultes et d\'enfants doit correspondre au nombre de personnes', 400);
   }
 
   const etablissement = await prisma.etablissement.findUnique({ where: { id: input.etablissementId } });
@@ -119,6 +171,8 @@ export async function creerReservation(input: CreerReservationInput) {
 
   const client = await findOrCreateClient(input.client);
 
+  const reference = await genererReferenceUnique();
+
   let reservation;
   try {
     reservation = await prisma.$transaction(async (tx) => {
@@ -127,9 +181,12 @@ export async function creerReservation(input: CreerReservationInput) {
           etablissementId: etablissement.id,
           chambreId,
           clientId: client.id,
+          reference,
           dateArrivee: input.dateArrivee,
           dateDepart: input.dateDepart,
           nombrePersonnes: input.nombrePersonnes,
+          nombreAdultes,
+          nombreEnfants,
           devise: input.devise,
           typeSejour,
           montantTotal,
@@ -193,6 +250,28 @@ export async function getReservation(id: string, etablissementId?: string | null
   if (!reservation) throw new AppError('Réservation non trouvée', 404);
   if (etablissementId && reservation.etablissementId !== etablissementId) {
     throw new AppError('Cette réservation n\'appartient pas à votre établissement', 403);
+  }
+  return reservation;
+}
+
+// Consultation publique par référence, sans compte. La référence seule ne suffit
+// pas : l'email du client doit correspondre (comparaison insensible à la casse),
+// pour qu'une référence devinée ou interceptée ne dévoile pas les données d'un
+// client. Renvoie un message identique que la référence n'existe pas ou que l'email
+// ne corresponde pas — ne pas révéler l'existence d'une référence.
+export async function getReservationPublique(reference: string, email: string) {
+  const reservation = await prisma.reservation.findUnique({
+    where: { reference },
+    include: {
+      client: true,
+      chambre: { include: { typeChambre: true } },
+      etablissement: { select: { nom: true, adresse: true, commune: true, telephone: true, email: true, heureCheckIn: true, heureCheckOut: true, politiqueAnnulation: true } },
+      facture: { select: { montantHT: true, taxes: true, montantTotal: true, devise: true, statutPaiement: true } },
+    },
+  });
+
+  if (!reservation || reservation.client.email.toLowerCase() !== email.trim().toLowerCase()) {
+    throw new AppError('Aucune réservation ne correspond à cette référence et cet email', 404);
   }
   return reservation;
 }

@@ -5,7 +5,8 @@ import { validate } from '../../middlewares/validate.middleware';
 import { requireAuth } from '../../middlewares/auth.middleware';
 import { resolveEtablissement } from '../../middlewares/tenant.middleware';
 import { reservationLimiter } from '../../middlewares/rateLimiter.middleware';
-import { creerReservationSchema, listReservationsQuerySchema } from './reservations.schemas';
+import * as facturesCtrl from '../factures/factures.controller';
+import { creerReservationSchema, listReservationsQuerySchema, consultationPubliqueSchema } from './reservations.schemas';
 
 const router = Router();
 
@@ -13,6 +14,11 @@ const router = Router();
 // back-office appelle exactement cette même route (même service, même garde
 // anti-double-booking) pour une création manuelle : jamais deux chemins de code.
 router.post('/', reservationLimiter, validate(creerReservationSchema), asyncHandler(ctrl.create));
+
+// Consultation publique par référence + email — montée AVANT /:id pour que la
+// référence "public" ne soit pas capturée comme un id de réservation.
+router.get('/public/:reference', validate(consultationPubliqueSchema), asyncHandler(ctrl.consultationPublique));
+router.get('/public/:reference/facture.pdf', validate(consultationPubliqueSchema), asyncHandler(facturesCtrl.getFacturePdfPublic));
 
 router.get('/', requireAuth, resolveEtablissement, validate(listReservationsQuerySchema), asyncHandler(ctrl.list));
 router.get('/:id', requireAuth, resolveEtablissement, asyncHandler(ctrl.getOne));

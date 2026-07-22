@@ -67,7 +67,17 @@ export async function refresh(refreshTokenValue: string) {
 }
 
 export async function logout(refreshTokenValue: string) {
+  // L'employé est lu AVANT la suppression pour permettre au contrôleur de tracer la
+  // déconnexion : /logout n'exige pas d'access token valide (on doit pouvoir se
+  // déconnecter après expiration), donc req.employe n'y est jamais renseigné.
+  const enregistrement = await prisma.refreshToken.findUnique({
+    where: { token: refreshTokenValue },
+    select: { employe: { select: { id: true, nom: true, role: true, etablissementId: true } } },
+  });
+
   await prisma.refreshToken.deleteMany({ where: { token: refreshTokenValue } });
+
+  return enregistrement?.employe ?? null;
 }
 
 export async function getMe(employeId: string) {

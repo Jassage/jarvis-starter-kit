@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const ROLES = ['RECEPTION', 'MENAGE', 'SERVEUR', 'ADMINISTRATEUR_ETABLISSEMENT', 'ADMINISTRATEUR_CHAINE'] as const;
+const ROLES = ['RECEPTION', 'MENAGE', 'SERVEUR', 'MAINTENANCE', 'COMPTABLE', 'PROPRIETAIRE', 'ADMINISTRATEUR_ETABLISSEMENT', 'ADMINISTRATEUR_CHAINE'] as const;
 
 export const listEmployesQuerySchema = z.object({
   query: z.object({

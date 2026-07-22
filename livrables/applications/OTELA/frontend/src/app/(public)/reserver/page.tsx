@@ -42,9 +42,13 @@ export default function ReserverPage() {
     dateJour: '',
     heureArrivee: '10:00',
     heureDepart: '18:00',
-    nombrePersonnes: 2,
+    nombreAdultes: 2,
+    nombreEnfants: 0,
     devise: 'HTG' as 'HTG' | 'USD',
   });
+  // Le moteur de disponibilité ne raisonne qu'en nombre total ; la ventilation
+  // adultes/enfants n'est portée que par la réservation finale.
+  const nombrePersonnes = form.nombreAdultes + form.nombreEnfants;
   const [resultats, setResultats] = useState<Resultat[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
@@ -82,7 +86,7 @@ export default function ReserverPage() {
         params: {
           etablissementId: form.etablissementId || undefined,
           ...datesRecherche(),
-          nombrePersonnes: form.nombrePersonnes,
+          nombrePersonnes,
           devise: form.devise,
           typeSejour: form.typeSejour,
         },
@@ -116,7 +120,9 @@ export default function ReserverPage() {
         etablissementId: selection.etablissement.id,
         typeChambreId: selection.typeChambreId,
         ...datesRecherche(),
-        nombrePersonnes: form.nombrePersonnes,
+        nombrePersonnes,
+        nombreAdultes: form.nombreAdultes,
+        nombreEnfants: form.nombreEnfants,
         devise: selection.devise,
         typeSejour: selection.typeSejour,
         client,
@@ -138,7 +144,14 @@ export default function ReserverPage() {
             <CheckCircle2 className="w-7 h-7" style={{ color: 'var(--color-success)' }} />
           </div>
           <h1 className="text-xl font-bold mb-1" style={{ color: 'var(--color-ink)' }}>Réservation confirmée</h1>
-          <p className="text-sm mb-6" style={{ color: 'var(--color-ink-3)' }}>Un email de confirmation a été envoyé à {confirmation.client.email}.</p>
+          <p className="text-sm mb-4" style={{ color: 'var(--color-ink-3)' }}>Un email de confirmation avec votre QR code a été envoyé à {confirmation.client.email}.</p>
+          {confirmation.reference && (
+            <div className="mb-6 p-4 rounded-xl" style={{ background: 'var(--color-primary-soft)' }}>
+              <p className="text-xs font-bold tracking-widest" style={{ color: 'var(--color-primary-2)' }}>VOTRE RÉFÉRENCE</p>
+              <p className="text-2xl font-extrabold tracking-tight" style={{ color: 'var(--color-primary-2)' }}>{confirmation.reference}</p>
+              <a href={`/ma-reservation?ref=${encodeURIComponent(confirmation.reference)}`} className="text-xs font-semibold underline" style={{ color: 'var(--color-primary-2)' }}>Consulter ma réservation en ligne</a>
+            </div>
+          )}
           <div className="text-left space-y-2 p-4 rounded-xl" style={{ background: 'var(--color-surface-2)' }}>
             <div className="flex justify-between text-sm"><span style={{ color: 'var(--color-ink-3)' }}>Établissement</span><span className="font-semibold" style={{ color: 'var(--color-ink)' }}>{confirmation.etablissement.nom}</span></div>
             <div className="flex justify-between text-sm"><span style={{ color: 'var(--color-ink-3)' }}>Chambre</span><span className="font-semibold" style={{ color: 'var(--color-ink)' }}>{confirmation.chambre.typeChambre.nom} — {confirmation.chambre.numero}</span></div>
@@ -291,8 +304,12 @@ export default function ReserverPage() {
             )}
 
             <div>
-              <label className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider mb-1.5" style={{ color: '#c8941c' }}><Users className="w-3 h-3" /> PERSONNES</label>
-              <input required type="number" min={1} max={20} className="input" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'white' }} value={form.nombrePersonnes} onChange={(e) => setForm({ ...form, nombrePersonnes: Number(e.target.value) })} />
+              <label className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider mb-1.5" style={{ color: '#c8941c' }}><Users className="w-3 h-3" /> ADULTES</label>
+              <input required type="number" min={1} max={20} className="input" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'white' }} value={form.nombreAdultes} onChange={(e) => setForm({ ...form, nombreAdultes: Number(e.target.value) })} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold tracking-wider mb-1.5" style={{ color: '#c8941c' }}>ENFANTS</label>
+              <input required type="number" min={0} max={20} className="input" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'white' }} value={form.nombreEnfants} onChange={(e) => setForm({ ...form, nombreEnfants: Number(e.target.value) })} />
             </div>
             <div>
               <label className="block text-[11px] font-bold tracking-wider mb-1.5" style={{ color: '#c8941c' }}>DEVISE</label>

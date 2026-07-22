@@ -19,6 +19,16 @@ function estChaine(requester: Requester) {
   return requester.role === 'ADMINISTRATEUR_CHAINE';
 }
 
+// Rôles rattachés à la chaîne, sans établissement propre. Seul l'administrateur de
+// chaîne peut créer ou promouvoir vers l'un d'eux : un directeur d'établissement en
+// est incapable, y compris en forçant le rôle dans le payload. Le propriétaire est
+// un rôle de chaîne (lecture consolidée) au même titre que l'administrateur.
+const ROLES_CHAINE: RoleEmploye[] = [RoleEmploye.ADMINISTRATEUR_CHAINE, RoleEmploye.PROPRIETAIRE];
+
+function estRoleChaine(role: RoleEmploye) {
+  return ROLES_CHAINE.includes(role);
+}
+
 export async function listEmployes(requester: Requester, filtreEtablissementId?: string) {
   if (estChaine(requester)) {
     return prisma.employe.findMany({
@@ -46,15 +56,16 @@ export async function creerEmploye(
   let etablissementId: string | null;
 
   if (estChaine(requester)) {
-    if (data.role === 'ADMINISTRATEUR_CHAINE') {
+    if (estRoleChaine(data.role)) {
+      // Administrateur de chaîne et propriétaire n'ont pas d'établissement propre.
       etablissementId = null;
     } else {
       if (!data.etablissementId) throw new AppError('etablissementId requis pour ce rôle', 400);
       etablissementId = data.etablissementId;
     }
   } else {
-    if (data.role === 'ADMINISTRATEUR_CHAINE') {
-      throw new AppError('Vous ne pouvez pas créer de compte administrateur chaîne', 403);
+    if (estRoleChaine(data.role)) {
+      throw new AppError('Vous ne pouvez pas créer de compte au niveau de la chaîne', 403);
     }
     etablissementId = requester.etablissementId;
   }
@@ -83,8 +94,8 @@ export async function updateEmploye(
 ) {
   await trouverEmployeGere(requester, id);
 
-  if (data.role === 'ADMINISTRATEUR_CHAINE' && !estChaine(requester)) {
-    throw new AppError('Vous ne pouvez pas promouvoir un compte en administrateur chaîne', 403);
+  if (data.role && estRoleChaine(data.role) && !estChaine(requester)) {
+    throw new AppError('Vous ne pouvez pas promouvoir un compte au niveau de la chaîne', 403);
   }
   // Anti-auto-verrouillage : un admin ne peut pas désactiver son propre compte,
   // au risque de laisser un établissement sans aucun admin actif.
@@ -92,7 +103,12 @@ export async function updateEmploye(
     throw new AppError('Vous ne pouvez pas désactiver votre propre compte', 400);
   }
 
-  return prisma.employe.update({ where: { id }, data, select: SELECT_SAFE });
+  // Une promotion vers un rôle de chaîne détache l'employé de son établissement,
+  // pour rester cohérent avec creerEmploye (les rôles de chaîne ont etablissementId
+  // null). Sans cela le champ resterait renseigné mais ignoré.
+  const patch = data.role && estRoleChaine(data.role) ? { ...data, etablissementId: null } : data;
+
+  return prisma.employe.update({ where: { id }, data: patch, select: SELECT_SAFE });
 }
 
 // Distincte de auth.service.ts::changePassword (qui exige de connaître l'ancien mot

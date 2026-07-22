@@ -107,6 +107,16 @@ html, body {
 }
 .input:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Libellé de champ — reprend le style inline déjà utilisé dans les modals
+   (bloc, xs, semibold, ink-2), centralisé pour les formulaires longs. */
+.label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 0.375rem;
+  color: var(--color-ink-2);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

@@ -11,6 +11,8 @@ export interface Reservation {
   dateArrivee: string;
   dateDepart: string;
   nombrePersonnes: number;
+  nombreAdultes?: number;
+  nombreEnfants?: number;
   devise: 'HTG' | 'USD';
   typeSejour: TypeSejour;
   montantTotal: string;
@@ -34,6 +36,8 @@ interface ReservationsState {
     dateArrivee: string;
     dateDepart: string;
     nombrePersonnes: number;
+    nombreAdultes?: number;
+    nombreEnfants?: number;
     devise: 'HTG' | 'USD';
     typeSejour?: TypeSejour;
     client: { nom: string; telephone: string; email: string };

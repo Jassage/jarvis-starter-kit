@@ -7,6 +7,35 @@
 
 ---
 
+## 2026-07-22
+
+### OTELA : mise à niveau vers un cahier des charges SaaS Multi-Hôtel (2 tranches, façon Cloudbeds)
+
+**Contexte :** Jaslin a fourni un cahier des charges de 22 points pour une plateforme SaaS de gestion multi-hôtel (façon Cloudbeds/HotelRunner) avec la consigne de l'appliquer à OTELA. Audit préalable : OTELA couvrait déjà ~65 % du back-office cœur mais ~10 % du volet public/commercial. L'ensemble a été estimé à 8-12 sessions. **Trois décisions tranchées avec Jaslin avant de coder** (AskUserQuestion) : garder **Express** (pas de migration NestJS demandée par le prompt, 19 modules déjà livrés et vérifiés, le point « API documentée » livré via Swagger dérivé des schémas Zod) ; **stockage disque local via multer** (pas Cloudinary, cohérent avec le reste du portefeuille, sans dépendance réseau) ; commencer par les **fondations manquantes**. Deux tranches livrées dans la même session, plan écrit et validé (EnterPlanMode) pour la première.
+
+**Tranche 1 — Fondations (points 1, 2, 3, 20 + Swagger) :**
+- **Fiche établissement complète** : logo, GPS, téléphone, email, site web, description, équipements, heures de check-in/out, politique d'annulation, devise principale (validée comme appartenant aux devises acceptées), fuseau horaire. Décision documentée dans le code : le fuseau ne sert **qu'à l'affichage**, toute la logique de dates reste en UTC (sinon on rouvre le bug de décalage corrigé en Phase 2).
+- **7 rôles** : sans renommer les enums existants (`ADMINISTRATEUR_CHAINE` = Super Administrateur, `ADMINISTRATEUR_ETABLISSEMENT` = Directeur, libellés d'interface seulement), ajout de **Propriétaire** (lecture seule chaîne), **Comptable** (factures/paiements/rapports) et **Maintenance** (bascule chambre en/hors maintenance). Anti-escalade étendue (un directeur ne peut créer ni admin chaîne ni propriétaire).
+- **Chambres enrichies** : lits, superficie, équipements, **galerie photo par type de chambre** (portée par le type, pas la chambre individuelle, invariant « une seule photo principale » en transaction), statut `RESERVEE`. Piège explicitement évité et testé : `RESERVEE` et `OCCUPEE` ne doivent JAMAIS entrer dans l'exclusion de disponibilité (sinon des chambres deviennent invisibles à la vente) — vérifié 5/5 chambres Standard toujours disponibles malgré une chambre réservée.
+- **Journal d'audit** : écriture explicite dans les services sensibles (jamais un middleware global), appelée hors transaction pour ne jamais bloquer l'opération métier (même principe que `creerEcritureAuto` de BANKA). Page `/journal` avec filtres + export CSV, réservée super admin/propriétaire.
+- **Socle upload** (multer, filtre MIME sans SVG — faille XSS stockée déjà corrigée sur ANTENN — erreurs en 400 propres, `/uploads` servi en statique avec CORP relâché sur ce seul chemin) et **ventilation adultes/enfants** (invariant validé côté service, partagé site public + back-office).
+- **Swagger** sur `/api/docs` dérivé des schémas Zod existants (désactivé en production).
+
+**Tranche 2 — Parcours client final (points 4, 8 partiel, 9, 17) :**
+- **Référence de réservation** (`OT-XXXXXX`, alphabet sans caractères ambigus, unicité en base + reprise sur collision) générée à chaque réservation.
+- **Email de confirmation enrichi** : référence en évidence, **QR code** intégré (data URL), lien de consultation. Best-effort (ne bloque jamais la réservation sans SMTP).
+- **Facture PDF** (pdfkit) : en-tête établissement, bloc client/séjour, tableau HT/taxes/total, statut et historique de paiement, QR. Générée à la demande, jamais stockée.
+- **Consultation en ligne sans compte** : page publique `/ma-reservation`, recherche par **référence + email** (l'email vérifie le titulaire, une référence devinée ne révèle rien, message identique que la référence n'existe pas ou que l'email ne corresponde pas). Téléchargement PDF public (référence+email) et back-office (authentifié, cloisonné, via blob pour porter le token). Bouton PDF ajouté à `FactureModal`.
+- Correctif au passage : la trace d'audit `PAIEMENT_ENCAISSE` loggait un champ inexistant (`methodePaiement` au lieu de `methode`).
+
+**Vérifié en conditions réelles :** `tsc` propre des deux côtés à chaque tranche. Tranche 1 — 20 tests API (anti-escalade, cloisonnement établissement, SVG rejeté 400, upload/suppression disque, RBAC des 3 nouveaux rôles, invariant adultes/enfants, non-régression RESERVEE sur disponibilité) et 10 vérifications navigateur (Playwright, chromium en cache, sans toucher au `package.json`) dont un upload photo réel. Tranche 2 — 8 tests API (référence, consultation bon/mauvais email, PDF public/back-office valides `%PDF-`, RBAC ménage 403) et 6 vérifications navigateur dont un **téléchargement PDF réel**. **Deux bugs PDF trouvés en relisant le PDF généré** : le séparateur de milliers `fr-FR` (espace insécable rendu en `/` par la police Helvetica de pdfkit) et un débordement sur une 2e page — les deux corrigés et re-vérifiés visuellement. Base remise au seed à chaque fois, serveurs arrêtés **par PID ciblé sur le port** (jamais un `taskkill` large, incident du 2026-07-21 à ne pas reproduire), scratchpad Playwright nettoyé.
+
+**Incident de vérif (pas un bug produit) :** les premiers `npm install` de Swagger sont partis à la racine du repo au lieu du backend OTELA (le tool PowerShell démarre à la racine du workspace, pas dans le dossier ciblé par le tool Bash — les deux ont des répertoires de travail distincts). Détecté via un `tsc` qui ne trouvait plus TypeScript, artefacts parasites (`package.json`, `package-lock.json`, `node_modules` 26 Mo, tous non suivis) supprimés de la racine, install refaite dans le backend avec chemin absolu. À retenir : toujours `Set-Location` en chemin absolu côté PowerShell avant un `npm install`.
+
+**Reste (documenté, non traité) :** signature numérique au check-in (point 8), inventaire (14), tickets de maintenance (13), notifications SMS/WhatsApp (17), exports Excel (15), tableau de bord avec graphiques (6), site vitrine 10 pages + avis + SEO (5, 19), paiements en ligne réels (10, bloqués sur les credentials Digicel/MonCash, même blocage que KONEKTE). Dépendances ajoutées : multer, swagger-ui-express, @asteasolutions/zod-to-openapi, pdfkit, qrcode. Deux migrations additives (`fondations_saas`, `reservation_reference`). Commité en git à la fin de la session (deux tranches vérifiées).
+
+---
+
 ## 2026-07-21 (suite 2)
 
 ### POSTA : audit sécurité + 2 correctifs (hash refresh tokens, réassignation du validate middleware)

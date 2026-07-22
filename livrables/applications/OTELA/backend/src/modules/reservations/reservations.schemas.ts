@@ -17,6 +17,10 @@ export const creerReservationSchema = z.object({
     dateArrivee: z.coerce.date(),
     dateDepart: z.coerce.date(),
     nombrePersonnes: z.number().int().min(1).max(20),
+    // Optionnels : la cohérence adultes + enfants === personnes est vérifiée dans le
+    // service (partagé public/back-office), pas ici, pour un message d'erreur unique.
+    nombreAdultes: z.number().int().min(1).max(20).optional(),
+    nombreEnfants: z.number().int().min(0).max(20).optional(),
     devise: z.enum(['HTG', 'USD']),
     typeSejour: z.enum(['NUITEE', 'JOUR']).default('NUITEE'),
     client: clientSchema,
@@ -34,4 +38,11 @@ export const listReservationsQuerySchema = z.object({
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),
   }),
+});
+
+// Consultation publique : la référence vient du chemin, l'email de la query sert de
+// vérification (le client prouve qu'il est bien le titulaire de la réservation).
+export const consultationPubliqueSchema = z.object({
+  params: z.object({ reference: z.string().min(1) }),
+  query: z.object({ email: z.string().email() }),
 });

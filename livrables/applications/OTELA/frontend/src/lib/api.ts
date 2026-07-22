@@ -25,7 +25,7 @@ api.interceptors.request.use((config) => {
 // systématiquement l'un l'autre. Un verrou partagé garantit une seule requête de
 // refresh en vol à la fois, réutilisée par tous les appelants concurrents. Appliqué
 // dès le départ sur OTELA (correctif découvert après coup sur LAKAY, préventif ici).
-export type RoleEmploye = 'RECEPTION' | 'MENAGE' | 'SERVEUR' | 'ADMINISTRATEUR_ETABLISSEMENT' | 'ADMINISTRATEUR_CHAINE';
+export type RoleEmploye = 'RECEPTION' | 'MENAGE' | 'SERVEUR' | 'MAINTENANCE' | 'COMPTABLE' | 'PROPRIETAIRE' | 'ADMINISTRATEUR_ETABLISSEMENT' | 'ADMINISTRATEUR_CHAINE';
 
 interface RefreshResult {
   accessToken: string;
@@ -49,7 +49,7 @@ export function refreshAccessToken(): Promise<RefreshResult> {
   return refreshPromise;
 }
 
-const PROTECTED_PREFIXES = ['/reservations', '/calendrier', '/chambres', '/rapports', '/chaine', '/etablissements', '/reception', '/menage', '/pos', '/cuisine', '/restaurant', '/spa', '/minibar', '/blanchisserie', '/conciergerie', '/voiturier', '/room-service'];
+const PROTECTED_PREFIXES = ['/reservations', '/calendrier', '/chambres', '/rapports', '/chaine', '/etablissements', '/reception', '/menage', '/pos', '/cuisine', '/restaurant', '/spa', '/minibar', '/blanchisserie', '/conciergerie', '/voiturier', '/room-service', '/parametres', '/journal'];
 
 api.interceptors.response.use(
   (res) => res,

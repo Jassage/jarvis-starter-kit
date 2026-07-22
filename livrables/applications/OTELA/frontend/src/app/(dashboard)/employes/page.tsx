@@ -13,8 +13,11 @@ const ROLE_LABEL: Record<RoleEmploye, string> = {
   RECEPTION: 'Réception',
   MENAGE: 'Ménage',
   SERVEUR: 'Serveur',
-  ADMINISTRATEUR_ETABLISSEMENT: 'Admin établissement',
-  ADMINISTRATEUR_CHAINE: 'Admin chaîne',
+  MAINTENANCE: 'Maintenance',
+  COMPTABLE: 'Comptable',
+  PROPRIETAIRE: 'Propriétaire',
+  ADMINISTRATEUR_ETABLISSEMENT: 'Directeur',
+  ADMINISTRATEUR_CHAINE: 'Super administrateur',
 };
 
 export default function EmployesPage() {

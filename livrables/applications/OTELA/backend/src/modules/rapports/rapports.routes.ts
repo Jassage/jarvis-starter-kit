@@ -3,13 +3,16 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import * as ctrl from './rapports.controller';
 import { validate } from '../../middlewares/validate.middleware';
 import { requireAuth } from '../../middlewares/auth.middleware';
-import { requireAdministrateurEtablissement, requireAdministrateurChaine } from '../../middlewares/rbac.middleware';
+import { requireLectureGestion, requireLectureChaine } from '../../middlewares/rbac.middleware';
 import { resolveEtablissement } from '../../middlewares/tenant.middleware';
 import { periodeSchema } from './rapports.schemas';
 
 const router = Router();
 
-router.get('/etablissement', requireAuth, resolveEtablissement, requireAdministrateurEtablissement, validate(periodeSchema), asyncHandler(ctrl.getRapportEtablissement));
-router.get('/chaine', requireAuth, requireAdministrateurChaine, validate(periodeSchema), asyncHandler(ctrl.getRapportChaine));
+// Rapports en lecture : direction (établissement/chaîne), propriétaire et comptable.
+// Le propriétaire et l'administrateur de chaîne ciblent un établissement via
+// ?etablissementId= (résolu par resolveEtablissement) ; le comptable voit le sien.
+router.get('/etablissement', requireAuth, resolveEtablissement, requireLectureGestion, validate(periodeSchema), asyncHandler(ctrl.getRapportEtablissement));
+router.get('/chaine', requireAuth, requireLectureChaine, validate(periodeSchema), asyncHandler(ctrl.getRapportChaine));
 
 export default router;

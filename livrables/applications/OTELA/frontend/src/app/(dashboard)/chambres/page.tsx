@@ -1,17 +1,19 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { BedDouble, Plus, Wrench } from 'lucide-react';
+import { BedDouble, Plus, Wrench, Images, BedSingle } from 'lucide-react';
 import { useChambresStore } from '@/stores/chambresStore';
 import EmptyState from '@/components/ui/EmptyState';
 import Badge from '@/components/ui/Badge';
 import TypeChambreModal from '@/components/chambres/TypeChambreModal';
 import ChambreModal from '@/components/chambres/ChambreModal';
 import TarifModal from '@/components/chambres/TarifModal';
-import type { StatutChambre } from '@/stores/chambresStore';
+import GalerieModal from '@/components/chambres/GalerieModal';
+import type { StatutChambre, TypeChambre } from '@/stores/chambresStore';
 import type { BadgeTone } from '@/components/ui/Badge';
 
 const STATUT_CHAMBRE_TONE: Record<StatutChambre, BadgeTone> = {
   DISPONIBLE: 'success',
+  RESERVEE: 'info',
   OCCUPEE: 'info',
   MAINTENANCE: 'warning',
   NETTOYAGE_EN_COURS: 'gold',
@@ -19,6 +21,7 @@ const STATUT_CHAMBRE_TONE: Record<StatutChambre, BadgeTone> = {
 
 const STATUT_CHAMBRE_LABEL: Record<StatutChambre, string> = {
   DISPONIBLE: 'Disponible',
+  RESERVEE: 'Réservée',
   OCCUPEE: 'Occupée',
   MAINTENANCE: 'Maintenance',
   NETTOYAGE_EN_COURS: 'Nettoyage en cours',
@@ -29,6 +32,7 @@ export default function ChambresPage() {
   const [typeModalOpen, setTypeModalOpen] = useState(false);
   const [chambreModalOpen, setChambreModalOpen] = useState(false);
   const [tarifModalTypeId, setTarifModalTypeId] = useState<string | null>(null);
+  const [galerieType, setGalerieType] = useState<TypeChambre | null>(null);
 
   useEffect(() => {
     fetchAll();
@@ -52,12 +56,28 @@ export default function ChambresPage() {
           <div className="card"><EmptyState icon={BedDouble} title="Aucun type de chambre" hint="Créez votre premier type pour commencer à recevoir des réservations." /></div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {types.map((t) => (
+            {types.map((t) => {
+              const principale = t.photos?.find((p) => p.estPrincipale) ?? t.photos?.[0];
+              return (
               <div key={t.id} className="card p-5">
+                {principale && (
+                  <img src={principale.url} alt={t.nom} className="w-full h-32 object-cover rounded-xl mb-3" />
+                )}
                 <div className="flex items-start justify-between mb-2">
                   <p className="font-bold" style={{ color: 'var(--color-ink)' }}>{t.nom}</p>
                   <Badge tone="brand">max {t.capaciteMax} pers.</Badge>
                 </div>
+                <div className="flex items-center gap-3 text-xs mb-2" style={{ color: 'var(--color-ink-3)' }}>
+                  <span className="inline-flex items-center gap-1"><BedSingle className="w-3.5 h-3.5" /> {t.nombreLits} lit{t.nombreLits > 1 ? 's' : ''}</span>
+                  {t.superficie != null && <span>{t.superficie} m²</span>}
+                  <span className="inline-flex items-center gap-1"><Images className="w-3.5 h-3.5" /> {t.photos?.length ?? 0}</span>
+                </div>
+                {t.equipements?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {t.equipements.slice(0, 4).map((eq) => <span key={eq} className="badge">{eq}</span>)}
+                    {t.equipements.length > 4 && <span className="badge">+{t.equipements.length - 4}</span>}
+                  </div>
+                )}
                 {t.description && <p className="text-xs mb-3" style={{ color: 'var(--color-ink-3)' }}>{t.description}</p>}
                 <div className="space-y-1">
                   {t.tarifs.length === 0 ? (
@@ -74,12 +94,17 @@ export default function ChambresPage() {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => setTarifModalTypeId(t.id)} className="btn btn-secondary w-full mt-3 text-xs">
-                  <Plus className="w-3.5 h-3.5" />
-                  Tarif
-                </button>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => setTarifModalTypeId(t.id)} className="btn btn-secondary flex-1 text-xs">
+                    <Plus className="w-3.5 h-3.5" /> Tarif
+                  </button>
+                  <button onClick={() => setGalerieType(t)} className="btn btn-secondary flex-1 text-xs">
+                    <Images className="w-3.5 h-3.5" /> Photos
+                  </button>
+                </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -108,7 +133,7 @@ export default function ChambresPage() {
                     <td>
                       {(c.statut === 'DISPONIBLE' || c.statut === 'MAINTENANCE') && (
                         <button
-                          onClick={() => toggleMaintenance(c.id, c.statut === 'DISPONIBLE' ? 'MAINTENANCE' : 'DISPONIBLE')}
+                          onClick={() => toggleMaintenance(c.id, c.statut === 'DISPONIBLE')}
                           className="text-xs font-semibold flex items-center gap-1"
                           style={{ color: 'var(--color-ink-2)' }}
                         >
@@ -130,6 +155,13 @@ export default function ChambresPage() {
       {tarifModalTypeId && (
         <TarifModal open={!!tarifModalTypeId} onClose={() => setTarifModalTypeId(null)} typeChambreId={tarifModalTypeId} />
       )}
+      {/* La galerie relit le type depuis le store à jour pour refléter les photos
+          ajoutées/supprimées sans se figer sur l'instantané du clic. */}
+      <GalerieModal
+        open={!!galerieType}
+        onClose={() => setGalerieType(null)}
+        type={galerieType ? types.find((t) => t.id === galerieType.id) ?? null : null}
+      />
     </div>
   );
 }

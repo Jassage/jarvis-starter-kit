@@ -12,9 +12,14 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             </div>
             <span className="font-extrabold text-lg tracking-tight" style={{ color: 'var(--color-ink)' }}>OTELA</span>
           </Link>
-          <Link href="/login" className="text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>
-            Espace professionnel
-          </Link>
+          <div className="flex items-center gap-5">
+            <Link href="/ma-reservation" className="text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>
+              Ma réservation
+            </Link>
+            <Link href="/login" className="text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>
+              Espace professionnel
+            </Link>
+          </div>
         </div>
       </header>
       <main className="flex-1">{children}</main>

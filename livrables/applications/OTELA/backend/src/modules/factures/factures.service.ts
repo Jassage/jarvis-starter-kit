@@ -20,6 +20,36 @@ export async function recalculerStatutPaiement(tx: Prisma.TransactionClient, fac
   await tx.facture.update({ where: { id: factureId }, data: { statutPaiement: statut } });
 }
 
+// Dossier complet pour la génération du PDF (facture + réservation + client +
+// établissement + paiements). Applique le cloisonnement d'établissement quand un
+// etablissementId est fourni (back-office authentifié).
+const INCLUDE_DOSSIER = {
+  reservation: { include: { client: true, etablissement: true, chambre: { include: { typeChambre: true } } } },
+  paiements: { orderBy: { datePaiement: 'asc' as const }, include: { employe: { select: { nom: true } } } },
+};
+
+export async function getDossierFacture(reservationId: string, etablissementId: string | null | undefined) {
+  const facture = await prisma.facture.findUnique({ where: { reservationId }, include: INCLUDE_DOSSIER });
+  if (!facture) throw new AppError('Facture non trouvée', 404);
+  if (etablissementId && facture.reservation.etablissementId !== etablissementId) {
+    throw new AppError('Cette facture n\'appartient pas à votre établissement', 403);
+  }
+  return facture;
+}
+
+// Variante publique : retrouve le dossier par référence de réservation, en exigeant
+// la correspondance de l'email du client (même règle que la consultation publique).
+export async function getDossierPublic(reference: string, email: string) {
+  const facture = await prisma.facture.findFirst({
+    where: { reservation: { reference } },
+    include: INCLUDE_DOSSIER,
+  });
+  if (!facture || facture.reservation.client.email.toLowerCase() !== email.trim().toLowerCase()) {
+    throw new AppError('Aucune facture ne correspond à cette référence et cet email', 404);
+  }
+  return facture;
+}
+
 export async function getFactureParReservation(reservationId: string, etablissementId: string | null | undefined) {
   const reservation = await prisma.reservation.findUnique({ where: { id: reservationId }, select: { etablissementId: true } });
   if (!reservation) throw new AppError('Réservation non trouvée', 404);

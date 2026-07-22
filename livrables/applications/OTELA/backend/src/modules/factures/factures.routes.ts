@@ -13,9 +13,18 @@ const router = Router();
 router.use(requireAuth, resolveEtablissement);
 
 router.get('/:reservationId', asyncHandler(ctrl.getFacture));
+// Montée avant aucune route conflictuelle ; le PDF est réservé au personnel habilité
+// à consulter la facture (réception, direction, comptable).
+router.get(
+  '/:reservationId/pdf',
+  requireRole(RoleEmploye.RECEPTION, RoleEmploye.ADMINISTRATEUR_ETABLISSEMENT, RoleEmploye.ADMINISTRATEUR_CHAINE, RoleEmploye.COMPTABLE),
+  asyncHandler(ctrl.getFacturePdf)
+);
 router.post(
   '/:factureId/paiements',
-  requireRole(RoleEmploye.RECEPTION, RoleEmploye.ADMINISTRATEUR_ETABLISSEMENT),
+  // Le comptable encaisse et suit les paiements, aux côtés de la réception et du
+  // directeur.
+  requireRole(RoleEmploye.RECEPTION, RoleEmploye.ADMINISTRATEUR_ETABLISSEMENT, RoleEmploye.COMPTABLE),
   validate(enregistrerPaiementSchema),
   asyncHandler(ctrl.enregistrerPaiement)
 );

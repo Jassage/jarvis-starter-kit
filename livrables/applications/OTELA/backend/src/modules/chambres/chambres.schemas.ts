@@ -2,11 +2,16 @@ import { z } from 'zod';
 
 const deviseEnum = z.enum(['HTG', 'USD']);
 
+const equipements = z.array(z.string().min(1).max(100));
+
 export const createTypeChambreSchema = z.object({
   body: z.object({
     nom: z.string().min(2).max(100),
     capaciteMax: z.number().int().min(1).max(50),
     description: z.string().max(1000).optional(),
+    nombreLits: z.number().int().min(1).max(20).optional(),
+    equipements: equipements.optional(),
+    superficie: z.number().int().min(1).max(2000).nullable().optional(),
   }),
 });
 
@@ -15,6 +20,25 @@ export const updateTypeChambreSchema = z.object({
     nom: z.string().min(2).max(100).optional(),
     capaciteMax: z.number().int().min(1).max(50).optional(),
     description: z.string().max(1000).optional(),
+    nombreLits: z.number().int().min(1).max(20).optional(),
+    equipements: equipements.optional(),
+    superficie: z.number().int().min(1).max(2000).nullable().optional(),
+  }),
+});
+
+// Métadonnées des photos envoyées en multipart : le fichier est traité par multer,
+// ces champs (légendes alignées sur l'ordre des fichiers) arrivent en texte.
+export const modifierPhotoSchema = z.object({
+  body: z.object({
+    legende: z.string().max(255).nullable().optional(),
+    ordre: z.number().int().min(0).optional(),
+    estPrincipale: z.boolean().optional(),
+  }),
+});
+
+export const basculerMaintenanceSchema = z.object({
+  body: z.object({
+    enMaintenance: z.boolean(),
   }),
 });
 
@@ -51,6 +75,6 @@ export const createChambreSchema = z.object({
 export const updateChambreSchema = z.object({
   body: z.object({
     numero: z.string().min(1).max(20).optional(),
-    statut: z.enum(['DISPONIBLE', 'OCCUPEE', 'MAINTENANCE', 'NETTOYAGE_EN_COURS']).optional(),
+    statut: z.enum(['DISPONIBLE', 'RESERVEE', 'OCCUPEE', 'MAINTENANCE', 'NETTOYAGE_EN_COURS']).optional(),
   }),
 });
