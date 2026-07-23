@@ -69,15 +69,48 @@ versions qu'expo aura deja ecrites dans `package.json`.
 
 Expo Go ne supporte pas les notifications push ni AdMod : il faut un vrai
 build EAS installe sur un appareil ou emulateur. `eas.json` est deja pret
-(profil `development` avec `expo-dev-client` deja installe). Necessite un
-compte Expo (EAS), pas encore connecte dans cet environnement.
+(profil `development` avec `expo-dev-client` deja installe). Compte EAS deja
+connecte (`jassage`), projet EAS deja cree (`extra.eas.projectId` dans
+`app.json`).
+
+**Premier build reussi et verifie le 2026-07-23** (APK reellement compile et
+installable, pas juste soumis). Deux correctifs de config ont ete necessaires
+au passage, deja appliques ici :
+- `.npmrc` (`legacy-peer-deps=true`) — EAS execute `npm ci`, plus strict que
+  `npm install`, qui echouait sur le conflit de peer dependency typescript
+  entre le scaffold Expo et i18next/react-i18next.
+- Plugin `expo-notifications` sans `icon` custom (le fichier
+  `./assets/notification-icon.png` n'existait pas, faisait echouer le
+  prebuild) + ajout de `expo-font` (peer dependency manquante de
+  `@expo/vector-icons`, signale par `expo doctor`).
+
+**Limite connue et contournement necessaire (bug EAS CLI monorepo) :**
+`jarvis-starter-kit` est un monorepo geant (TCHEKE n'est qu'un sous-dossier
+parmi beaucoup d'autres projets). EAS Build calcule `projectRootDirectory` a
+partir de l'emplacement du dossier `.git` (la racine de tout le monorepo),
+mais l'archive locale ne contient que `mobile/` a plat — decalage qui fait
+echouer le build avec "package.json does not exist" des la premiere etape.
+Ni `EAS_NO_VCS=1` ni `EAS_PROJECT_ROOT` ne corrigent ce champ dans cette
+version d'eas-cli (bug documente : github.com/expo/eas-cli/issues/2938).
+
+**Contournement qui fonctionne** : lancer `eas build` depuis une copie de
+`mobile/` qui a son PROPRE depot git (pour que `git rev-parse --show-toplevel`
+retourne ce dossier lui-meme, pas la racine du monorepo) :
 
 ```bash
-npx eas-cli login          # ta propre connexion Expo, pas automatisable ici
-npx eas-cli build:configure  # associe le projet a ton compte EAS (une seule fois)
-npx eas-cli build --profile development --platform android
+# Depuis mobile/, dans un dossier temporaire hors du monorepo :
+cp -r . /tmp/tcheke-mobile-build --exclude=node_modules   # ou equivalent
+cd /tmp/tcheke-mobile-build
+git init -q && git add . && git commit -q -m "temp build snapshot"
+npm install --legacy-peer-deps
+npx eas-cli build --profile development --platform android --non-interactive
 ```
 
-Une fois le build termine (APK telechargeable depuis le lien fourni par EAS),
-installe-le sur ton telephone, puis lance `npx expo start --dev-client` pour
-t'y connecter avec le vrai code source.
+A refaire a chaque nouveau build tant que ce bug eas-cli n'est pas corrige,
+ou tant que TCHEKE n'a pas son propre depot git dedie (a discuter avec
+Jaslin si ca devient penible).
+
+Une fois le build termine, ouvre le lien fourni par EAS (ou scanne le QR
+code) directement sur ton telephone Android pour installer l'APK, puis lance
+`npx expo start --dev-client` depuis le vrai `mobile/` pour t'y connecter
+avec le code source reel.
