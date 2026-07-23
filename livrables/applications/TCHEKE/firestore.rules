@@ -1,0 +1,78 @@
+rules_version = '2';
+
+/**
+ * Regles TCHEKE.
+ *
+ * Principe central (cf. PLAN.md) : les donnees officielles (tirages, taux BRH,
+ * agregats) sont ecrites UNIQUEMENT par le worker via l'Admin SDK, qui
+ * contourne ces regles. Le client n'a donc jamais de droit d'ecriture dessus.
+ * Seule la contribution crowdsourcee du taux de rue est ecrite par les
+ * utilisateurs, et c'est elle qui doit etre strictement validee ici : c'est
+ * la seule porte d'entree ecrivable par n'importe qui.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- Tirages borlette : lecture publique, ecriture reservee au worker (Admin SDK).
+    match /tirages/{tirageId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ---- Taux officiel BRH : lecture publique, ecriture reservee au worker.
+    match /taux_officiel/{date} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ---- Agregats du taux de rue (calcules par le worker) : lecture publique.
+    match /taux_agrege/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ---- Contributions du taux de rue : la seule collection ecrivable par le client.
+    match /taux_kontribisyon/{docId} {
+      allow read: if true;
+
+      allow create: if request.auth != null
+        && estContributionValide(request.resource.data);
+
+      // Seuls votesFyab (increment communautaire) et statut (moderation) sont
+      // modifiables. Les montants et l'auteur d'origine ne peuvent jamais
+      // etre reecrits : une contribution est append-only comme le reste du
+      // portefeuille (ASSOCOTISE, BANKA).
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['votesFyab', 'statut'])
+        && request.resource.data.achat == resource.data.achat
+        && request.resource.data.vente == resource.data.vente
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.statut in ['AKTIF', 'SIYALE'];
+
+      allow delete: if false;
+    }
+
+    // ---- Tokens push : un utilisateur ne gere que le sien.
+    match /push_tokens/{token} {
+      allow read: if false; // jamais lu par un client, seulement par le worker (Admin SDK)
+      allow create, update: if request.auth != null
+        && request.resource.data.keys().hasOnly(['token', 'bolet', 'tauxSeuil', 'uid'])
+        && request.resource.data.token == token
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.bolet is bool;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    function estContributionValide(d) {
+      return d.keys().hasOnly(['achat', 'vente', 'vil', 'uid', 'kreyeLe', 'votesFyab', 'statut'])
+        && d.achat is number && d.achat > 0 && d.achat < 1000
+        && d.vente is number && d.vente > 0 && d.vente < 1000
+        && d.vente >= d.achat
+        && d.vil is string && d.vil.size() > 0 && d.vil.size() < 60
+        && d.uid == request.auth.uid
+        && d.votesFyab == 0
+        && d.statut == 'AKTIF';
+    }
+  }
+}
