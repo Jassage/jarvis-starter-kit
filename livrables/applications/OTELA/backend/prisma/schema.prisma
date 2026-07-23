@@ -15,6 +15,14 @@
 // Tranche Fondations SaaS : fiche établissement complète (contacts, GPS, horaires,
 // politique), 3 rôles supplémentaires, galerie photo par type de chambre,
 // statut RESERVEE, ventilation adultes/enfants, journal d'audit.
+// Tranche Maintenance & Inventaire (cahier des charges SaaS, points #13/#14) :
+// TicketMaintenance (signalement chambre ou zone commune, priorité, bascule
+// maintenance optionnelle de la chambre) + suivi de stock opérationnel
+// (ArticleInventaire/MouvementInventaire — linge, consommables, distinct de
+// ArticleMinibar qui sert la facturation client).
+// Tranche Site vitrine + Avis + SEO (points #5/#19) : Avis (un par séjour terminé,
+// modération par masquage jamais suppression, réponse optionnelle de la direction).
+// Tranche Check-in signé (point #8) : Reservation.signatureUrl/signatureDate.
 
 generator client {
   provider = "prisma-client-js"
@@ -171,6 +179,34 @@ enum TypeSejour {
   JOUR
 }
 
+enum PrioriteTicket {
+  BASSE
+  NORMALE
+  HAUTE
+  URGENTE
+}
+
+// Même nommage que StatutTacheMenage — pas d'état ANNULE, périmètre volontairement
+// restreint à un cycle de vie simple signalement → prise en charge → résolution.
+enum StatutTicketMaintenance {
+  A_FAIRE
+  EN_COURS
+  RESOLU
+}
+
+enum CategorieInventaire {
+  LINGE
+  CONSOMMABLE
+  PRODUIT_ENTRETIEN
+  AUTRE
+}
+
+enum TypeMouvementInventaire {
+  ENTREE
+  SORTIE
+  AJUSTEMENT
+}
+
 // ─────────────────────────────────────────
 // CHAÎNE / ÉTABLISSEMENTS
 // ─────────────────────────────────────────
@@ -233,6 +269,9 @@ model Etablissement {
   servicesSpa   ServiceSpa[]
   praticiens    Praticien[]
   articlesMinibar ArticleMinibar[]
+  ticketsMaintenance TicketMaintenance[]
+  articlesInventaire ArticleInventaire[]
+  avis               Avis[]
 
   @@index([chaineId])
   @@map("etablissements")
@@ -299,6 +338,7 @@ model Chambre {
   demandesConciergerie    DemandeConciergerie[]
   vehicules               Vehicule[]
   commandesRoomService    CommandeRoomService[]
+  ticketsMaintenance      TicketMaintenance[]
 
   @@unique([etablissementId, numero])
   @@index([typeChambreId])
@@ -380,11 +420,17 @@ model Reservation {
   montantTotal    Decimal           @db.Decimal(12, 2)
   statut          StatutReservation @default(CONFIRMEE)
   canal           CanalReservation  @default(SITE_DIRECT)
+  // Signature client capturée au check-in (pad canvas) — le check-in échoue tant
+  // qu'aucune signature n'est fournie, cf. reception.service.ts::checkin. Nullable
+  // pour ne pas casser les réservations déjà en base avant cette tranche.
+  signatureUrl    String?
+  signatureDate   DateTime?
   dateCreation    DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
   facture Facture?
   folio   Folio?
+  avis    Avis?
 
   @@index([etablissementId])
   @@index([chambreId])
@@ -827,6 +873,9 @@ model Employe {
   consommationsMinibarSaisies ConsommationMinibar[]
   demandesConciergerieAssignees DemandeConciergerie[]
   commandesRoomServicePrises CommandeRoomService[]
+  ticketsSignales             TicketMaintenance[] @relation("TicketSignalant")
+  ticketsMaintenanceAssignees TicketMaintenance[] @relation("TicketAssigne")
+  mouvementsInventaireSaisis  MouvementInventaire[]
 
   @@index([etablissementId])
   @@map("employes")
@@ -871,4 +920,112 @@ model JournalAudit {
   @@index([etablissementId])
   @@index([entite, entiteId])
   @@map("journal_audit")
+}
+
+// ─────────────────────────────────────────
+// MAINTENANCE (cahier des charges SaaS, point #13)
+// ─────────────────────────────────────────
+
+// Un ticket vise soit une chambre (chambreId), soit une zone commune (zone en texte
+// libre) — jamais les deux, jamais aucun des deux (invariant appliqué en Zod, pas
+// possible à exprimer proprement en contrainte Prisma). bloqueChambre indique que CE
+// ticket a fait passer la chambre en MAINTENANCE : voir
+// maintenance.service.ts::creerTicket/updateTicket pour la garde anti-écrasement d'un
+// autre ticket encore ouvert sur la même chambre.
+model TicketMaintenance {
+  id              String                  @id @default(cuid())
+  etablissementId String
+  etablissement   Etablissement           @relation(fields: [etablissementId], references: [id])
+  chambreId       String?
+  chambre         Chambre?                @relation(fields: [chambreId], references: [id])
+  zone            String?
+  titre           String
+  description     String?
+  priorite        PrioriteTicket          @default(NORMALE)
+  statut          StatutTicketMaintenance @default(A_FAIRE)
+  bloqueChambre   Boolean                 @default(false)
+  signalantId     String
+  signalant       Employe                 @relation("TicketSignalant", fields: [signalantId], references: [id])
+  employeAssigneId String?
+  employeAssigne   Employe?               @relation("TicketAssigne", fields: [employeAssigneId], references: [id])
+  notesResolution String?
+  dateSignalement DateTime                @default(now())
+  dateResolution  DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@index([etablissementId])
+  @@index([chambreId])
+  @@index([statut])
+  @@map("tickets_maintenance")
+}
+
+// ─────────────────────────────────────────
+// INVENTAIRE (cahier des charges SaaS, point #14)
+// ─────────────────────────────────────────
+
+// Stock opérationnel interne (linge, consommables, entretien) — distinct
+// d'ArticleMinibar qui sert la facturation client au folio, pas le suivi de stock.
+model ArticleInventaire {
+  id              String              @id @default(cuid())
+  etablissementId String
+  etablissement   Etablissement       @relation(fields: [etablissementId], references: [id])
+  nom             String
+  categorie       CategorieInventaire @default(AUTRE)
+  unite           String              @default("unité")
+  quantiteStock   Int                 @default(0)
+  seuilAlerte     Int                 @default(0)
+  actif           Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  mouvements MouvementInventaire[]
+
+  @@unique([etablissementId, nom])
+  @@index([etablissementId])
+  @@map("articles_inventaire")
+}
+
+// Historique append-only des mouvements de stock. stockApres fige le stock résultant
+// au moment du mouvement pour afficher l'historique sans recalcul (même principe que
+// Facture.montantHT figée par rapport à Reservation.montantTotal).
+model MouvementInventaire {
+  id        String                  @id @default(cuid())
+  articleId String
+  article   ArticleInventaire       @relation(fields: [articleId], references: [id])
+  type      TypeMouvementInventaire
+  quantite  Int
+  stockApres Int
+  motif     String?
+  employeId String?
+  employe   Employe?                @relation(fields: [employeId], references: [id])
+  createdAt DateTime                @default(now())
+
+  @@index([articleId])
+  @@map("mouvements_inventaire")
+}
+
+// ─────────────────────────────────────────
+// AVIS CLIENTS (site vitrine, point #19)
+// ─────────────────────────────────────────
+
+// Un avis par séjour (contrainte d'unicité sur reservationId, pas de garde
+// applicative séparée). Jamais soumis pour un séjour non terminé — vérifié dans
+// avis.service.ts::soumettreAvis. Modération par masquage (visible=false), jamais de
+// suppression : préserve la trace, même philosophie que le reste du portefeuille.
+model Avis {
+  id              String   @id @default(cuid())
+  reservationId   String   @unique
+  reservation     Reservation @relation(fields: [reservationId], references: [id])
+  etablissementId String
+  etablissement   Etablissement @relation(fields: [etablissementId], references: [id])
+  note            Int
+  commentaire     String?
+  visible         Boolean  @default(true)
+  reponseDirection String?
+  reponseDate     DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([etablissementId])
+  @@map("avis")
 }

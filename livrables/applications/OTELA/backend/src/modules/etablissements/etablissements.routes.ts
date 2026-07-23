@@ -12,6 +12,7 @@ const router = Router();
 // Lecture publique — le site de réservation a besoin de lister les établissements.
 router.get('/', asyncHandler(ctrl.list));
 router.get('/:id', asyncHandler(ctrl.getOne));
+router.get('/:id/vitrine', asyncHandler(ctrl.getVitrine));
 
 // Créer un établissement reste réservé à la chaîne. La modification et le logo sont
 // ouverts au directeur d'établissement : le contrôleur (assertPeutModifier) garantit

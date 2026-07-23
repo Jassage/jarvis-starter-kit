@@ -1,9 +1,12 @@
 'use client';
-import { useEffect } from 'react';
-import { LogIn, LogOut, DoorOpen } from 'lucide-react';
-import { useReceptionStore } from '@/stores/receptionStore';
+import { useEffect, useState } from 'react';
+import { LogIn, LogOut, DoorOpen, CheckCircle2, MessageCircle } from 'lucide-react';
+import { useReceptionStore, ReservationDuJour } from '@/stores/receptionStore';
 import EmptyState from '@/components/ui/EmptyState';
 import StatCard from '@/components/ui/StatCard';
+import Badge from '@/components/ui/Badge';
+import CheckinModal from '@/components/reception/CheckinModal';
+import { construireLienWhatsApp } from '@/lib/whatsapp';
 
 const STATUT_LABEL: Record<string, string> = {
   DISPONIBLE: 'Disponibles',
@@ -13,20 +16,13 @@ const STATUT_LABEL: Record<string, string> = {
 };
 
 export default function ReceptionPage() {
-  const { arrivees, departs, chambresParStatut, isLoading, fetchVueDuJour, checkin, checkout } = useReceptionStore();
+  const { arrivees, departs, chambresParStatut, isLoading, fetchVueDuJour, checkout, whatsappLog } = useReceptionStore();
+  const [checkinCible, setCheckinCible] = useState<ReservationDuJour | null>(null);
 
   useEffect(() => {
     fetchVueDuJour();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleCheckin = async (id: string) => {
-    try {
-      await checkin(id);
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Impossible d\'enregistrer le check-in');
-    }
-  };
 
   const handleCheckout = async (id: string) => {
     try {
@@ -34,6 +30,12 @@ export default function ReceptionPage() {
     } catch (err: any) {
       alert(err.response?.data?.message || 'Impossible d\'enregistrer le check-out');
     }
+  };
+
+  const handleRappelWhatsApp = (r: ReservationDuJour) => {
+    const message = `Bonjour ${r.client.nom}, nous vous attendons aujourd'hui pour votre séjour (chambre ${r.chambre.typeChambre.nom} — ${r.chambre.numero}). À bientôt !`;
+    window.open(construireLienWhatsApp(r.client.telephone, message), '_blank');
+    whatsappLog(r.id, 'rappel_arrivee');
   };
 
   return (
@@ -65,10 +67,19 @@ export default function ReceptionPage() {
                       </td>
                       <td>{r.chambre.typeChambre.nom} — {r.chambre.numero}</td>
                       <td>
-                        <button onClick={() => handleCheckin(r.id)} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}>
-                          <LogIn className="w-3.5 h-3.5" />
-                          Check-in
-                        </button>
+                        <div className="flex items-center gap-2 justify-end">
+                          <button onClick={() => handleRappelWhatsApp(r)} className="text-xs font-semibold flex items-center gap-1" style={{ color: 'var(--color-success)' }} title="Rappel WhatsApp">
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </button>
+                          {r.signatureUrl ? (
+                            <Badge tone="success"><CheckCircle2 className="w-3 h-3 inline mr-1" />Signé</Badge>
+                          ) : (
+                            <button onClick={() => setCheckinCible(r)} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}>
+                              <LogIn className="w-3.5 h-3.5" />
+                              Check-in
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -121,6 +132,8 @@ export default function ReceptionPage() {
           </div>
         </section>
       </div>
+
+      <CheckinModal reservation={checkinCible} onClose={() => setCheckinCible(null)} />
     </div>
   );
 }

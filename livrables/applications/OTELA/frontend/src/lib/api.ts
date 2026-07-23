@@ -49,7 +49,7 @@ export function refreshAccessToken(): Promise<RefreshResult> {
   return refreshPromise;
 }
 
-const PROTECTED_PREFIXES = ['/reservations', '/calendrier', '/chambres', '/rapports', '/chaine', '/etablissements', '/reception', '/menage', '/pos', '/cuisine', '/restaurant', '/spa', '/minibar', '/blanchisserie', '/conciergerie', '/voiturier', '/room-service', '/parametres', '/journal'];
+const PROTECTED_PREFIXES = ['/reservations', '/calendrier', '/chambres', '/rapports', '/chaine', '/etablissements', '/reception', '/menage', '/pos', '/cuisine', '/restaurant', '/spa', '/minibar', '/blanchisserie', '/conciergerie', '/voiturier', '/room-service', '/parametres', '/journal', '/maintenance', '/inventaire', '/avis'];
 
 api.interceptors.response.use(
   (res) => res,

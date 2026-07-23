@@ -13,6 +13,9 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             <span className="font-extrabold text-lg tracking-tight" style={{ color: 'var(--color-ink)' }}>OTELA</span>
           </Link>
           <div className="flex items-center gap-5">
+            <Link href="/contact" className="text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>
+              Contact
+            </Link>
             <Link href="/ma-reservation" className="text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>
               Ma réservation
             </Link>
@@ -24,6 +27,12 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       </header>
       <main className="flex-1">{children}</main>
       <footer className="py-6 text-center text-xs" style={{ color: 'var(--color-ink-3)' }}>
+        <div className="flex items-center justify-center gap-4 mb-2 flex-wrap">
+          <Link href="/faq" className="hover:underline">FAQ</Link>
+          <Link href="/mentions-legales" className="hover:underline">Mentions légales</Link>
+          <Link href="/cgu" className="hover:underline">CGU</Link>
+          <Link href="/confidentialite" className="hover:underline">Confidentialité</Link>
+        </div>
         OTELA · Chaîne hôtelière haïtienne · Haitech Solutions
       </footer>
     </div>

@@ -54,6 +54,26 @@ export async function consultationPublique(req: Request, res: Response) {
   sendSuccess(res, { reservation, qr });
 }
 
+// Trace qu'un rappel WhatsApp a été déclenché par le personnel (lien wa.me ouvert
+// côté navigateur, jamais un envoi serveur) — atteste la démarche, pas la réception,
+// même nuance que le module de relances d'ASSOCOTISE.
+export async function whatsappLog(req: Request, res: Response) {
+  const reservation = await service.getReservation(req.params.id, req.etablissementId);
+
+  await journaliser(
+    {
+      action: 'WHATSAPP_ENVOYE',
+      entite: 'Reservation',
+      entiteId: reservation.id,
+      etablissementId: reservation.etablissementId,
+      details: { type: req.body?.type ?? 'rappel' },
+    },
+    req
+  );
+
+  sendSuccess(res, {}, 'Rappel consigné');
+}
+
 export async function annuler(req: Request, res: Response) {
   const reservation = await service.annulerReservation(req.params.id, req.etablissementId);
 

@@ -267,6 +267,7 @@ export async function getReservationPublique(reference: string, email: string) {
       chambre: { include: { typeChambre: true } },
       etablissement: { select: { nom: true, adresse: true, commune: true, telephone: true, email: true, heureCheckIn: true, heureCheckOut: true, politiqueAnnulation: true } },
       facture: { select: { montantHT: true, taxes: true, montantTotal: true, devise: true, statutPaiement: true } },
+      avis: { select: { id: true } },
     },
   });
 

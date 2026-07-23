@@ -24,3 +24,13 @@ export const reservationLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, message: 'Trop de tentatives de réservation, réessayez plus tard.' },
 });
+
+// Soumission d'avis publique, même raison que reservationLimiter : anti-spam sur un
+// point d'écriture ouvert sans authentification.
+export const avisLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Trop de tentatives, réessayez plus tard.' },
+});

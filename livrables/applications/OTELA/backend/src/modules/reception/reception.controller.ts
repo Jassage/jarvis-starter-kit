@@ -3,6 +3,7 @@ import * as service from './reception.service';
 import { sendSuccess } from '../../utils/response';
 import { AppError } from '../../middlewares/errorHandler.middleware';
 import { journaliser } from '../audit/audit.service';
+import { urlPublique } from '../../middlewares/upload.middleware';
 
 export async function vueDuJour(req: Request, res: Response) {
   if (!req.etablissementId) throw new AppError('etablissementId requis', 400);
@@ -11,7 +12,9 @@ export async function vueDuJour(req: Request, res: Response) {
 }
 
 export async function checkin(req: Request, res: Response) {
-  const reservation = await service.checkin(req.params.reservationId, req.etablissementId);
+  if (!req.file) throw new AppError('Signature requise (champ "signature")', 400);
+  const signatureUrl = urlPublique('signatures', req.file.filename);
+  const reservation = await service.checkin(req.params.reservationId, req.etablissementId, signatureUrl);
   if (!reservation) throw new AppError('Réservation introuvable après check-in', 500);
 
   await journaliser(

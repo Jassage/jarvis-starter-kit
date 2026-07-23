@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { DollarSign, TrendingUp, Receipt, CheckCircle2, AlertCircle } from 'lucide-react';
+import { DollarSign, TrendingUp, Receipt, CheckCircle2, AlertCircle, Download } from 'lucide-react';
 import { useRapportsStore } from '@/stores/rapportsStore';
 import StatCard from '@/components/ui/StatCard';
 import EmptyState from '@/components/ui/EmptyState';
@@ -10,22 +10,37 @@ function ilYa(jours: number) { return new Date(Date.now() - jours * 86400000).to
 const AUJOURDHUI = new Date().toISOString().slice(0, 10);
 
 export default function ChainePage() {
-  const { rapportChaine, isLoading, fetchRapportChaine } = useRapportsStore();
+  const { rapportChaine, isLoading, fetchRapportChaine, exporter } = useRapportsStore();
   const [periode, setPeriode] = useState(30);
+  const [exportEnCours, setExportEnCours] = useState(false);
 
   useEffect(() => {
     fetchRapportChaine(ilYa(periode), AUJOURDHUI);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periode]);
 
+  const handleExport = async () => {
+    setExportEnCours(true);
+    try {
+      await exporter('chaine', ilYa(periode), AUJOURDHUI);
+    } catch {
+      alert("Impossible de générer l'export Excel");
+    } finally {
+      setExportEnCours(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
         <select className="input sm:max-w-[200px]" value={periode} onChange={(e) => setPeriode(Number(e.target.value))}>
           <option value={7}>7 derniers jours</option>
           <option value={30}>30 derniers jours</option>
           <option value={90}>90 derniers jours</option>
         </select>
+        <button onClick={handleExport} disabled={exportEnCours} className="btn btn-secondary">
+          <Download className="w-4 h-4" /> {exportEnCours ? 'Génération...' : 'Exporter en Excel'}
+        </button>
       </div>
 
       {isLoading || !rapportChaine ? (

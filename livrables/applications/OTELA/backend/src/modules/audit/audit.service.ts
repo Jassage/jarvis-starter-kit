@@ -28,7 +28,8 @@ export type ActionAudit =
   | 'ETABLISSEMENT_MODIFIE'
   | 'LOGO_MODIFIE'
   | 'PHOTO_AJOUTEE'
-  | 'PHOTO_SUPPRIMEE';
+  | 'PHOTO_SUPPRIMEE'
+  | 'WHATSAPP_ENVOYE';
 
 interface EntreeAudit {
   action: ActionAudit;

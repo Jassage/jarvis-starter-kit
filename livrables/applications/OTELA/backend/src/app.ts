@@ -29,6 +29,9 @@ import voiturierRoutes from './modules/voiturier/voiturier.routes';
 import roomServiceRoutes from './modules/room-service/room-service.routes';
 import employesRoutes from './modules/employes/employes.routes';
 import auditRoutes from './modules/audit/audit.routes';
+import maintenanceRoutes from './modules/maintenance/maintenance.routes';
+import inventaireRoutes from './modules/inventaire/inventaire.routes';
+import avisRoutes from './modules/avis/avis.routes';
 
 const app = express();
 
@@ -86,6 +89,9 @@ app.use('/api/voiturier', voiturierRoutes);
 app.use('/api/room-service', roomServiceRoutes);
 app.use('/api/employes', employesRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/inventaire', inventaireRoutes);
+app.use('/api/avis', avisRoutes);
 
 // Documentation Swagger dérivée des schémas Zod. Servie hors production : la doc
 // détaillerait la surface d'attaque d'une API exposée. En dev, /api/docs pour l'UI

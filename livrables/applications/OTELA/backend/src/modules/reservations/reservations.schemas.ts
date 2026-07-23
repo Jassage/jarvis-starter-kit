@@ -46,3 +46,7 @@ export const consultationPubliqueSchema = z.object({
   params: z.object({ reference: z.string().min(1) }),
   query: z.object({ email: z.string().email() }),
 });
+
+export const whatsappLogSchema = z.object({
+  body: z.object({ type: z.string().max(50).optional() }),
+});

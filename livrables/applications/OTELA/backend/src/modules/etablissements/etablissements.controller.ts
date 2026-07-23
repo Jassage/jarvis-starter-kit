@@ -28,6 +28,11 @@ export async function getOne(req: Request, res: Response) {
   sendSuccess(res, { etablissement });
 }
 
+export async function getVitrine(req: Request, res: Response) {
+  const etablissement = await service.getEtablissementVitrine(req.params.id);
+  sendSuccess(res, { etablissement });
+}
+
 export async function create(req: Request, res: Response) {
   const etablissement = await service.createEtablissement(req.body);
   sendSuccess(res, { etablissement }, 'Établissement créé', 201);

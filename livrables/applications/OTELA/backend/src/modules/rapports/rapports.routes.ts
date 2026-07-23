@@ -13,6 +13,9 @@ const router = Router();
 // Le propriétaire et l'administrateur de chaîne ciblent un établissement via
 // ?etablissementId= (résolu par resolveEtablissement) ; le comptable voit le sien.
 router.get('/etablissement', requireAuth, resolveEtablissement, requireLectureGestion, validate(periodeSchema), asyncHandler(ctrl.getRapportEtablissement));
+router.get('/etablissement/serie', requireAuth, resolveEtablissement, requireLectureGestion, validate(periodeSchema), asyncHandler(ctrl.getSerieJournaliere));
+router.get('/etablissement/export.xlsx', requireAuth, resolveEtablissement, requireLectureGestion, validate(periodeSchema), asyncHandler(ctrl.exportEtablissement));
 router.get('/chaine', requireAuth, requireLectureChaine, validate(periodeSchema), asyncHandler(ctrl.getRapportChaine));
+router.get('/chaine/export.xlsx', requireAuth, requireLectureChaine, validate(periodeSchema), asyncHandler(ctrl.exportChaine));
 
 export default router;

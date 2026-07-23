@@ -6,7 +6,9 @@ import { requireAuth } from '../../middlewares/auth.middleware';
 import { resolveEtablissement } from '../../middlewares/tenant.middleware';
 import { reservationLimiter } from '../../middlewares/rateLimiter.middleware';
 import * as facturesCtrl from '../factures/factures.controller';
-import { creerReservationSchema, listReservationsQuerySchema, consultationPubliqueSchema } from './reservations.schemas';
+import { RoleEmploye } from '@prisma/client';
+import { requireRole } from '../../middlewares/rbac.middleware';
+import { creerReservationSchema, listReservationsQuerySchema, consultationPubliqueSchema, whatsappLogSchema } from './reservations.schemas';
 
 const router = Router();
 
@@ -23,5 +25,13 @@ router.get('/public/:reference/facture.pdf', validate(consultationPubliqueSchema
 router.get('/', requireAuth, resolveEtablissement, validate(listReservationsQuerySchema), asyncHandler(ctrl.list));
 router.get('/:id', requireAuth, resolveEtablissement, asyncHandler(ctrl.getOne));
 router.patch('/:id/annuler', requireAuth, resolveEtablissement, asyncHandler(ctrl.annuler));
+router.post(
+  '/:id/whatsapp-log',
+  requireAuth,
+  resolveEtablissement,
+  requireRole(RoleEmploye.RECEPTION, RoleEmploye.ADMINISTRATEUR_ETABLISSEMENT, RoleEmploye.ADMINISTRATEUR_CHAINE),
+  validate(whatsappLogSchema),
+  asyncHandler(ctrl.whatsappLog)
+);
 
 export default router;

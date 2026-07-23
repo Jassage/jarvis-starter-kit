@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarClock, CalendarDays, BedDouble, BarChart3, Building2, X, Hotel, DoorOpen, Sparkles, UtensilsCrossed, ChefHat, Sparkle, Settings, Wine, Shirt, Bell, Car, ConciergeBell, Users, ScrollText, Wrench, Receipt } from 'lucide-react';
+import { CalendarClock, CalendarDays, BedDouble, BarChart3, Building2, X, Hotel, DoorOpen, Sparkles, UtensilsCrossed, ChefHat, Sparkle, Settings, Wine, Shirt, Bell, Car, ConciergeBell, Users, ScrollText, Wrench, Receipt, Package, Star } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -21,6 +21,9 @@ const NAV_ETABLISSEMENT = [
   { href: '/conciergerie', label: 'Conciergerie', icon: Bell },
   { href: '/voiturier', label: 'Voiturier', icon: Car },
   { href: '/chambres', label: 'Chambres & Tarifs', icon: BedDouble },
+  { href: '/maintenance', label: 'Maintenance', icon: Wrench },
+  { href: '/inventaire', label: 'Inventaire', icon: Package },
+  { href: '/avis', label: 'Avis clients', icon: Star },
   { href: '/employes', label: 'Employés', icon: Users },
   { href: '/rapports', label: 'Rapports', icon: BarChart3 },
   { href: '/parametres', label: 'Paramètres hôtel', icon: Settings },
@@ -32,12 +35,15 @@ const NAV_COMPTABLE = [
 ];
 
 const NAV_MAINTENANCE = [
-  { href: '/chambres', label: 'Chambres', icon: Wrench },
+  { href: '/maintenance', label: 'Maintenance', icon: Wrench },
+  { href: '/chambres', label: 'Chambres', icon: BedDouble },
+  { href: '/inventaire', label: 'Inventaire', icon: Package },
 ];
 
 const NAV_PROPRIETAIRE = [
   { href: '/chaine', label: 'Vue chaîne', icon: BarChart3 },
   { href: '/rapports', label: 'Rapports', icon: Receipt },
+  { href: '/avis', label: 'Avis clients', icon: Star },
   { href: '/journal', label: 'Journal d\'audit', icon: ScrollText },
 ];
 
@@ -49,11 +55,14 @@ const NAV_RECEPTION = [
   { href: '/blanchisserie', label: 'Blanchisserie', icon: Shirt },
   { href: '/conciergerie', label: 'Conciergerie', icon: Bell },
   { href: '/voiturier', label: 'Voiturier', icon: Car },
+  { href: '/maintenance', label: 'Maintenance', icon: Wrench },
 ];
 
 const NAV_MENAGE = [
   { href: '/menage', label: 'Ménage', icon: Sparkles },
   { href: '/minibar', label: 'Minibar', icon: Wine },
+  { href: '/maintenance', label: 'Maintenance', icon: Wrench },
+  { href: '/inventaire', label: 'Inventaire', icon: Package },
 ];
 
 const NAV_SERVEUR = [
@@ -66,6 +75,7 @@ const NAV_CHAINE = [
   { href: '/chaine', label: 'Vue chaîne', icon: BarChart3 },
   { href: '/etablissements', label: 'Établissements', icon: Building2 },
   { href: '/employes', label: 'Employés', icon: Users },
+  { href: '/avis', label: 'Avis clients', icon: Star },
   { href: '/journal', label: 'Journal d\'audit', icon: ScrollText },
 ];
 

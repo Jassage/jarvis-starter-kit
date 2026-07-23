@@ -24,6 +24,44 @@ export async function getEtablissement(id: string) {
   return etab;
 }
 
+// Fiche publique complète pour la page vitrine — chambres+photos+avis en une seule
+// requête composée (2 appels en parallèle), pour que la page serveur n'ait besoin
+// que d'un seul fetch. Distincte de getEtablissement() (utilisée par l'admin pour
+// upload/mise à jour) afin de ne pas alourdir ce chemin interne de jointures inutiles.
+export async function getEtablissementVitrine(id: string) {
+  const [etablissement, avisAgg] = await Promise.all([
+    prisma.etablissement.findUnique({
+      where: { id },
+      include: {
+        typesChambres: {
+          include: {
+            tarifs: { orderBy: { dateDebutSaison: 'desc' } },
+            photos: { orderBy: [{ estPrincipale: 'desc' }, { ordre: 'asc' }] },
+          },
+        },
+        avis: {
+          where: { visible: true },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        },
+      },
+    }),
+    prisma.avis.aggregate({
+      where: { etablissementId: id, visible: true },
+      _avg: { note: true },
+      _count: true,
+    }),
+  ]);
+
+  if (!etablissement) throw new AppError('Établissement non trouvé', 404);
+
+  return {
+    ...etablissement,
+    avisMoyenne: avisAgg._avg.note,
+    avisTotal: avisAgg._count,
+  };
+}
+
 // Champs de la fiche publique, communs à la création et à la mise à jour.
 export interface FicheEtablissement {
   logoUrl?: string | null;

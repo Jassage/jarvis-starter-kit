@@ -13,7 +13,7 @@ import { env } from '../config/env';
 
 export const UPLOAD_ROOT = path.resolve(process.cwd(), 'uploads');
 
-export type SousDossierUpload = 'logos' | 'chambres';
+export type SousDossierUpload = 'logos' | 'chambres' | 'signatures';
 
 function dossierDe(sousDossier: SousDossierUpload): string {
   const dossier = path.join(UPLOAD_ROOT, sousDossier);
@@ -62,6 +62,7 @@ function creerUpload(sousDossier: SousDossierUpload) {
 
 const uploadLogo = creerUpload('logos');
 const uploadPhotosChambre = creerUpload('chambres');
+const uploadSignature = creerUpload('signatures');
 
 // Enveloppe les handlers multer pour convertir ses erreurs en AppError : sans cela,
 // un dépassement de taille remonte en 500 alors que c'est une erreur d'appelant.
@@ -85,6 +86,7 @@ function envelopper(handler: RequestHandler): RequestHandler {
 
 export const uploadLogoEtablissement = envelopper(uploadLogo.single('logo'));
 export const uploadPhotosTypeChambre = envelopper(uploadPhotosChambre.array('photos', 10));
+export const uploadSignatureCheckIn = envelopper(uploadSignature.single('signature'));
 
 // URL absolue : le frontend et le futur site vitrine tournent sur une autre origine
 // que l'API, un chemin relatif ne serait pas résolvable côté client.

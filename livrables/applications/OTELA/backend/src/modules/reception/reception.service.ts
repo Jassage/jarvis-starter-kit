@@ -43,7 +43,9 @@ export async function vueDuJour(etablissementId: string) {
   };
 }
 
-export async function checkin(reservationId: string, etablissementId: string | null | undefined) {
+// La signature n'est jamais optionnelle : le check-in EST le moment de la signature
+// (point #8 du cahier des charges), pas une étape à part qu'on pourrait sauter.
+export async function checkin(reservationId: string, etablissementId: string | null | undefined, signatureUrl: string) {
   const reservation = await prisma.reservation.findUnique({ where: { id: reservationId } });
   if (!reservation) throw new AppError('Réservation non trouvée', 404);
   if (etablissementId && reservation.etablissementId !== etablissementId) {
@@ -63,6 +65,8 @@ export async function checkin(reservationId: string, etablissementId: string | n
     if (upd.count === 0) {
       throw new AppError('La chambre n\'est pas encore disponible (départ précédent pas encore enregistré)', 409);
     }
+
+    await tx.reservation.update({ where: { id: reservationId }, data: { signatureUrl, signatureDate: new Date() } });
 
     // Ouverture automatique du folio (extension 5 étoiles) — "la facture maîtresse"
     // du séjour, adossée à la Facture existante (cf. folios.service.ts).

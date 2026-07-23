@@ -100,7 +100,7 @@ registry.registerPath({ method: 'get', path: '/api/audit', tags: ['Audit'], summ
 // réception, ménage, restaurant, room service, spa, minibar, blanchisserie,
 // conciergerie, voiturier, rapports. Leurs schémas Zod sont la source de vérité ;
 // ils pourront être ajoutés ici de la même façon quand le besoin s'en fait sentir.
-const AUTRES_TAGS = ['Réception', 'Ménage', 'Restaurant', 'Spa', 'Rapports'];
+const AUTRES_TAGS = ['Réception', 'Ménage', 'Restaurant', 'Spa', 'Rapports', 'Maintenance', 'Inventaire', 'Avis'];
 
 export function genererDocumentOpenApi() {
   const generator = new OpenApiGeneratorV3(registry.definitions);
