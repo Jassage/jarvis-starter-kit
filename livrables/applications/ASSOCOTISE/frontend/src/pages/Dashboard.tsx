@@ -143,8 +143,10 @@ export function Dashboard() {
     }
   }
 
-  if (profil?.role !== 'responsable_finances') {
-    // Vue résumée pour le secrétaire : pas d'accès au financier complet.
+  const estGestionnaireFinances = profil?.role === 'responsable_finances' || profil?.role === 'tresoriere';
+
+  if (!estGestionnaireFinances) {
+    // Vue résumée pour le secrétaire et le membre du comité : pas d'accès au financier complet.
     return (
       <div className="space-y-4">
         <Card className="p-4">

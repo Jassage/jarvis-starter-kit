@@ -22,6 +22,7 @@ const labelCategorie: Record<CategorieDepense, string> = {
 
 export function DepensesListe() {
   const { profil } = useAuth();
+  const peutGerer = profil?.role === 'responsable_finances' || profil?.role === 'tresoriere';
   const [depenses, setDepenses] = useState<Depense[]>([]);
   const [filtreCategorie, setFiltreCategorie] = useState<'toutes' | CategorieDepense>('toutes');
   const [modalOuverte, setModalOuverte] = useState(false);
@@ -64,8 +65,8 @@ export function DepensesListe() {
   return (
     <div className="space-y-4">
       <PageToolbar
-        actionLabel="Nouvelle dépense"
-        onAction={ouvrirCreation}
+        actionLabel={peutGerer ? 'Nouvelle dépense' : undefined}
+        onAction={peutGerer ? ouvrirCreation : undefined}
         extra={
           <Select
             value={filtreCategorie}
@@ -98,7 +99,7 @@ export function DepensesListe() {
               <Th className="hidden sm:table-cell">Date</Th>
               <Th>Montant</Th>
               <Th className="hidden sm:table-cell">Justificatif</Th>
-              <Th></Th>
+              {peutGerer && <Th></Th>}
             </tr>
           </thead>
           <tbody>
@@ -131,32 +132,34 @@ export function DepensesListe() {
                     <span className="text-xs text-[var(--color-muted)]">—</span>
                   )}
                 </Td>
-                <Td>
-                  <div className="flex items-center justify-end gap-3">
-                    <button
-                      onClick={() => ouvrirEdition(d)}
-                      className="flex items-center gap-1 text-xs font-medium text-[var(--color-brand)] hover:underline"
-                    >
-                      <Pencil size={13} /> Modifier
-                    </button>
-                    <button
-                      onClick={() => onAnnuler(d)}
-                      className={`flex items-center gap-1 text-xs font-medium hover:underline ${
-                        d.annulee ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'
-                      }`}
-                    >
-                      {d.annulee ? (
-                        <>
-                          <RotateCcw size={13} /> Réactiver
-                        </>
-                      ) : (
-                        <>
-                          <Ban size={13} /> Annuler
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </Td>
+                {peutGerer && (
+                  <Td>
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        onClick={() => ouvrirEdition(d)}
+                        className="flex items-center gap-1 text-xs font-medium text-[var(--color-brand)] hover:underline"
+                      >
+                        <Pencil size={13} /> Modifier
+                      </button>
+                      <button
+                        onClick={() => onAnnuler(d)}
+                        className={`flex items-center gap-1 text-xs font-medium hover:underline ${
+                          d.annulee ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'
+                        }`}
+                      >
+                        {d.annulee ? (
+                          <>
+                            <RotateCcw size={13} /> Réactiver
+                          </>
+                        ) : (
+                          <>
+                            <Ban size={13} /> Annuler
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </Td>
+                )}
               </Tr>
             ))}
           </tbody>

@@ -8,9 +8,7 @@ import { NouvelUtilisateurModal } from '../../components/utilisateurs/NouvelUtil
 import { ecouterUtilisateurs, changerStatutUtilisateur } from '../../services/users.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatDate } from '../../lib/format';
-import type { UtilisateurBureau } from '../../types';
-
-const labelRole = { secretaire: 'Secrétaire', responsable_finances: 'Responsable Finances' };
+import { LABEL_ROLE, type UtilisateurBureau } from '../../types';
 
 export function UtilisateursListe() {
   const { profil, envoyerReinitialisation } = useAuth();
@@ -58,7 +56,7 @@ export function UtilisateursListe() {
               <Tr key={u.id}>
                 <Td className="font-medium text-[var(--color-ink)]">{u.nom}</Td>
                 <Td className="hidden sm:table-cell">{u.email}</Td>
-                <Td>{labelRole[u.role]}</Td>
+                <Td>{LABEL_ROLE[u.role]}</Td>
                 <Td className="hidden md:table-cell">{formatDate(u.creeLe)}</Td>
                 <Td>
                   <Badge tone={u.actif ? 'success' : 'neutral'}>{u.actif ? 'Actif' : 'Désactivé'}</Badge>

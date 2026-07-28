@@ -14,7 +14,8 @@ import type { Cotisation, Membre } from '../../types';
 export function VueMois() {
   const { profil } = useAuth();
   const { montantCotisation } = useParametres();
-  const peutAnnuler = profil?.role === 'responsable_finances';
+  const peutAnnuler = profil?.role === 'responsable_finances' || profil?.role === 'tresoriere';
+  const peutSaisir = profil?.role !== 'membre_comite';
   const [mois, setMois] = useState(moisCourant());
   const [membres, setMembres] = useState<Membre[]>([]);
   const [courantesParMembre, setCourantesParMembre] = useState<Map<string, Cotisation>>(new Map());
@@ -72,12 +73,14 @@ export function VueMois() {
             <ChevronRight size={16} />
           </button>
         </div>
-        <button
-          onClick={() => ouvrirSaisie()}
-          className="flex items-center gap-1.5 rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-brand-dark)]"
-        >
-          <Plus size={16} /> Saisir une cotisation
-        </button>
+        {peutSaisir && (
+          <button
+            onClick={() => ouvrirSaisie()}
+            className="flex items-center gap-1.5 rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-brand-dark)]"
+          >
+            <Plus size={16} /> Saisir une cotisation
+          </button>
+        )}
       </div>
 
       <Card className="flex items-center gap-8 p-4">
@@ -144,12 +147,14 @@ export function VueMois() {
                 </Td>
                 <Td>
                   <div className="flex items-center justify-end gap-3">
-                    <button
-                      onClick={() => ouvrirSaisie(m.id)}
-                      className="flex items-center gap-1 text-xs font-medium text-[var(--color-brand)] hover:underline"
-                    >
-                      <Pencil size={13} /> {c ? 'Corriger' : 'Saisir'}
-                    </button>
+                    {peutSaisir && (
+                      <button
+                        onClick={() => ouvrirSaisie(m.id)}
+                        className="flex items-center gap-1 text-xs font-medium text-[var(--color-brand)] hover:underline"
+                      >
+                        <Pencil size={13} /> {c ? 'Corriger' : 'Saisir'}
+                      </button>
+                    )}
                     {c && peutAnnuler && (
                       <button
                         onClick={() => onAnnuler(c)}

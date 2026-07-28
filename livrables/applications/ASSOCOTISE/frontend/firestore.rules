@@ -23,12 +23,38 @@ service cloud.firestore {
       return estActif() && role() == 'secretaire';
     }
 
-    function estResponsableFinances() {
+    // Rôle historique le plus élevé. Conservé sous ce nom de champ en base pour ne pas
+    // casser les comptes déjà déployés (même précédent que ADMINISTRATEUR_CHAINE/OTELA) :
+    // c'est désormais le coordonnateur, seul rôle habilité à administrer l'association
+    // (comptes, paramètres, clôture d'exercice).
+    function estCoordonateur() {
       return estActif() && role() == 'responsable_finances';
     }
 
+    function estTresoriere() {
+      return estActif() && role() == 'tresoriere';
+    }
+
+    function estMembreComite() {
+      return estActif() && role() == 'membre_comite';
+    }
+
+    // Rôles "du bureau" : peuvent saisir (membres, cotisations, relances). Le membre du
+    // comité n'en fait pas partie, lui n'a que de la lecture.
     function estMembreDuBureau() {
-      return estSecretaire() || estResponsableFinances();
+      return estSecretaire() || estCoordonateur() || estTresoriere();
+    }
+
+    // Coordonnateur + trésorière : les deux rôles qui touchent aux dépenses / à l'annulation
+    // de cotisations. Le secrétaire gère les membres mais jamais l'argent.
+    function estGestionnaireFinances() {
+      return estCoordonateur() || estTresoriere();
+    }
+
+    // Tout compte actif, y compris le membre du comité en lecture seule : sert de base à
+    // toutes les règles `read`, jamais à une règle d'écriture.
+    function estLectureAutorisee() {
+      return estMembreDuBureau() || estMembreComite();
     }
 
     // --- Validation des données -------------------------------------------------
@@ -65,29 +91,31 @@ service cloud.firestore {
              || get(/databases/$(database)/documents/exercices/$(annee)).data.statut != 'cloture';
     }
 
-    // Comptes internes du bureau (secretaire / responsable_finances)
+    // Comptes internes (secretaire / responsable_finances (coordonnateur) / tresoriere / membre_comite)
     function donneesUtilisateurValides(d) {
       return d.keys().hasAll(['nom', 'email', 'role', 'actif', 'creePar', 'creeLe'])
              && d.keys().hasOnly(['nom', 'email', 'role', 'actif', 'creePar', 'creeLe'])
              && texteNonVide(d.nom, 120)
              && texteNonVide(d.email, 200)
-             && d.role in ['secretaire', 'responsable_finances']
+             && d.role in ['secretaire', 'responsable_finances', 'tresoriere', 'membre_comite']
              && d.actif is bool
              && texteNonVide(d.creePar, 128)
              && texteNonVide(d.creeLe, 40);
     }
 
+    // La liste des comptes n'est pas une donnée "association" comme les cotisations : un
+    // membre du comité en lecture seule n'a pas besoin de voir qui a quel compte.
     match /users/{uid} {
       allow read: if utilisateurConnecte() && (request.auth.uid == uid || estMembreDuBureau());
 
-      allow create: if estResponsableFinances()
+      allow create: if estCoordonateur()
                     && donneesUtilisateurValides(request.resource.data)
                     && request.resource.data.creePar == request.auth.uid;
 
-      // Seuls le nom, le rôle et l'activation sont modifiables. Un responsable ne peut
+      // Seuls le nom, le rôle et l'activation sont modifiables. Un coordonnateur ne peut
       // ni changer son propre rôle ni se désactiver lui-même (anti auto-verrouillage :
       // il resterait sinon possible de laisser l'association sans aucun administrateur).
-      allow update: if estResponsableFinances()
+      allow update: if estCoordonateur()
                     && donneesUtilisateurValides(request.resource.data)
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nom', 'role', 'actif'])
                     && (uid != request.auth.uid
@@ -109,7 +137,9 @@ service cloud.firestore {
     }
 
     match /members/{memberId} {
-      allow read: if estMembreDuBureau();
+      // Lecture élargie au membre du comité : la vue Cotisations affiche les noms des
+      // membres, y compris pour un compte en lecture seule.
+      allow read: if estLectureAutorisee();
       allow create, update: if estMembreDuBureau() && donneesMembreValides(request.resource.data);
       allow delete: if false; // désactivation via champ statut, jamais de suppression définitive
     }
@@ -135,7 +165,7 @@ service cloud.firestore {
     }
 
     match /contributions/{contribId} {
-      allow read: if estMembreDuBureau();
+      allow read: if estLectureAutorisee();
 
       allow create: if estMembreDuBureau()
                     && donneesCotisationValides(request.resource.data)
@@ -143,8 +173,9 @@ service cloud.firestore {
                     && exerciceOuvert(request.resource.data.mois[0:4]);
 
       // Une annulation doit toujours dire qui l'a faite et quand, pour être lisible dans
-      // le journal d'audit (le seul champ `annulee` ne portait aucune trace).
-      allow update: if estResponsableFinances()
+      // le journal d'audit (le seul champ `annulee` ne portait aucune trace). Réservée aux
+      // deux rôles qui gèrent l'argent (coordonnateur, trésorière) — pas au secrétaire.
+      allow update: if estGestionnaireFinances()
                     && request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['annulee', 'annuleePar', 'annuleeLe'])
                     && request.resource.data.annulee is bool
@@ -155,7 +186,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Dépenses : réservées au responsable finances.
+    // Dépenses : réservées aux deux rôles qui gèrent l'argent (coordonnateur, trésorière).
     // Modifiables (contrairement aux cotisations, qui engagent un tiers), mais l'auteur et
     // l'horodatage de la saisie d'origine ne peuvent jamais être réécrits, et toute
     // modification de fond doit porter un `modifieLe`.
@@ -175,14 +206,14 @@ service cloud.firestore {
     }
 
     match /expenses/{expenseId} {
-      allow read: if estMembreDuBureau();
+      allow read: if estLectureAutorisee();
 
-      allow create: if estResponsableFinances()
+      allow create: if estGestionnaireFinances()
                     && donneesDepenseValides(request.resource.data)
                     && request.resource.data.saisiPar == request.auth.uid
                     && exerciceOuvert(request.resource.data.date[0:4]);
 
-      allow update: if estResponsableFinances()
+      allow update: if estGestionnaireFinances()
                     && donneesDepenseValides(request.resource.data)
                     && request.resource.data.saisiPar == resource.data.saisiPar
                     && request.resource.data.saisiLe == resource.data.saisiLe
@@ -232,7 +263,7 @@ service cloud.firestore {
     }
 
     match /reminders/{relanceId} {
-      allow read: if estMembreDuBureau();
+      allow read: if estLectureAutorisee();
       allow create: if estMembreDuBureau()
                     && donneesRelanceValides(request.resource.data)
                     && request.resource.data.envoyeePar == request.auth.uid;
@@ -257,20 +288,23 @@ service cloud.firestore {
     }
 
     match /exercices/{annee} {
-      allow read: if estMembreDuBureau();
+      // Lecture élargie : le dashboard (accessible à tous les rôles actifs, y compris le
+      // membre du comité) affiche le solde reporté de l'exercice en cours.
+      allow read: if estLectureAutorisee();
 
       // Une clôture doit toujours être signée par celui qui la prononce, de même qu'une
       // réouverture : ce sont les deux opérations les plus lourdes de conséquence de l'app.
+      // Réservée au coordonnateur seul (même la trésorière ne peut pas clôturer l'exercice).
       // Les signatures antérieures restent en place et ne sont vérifiées que si elles changent,
-      // sinon un second responsable ne pourrait plus toucher un exercice signé par un autre.
-      allow create: if estResponsableFinances()
+      // sinon un second coordonnateur ne pourrait plus toucher un exercice signé par un autre.
+      allow create: if estCoordonateur()
                     && donneesExerciceValides(request.resource.data, annee)
                     && !('rouvertPar' in request.resource.data)
                     && (request.resource.data.statut != 'cloture'
                         || (request.resource.data.cloturePar == request.auth.uid
                             && texteNonVide(request.resource.data.clotureLe, 40)));
 
-      allow update: if estResponsableFinances()
+      allow update: if estCoordonateur()
                     && donneesExerciceValides(request.resource.data, annee)
                     && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['cloturePar'])
                         || request.resource.data.cloturePar == request.auth.uid)
@@ -284,8 +318,8 @@ service cloud.firestore {
     }
 
     match /settings/{docId} {
-      allow read: if estMembreDuBureau();
-      allow create, update: if estResponsableFinances()
+      allow read: if estLectureAutorisee();
+      allow create, update: if estCoordonateur()
                             && docId == 'association'
                             && donneesParametresValides(request.resource.data)
                             && request.resource.data.majPar == request.auth.uid;

@@ -1,4 +1,13 @@
-export type Role = 'secretaire' | 'responsable_finances';
+// 'responsable_finances' est conservé tel quel en base (comptes déjà déployés) mais
+// désigne désormais le coordonnateur, seul rôle habilité à administrer l'association.
+export type Role = 'secretaire' | 'responsable_finances' | 'tresoriere' | 'membre_comite';
+
+export const LABEL_ROLE: Record<Role, string> = {
+  secretaire: 'Secrétaire',
+  responsable_finances: 'Coordonnateur',
+  tresoriere: 'Trésorière',
+  membre_comite: 'Membre du comité',
+};
 
 /**
  * Paramètres de l'association, document unique `settings/association`.

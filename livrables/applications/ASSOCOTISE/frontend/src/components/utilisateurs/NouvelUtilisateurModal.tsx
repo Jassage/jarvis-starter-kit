@@ -3,7 +3,9 @@ import { Modal } from '../ui/Modal';
 import { Field, Input, Select } from '../ui/Field';
 import { creerCompteSecretaire } from '../../services/users.service';
 import { useAuth } from '../../contexts/AuthContext';
-import type { Role } from '../../types';
+import { LABEL_ROLE, type Role } from '../../types';
+
+const ROLES_CREABLES: Role[] = ['secretaire', 'tresoriere', 'membre_comite', 'responsable_finances'];
 
 export function NouvelUtilisateurModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { profil } = useAuth();
@@ -61,8 +63,11 @@ export function NouvelUtilisateurModal({ open, onClose }: { open: boolean; onClo
         </Field>
         <Field label="Rôle" required>
           <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="secretaire">Secrétaire</option>
-            <option value="responsable_finances">Responsable Finances</option>
+            {ROLES_CREABLES.map((r) => (
+              <option key={r} value={r}>
+                {LABEL_ROLE[r]}
+              </option>
+            ))}
           </Select>
         </Field>
         <button

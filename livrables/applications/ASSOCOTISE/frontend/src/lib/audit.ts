@@ -1,4 +1,4 @@
-import type { Cotisation, Depense, Membre, Relance, UtilisateurBureau } from '../types';
+import { LABEL_ROLE, type Cotisation, type Depense, type Membre, type Relance, type UtilisateurBureau } from '../types';
 
 export type TypeEvenement =
   | 'cotisation_saisie'
@@ -127,7 +127,7 @@ export function construireJournal(sources: {
       date: u.creeLe,
       type: 'compte_cree',
       auteurId: u.creePar,
-      libelle: `${u.nom} (${u.role === 'secretaire' ? 'secrétaire' : 'responsable finances'})`,
+      libelle: `${u.nom} (${LABEL_ROLE[u.role]})`,
     });
   }
 

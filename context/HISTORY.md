@@ -7,6 +7,172 @@
 
 ---
 
+## 2026-07-28
+
+### ASSOCOTISE : extension du modèle de rôles à 4 niveaux (coordonnateur/trésorière/secrétaire/membre du comité)
+
+**Contexte :** Jaslin a signalé que l'association réelle derrière ASSOCOTISE a un coordonnateur, une secrétaire, une trésorière et d'autres membres du comité, et voulait que tous puissent se connecter avec des droits adaptés — surtout les simples membres du comité, en lecture limitée. L'app n'avait alors que 2 rôles (`secretaire` / `responsable_finances`).
+
+**Décisions clarifiées avec Jaslin avant de coder (AskUserQuestion)** : la trésorière a les droits financiers (cotisations + dépenses, y compris annulation) mais pas l'administration (ni clôture d'exercice, ni gestion des comptes, réservées au coordonnateur) ; les membres du comité ont un accès lecture seule complet sur dashboard/cotisations/dépenses/rapports, aucune écriture nulle part ; seul le coordonnateur peut créer des comptes.
+
+**Décision d'implémentation clé** : le rôle `responsable_finances` existant n'a **pas été renommé** en base — il désigne désormais le coordonnateur, mais la valeur stockée reste `responsable_finances` pour ne casser aucun compte déjà déployé en production (`assocotise-dev`), seul le libellé affiché a changé (« Coordonnateur »). Même précédent déjà appliqué sur OTELA (`ADMINISTRATEUR_CHAINE`/`_ETABLISSEMENT` restés en base, libellés Super Admin/Directeur côté interface).
+
+**`firestore.rules` (le seul vrai gardien, pas de backend)** : nouvelles fonctions `estTresoriere()`, `estMembreComite()`, `estGestionnaireFinances()` (coordonnateur OU trésorière), `estLectureAutorisee()` (les 4 rôles actifs). Lecture élargie à tous les rôles actifs sur members/contributions/expenses/reminders/exercices/settings (le dashboard et la vue cotisations du membre du comité en dépendent). Écriture restée cloisonnée par domaine : dépenses et annulation de cotisation → coordonnateur+trésorière ; comptes/paramètres/clôture d'exercice → coordonnateur seul ; membres/cotisations/relances → secrétaire+trésorière+coordonnateur.
+
+**Frontend** : `Role` étendu à 4 valeurs + `LABEL_ROLE` partagé (élimine 3 mappings dupliqués). Routes (`App.tsx`) et menu (`Sidebar.tsx`) restructurés par palier : Dashboard+Cotisations pour tous ; Membres/Relances pour secrétaire/trésorière/coordonnateur ; Dépenses/Rapports pour coordonnateur/trésorière/membre du comité ; Utilisateurs/Paramètres/Journal/Exercices pour le coordonnateur seul. Boutons d'action (saisir/corriger/annuler une cotisation, créer/modifier/annuler une dépense) masqués pour le membre du comité directement dans les pages concernées, en miroir des règles Firestore.
+
+**Vérifié en conditions réelles** : `tsc --noEmit` propre ; les 29 tests automatisés des règles Firestore (Vitest + émulateur, déjà existants depuis la session du 2026-07-21) repassent tous au vert sans modification — le comportement de `secretaire`/`responsable_finances` est resté strictement rétrocompatible.
+
+**Reste à la charge de Jaslin** : créer les comptes trésorière/membres du comité réels via l'écran Utilisateurs (aucune migration de données requise). Documenté dans `context/CONTEXT.md`.
+
+---
+
+## 2026-07-27 (suite, 3)
+
+### Guide Ultime du Déploiement : manuel de formation complet achevé (28 chapitres)
+
+**Contexte :** demande initiale d'un guide de déploiement simple, escaladée par itérations successives vers un manuel de formation complet façon O'Reilly/Packt/Manning pour un débutant total en administration système. Table des matières (`PLAN-EDITORIAL.md`, 10 parties, 28 chapitres) validée par Jaslin avant toute rédaction, puis manuel écrit chapitre par chapitre dans `livrables/guides/deploiement-ultime/`, avec validation explicite avant de passer au chapitre suivant.
+
+**Gabarit obligatoire par chapitre** (23 sections : objectifs, prérequis, concepts, schémas Mermaid, analogies, étude de cas, bonnes pratiques, erreurs fréquentes, captures d'écran à réaliser, 2-3 laboratoires, exercices, quiz corrigé, glossaire, FAQ, références, conclusion) et gabarit à 11 points pour chaque commande Linux expliquée. Diagrammes en Mermaid natif (et non en encadrés blockquote comme la première édition), sur le même principe que `manuel-nodejs`.
+
+**Contenu final** : 28 chapitres (fondations Linux/Git, préparation serveur, installation logiciels, 12 types de déploiement, Docker/Compose, Nginx, SSL, CI/CD, bases de données, monitoring, performance, sécurité avancée, sauvegardes avancées, maintenance, méthodologie de diagnostic à 150 scénarios + 4 arbres de décision) suivis de 10 études de cas complètes (React+Express+PostgreSQL, React+NestJS, Next.js+Prisma+Docker, Laravel+Docker, Django, Spring Boot, ASP.NET, WordPress, ERPNext, Odoo), plus Annexes (14 tableaux de référence), Glossaire compilé et Index. ~120 600 mots sur 35 fichiers Markdown.
+
+**Distinct de** `livrables/guides/deploiement-serveur.md`, l'aide-mémoire opérationnel rapide (déjà livré plus tôt dans la session) qui redevient l'outil du quotidien une fois ce manuel maîtrisé.
+
+**Documenté dans `context/CONTEXT.md`** sur confirmation de Jaslin, comme matériel pédagogique potentiellement réutilisable pour son activité d'enseignement. Reste non fait, à la demande seulement : export HTML/DOCX/PDF (nécessitera un pré-rendu Mermaid avant export, contrairement à la première édition).
+
+---
+
+## 2026-07-27 (suite, 2)
+
+### NEXORA : Business Copilot V1 (P1) — tout le plan MVP est livré
+
+**Contexte :** sur "vas y", suite directe des deux sessions précédentes le même jour (fondation + P0 métier commités). Dernier chantier du plan MVP : le Business Copilot, différenciateur produit selon `copilot-architecture.md`.
+
+**Décision structurante prise sans bloquer sur une clé API** : l'ADR-006 exige une abstraction `LLMProvider` (anti-lock-in) et un fournisseur LLM frontière hébergé (Anthropic recommandé). Plutôt que de s'arrêter pour demander une clé API à Jaslin (coût réel, décision fondateur qui lui revient), le service est construit pour **dégrader proprement sans clé configurée** : il retourne le contexte d'entreprise brut (calculé sur les vraies données) au lieu d'échouer ou d'halluciner une réponse. L'abstraction `LLMProvider` (interface `generate`, injectée via token Nest `LLM_PROVIDER`) isole `CopilotService` de l'implémentation concrète `AnthropicProvider` (`@anthropic-ai/sdk`, modèle configurable `ANTHROPIC_MODEL`, défaut `claude-sonnet-5`) — changer de fournisseur plus tard ne touchera que cette seule classe.
+
+**Context Builder** (composant central de `copilot-architecture.md` PARTIE IV) : `CopilotService` réutilise `DashboardService` (rendu exportable) pour le chiffre d'affaires/tendance/top produits, ajoute une requête stock faible dédiée (seuil fixe de 5 unités, faute de champ de seuil par produit dans le schéma — décision pragmatique pour rester "simple" comme l'exige la PARTIE IX du document produit). Pas de RAG/embeddings pgvector au MVP malgré l'ADR-006 : les données sont structurées (ventes, stock), pas des documents libres, l'agrégation directe est plus fiable qu'une recherche par similarité pour ce cas — décision documentée en commentaire dans le code. Conversations persistées dans `AIConversation`, déjà modélisé depuis la fondation de la veille (aucune migration nécessaire).
+
+**Garde-fou de coût minimal** (ADR-006 décision 4) : quota de 30 questions/jour/organisation par comptage sur `AIConversation`, en l'absence de tout système de plans tarifaires dans le MVP actuel.
+
+**Frontend** : page `/copilote` (chat avec bulles question/réponse, historique chargé au montage, 3 suggestions rapides reprenant exactement les fonctions V1 documentées — résumé, analyse ventes, alertes stock), carte "Votre copilote" du dashboard mise à jour avec un vrai lien, badge "Bientôt" retiré de la sidebar (plus aucun module en attente).
+
+**Vérifié en conditions réelles** : `tsc --noEmit` propre des deux côtés. Backend en curl : `POST /copilot/ask` répond en mode dégradé avec les vraies données (CA, top produit, alerte stock sur le produit à 5 unités restantes), validation Zod (question vide → 400), quota testé en tirant 30 questions puis confirmant un 429 propre sur la 31e — données de test nettoyées en base après coup (RLS oblige à poser `app.current_org` avant le `DELETE` manuel, sans quoi la policy fail-closed masque les lignes même au rôle propriétaire). Navigateur : question posée depuis l'UI, réponse affichée avec le badge "IA non configurée" uniquement sur la réponse fraîche (pas sur l'historique, limite cosmétique assumée plutôt que d'ajouter une colonne au schéma), lien fonctionnel depuis le dashboard.
+
+**Commité** (`a003d67`). **Tous les P0 et le P1 du plan MVP NEXORA sont désormais livrés.** Reste à la charge de Jaslin : fournir une vraie clé Anthropic pour activer la génération réelle (décision de coût qui lui revient), et surtout — rappel de l'audit stratégique du 2026-07-26, toujours valable — valider l'usage auprès de vrais dirigeants avant d'investir davantage, le projet ayant toujours zéro client.
+
+---
+
+## 2026-07-27 (suite)
+
+### NEXORA : les 4 derniers P0 livrés (Clients, Produits, Ventes, Dashboard) — premier commit de code
+
+**Contexte :** sur "on continue avec nexora", suite directe de la session précédente le même jour (fondation backend+frontend livrée mais non commitée). Lecture du `mvp-implementation-plan.md` et du `data-model.md` (déjà présents dans la doc, Customer/Category/Product/Sale/SaleItem déjà modélisés dans `schema.prisma` de la veille) pour cadrer les 4 derniers modules P0.
+
+**Backend (NestJS)** : module **Clients** (liste/recherche insensible à la casse, historique de ventes, création/modification réservées ADMIN+MANAGER, lecture ouverte à tous les rôles), **Produits + Catégories** (catalogue prix/quantité/disponibilité, création de catégorie à la volée), **Ventes** — le module le plus sensible : décrément de stock **atomique par compare-and-swap** (`updateMany({where: {id, quantity: {gte: demande}}, data: {quantity: {decrement}}})`) dans une transaction interactive `runInTenant`, qui verrouille la ligne produit le temps de la transaction et fait échouer/rollback proprement toute la vente (409) si le stock devient insuffisant. **Dashboard** : chiffre d'affaires du mois + tendance vs mois précédent, nombre de ventes, top 5 produits vendus, série 7 jours pour un sparkling. RBAC aligné sur la matrice de permissions déjà documentée dans `authn-authz-policy.md` (USER peut vendre et consulter mais pas gérer clients/produits).
+
+**Frontend** : pages Clients/Produits/Ventes (formulaire de vente multi-lignes avec total calculé en direct, sélection de catégorie avec création inline), nouveaux composants Modal/Badge/Select/Textarea alignés sur le design system teal/or existant, dashboard entièrement re-câblé sur les vraies données (sparkline 7 jours en CSS pur, checklist "Premiers pas" dynamique et masquée une fois tout accompli), badges "Bientôt" retirés de la sidebar pour ces 3 modules (seul Copilote reste à venir).
+
+**Incident d'environnement (pas applicatif)** : le cache Turbopack de `next dev` s'est corrompu après un `next build` lancé en parallèle sur le même dossier (`Persisting failed: Unable to write SST file`), et un `.next` de build stale de la veille provoquait de faux 404 sur `/login` au premier démarrage du jour — résolu en tuant tous les process Node et en supprimant `.next`.
+
+**Vérifié en conditions réelles de bout en bout** : `tsc --noEmit` et `next build` propres des deux côtés, RBAC/validation Zod/anti mass-assignment testés en curl (401 sans token, 400 champ non déclaré type `organizationId`, 400 catégorie vide), test de stock insuffisant confirmé (vente de 100 unités contre un stock de 7 rejetée en 409, stock inchangé après rollback), puis un parcours complet **en navigateur avec de vraies créations** : connexion démo, ajout du client "Boutique Coin de Rue" via le formulaire, vente de 2 Coca-Cola pour ce client, stock passé de 7 à 5 dans le catalogue, chiffre d'affaires du dashboard passé à 375 HTG en direct.
+
+**Commité** (`daad8c5`) — premier commit de code du projet : la fondation de la session précédente (auth, RLS, organizations) n'avait elle non plus jamais été commitée, tout est parti dans ce commit unique après validation explicite de Jaslin. **Reste : Business Copilot V1 (P1)**, seul chantier du plan MVP encore non commencé.
+
+---
+
+## 2026-07-27
+
+### NEXORA : démarrage du développement — Fondation backend (NestJS + PostgreSQL RLS + Auth)
+
+**Contexte :** sur "on attaque le développement de nexora". Le projet était 100 % documentaire (refonte du 2026-07-26). Avant tout code : lecture du `mvp-implementation-plan.md`, des ADR structurants et du `data-model.md`. Une seule décision remontée à Jaslin (pour/contre honnête) : le framework backend. L'ADR-002 fixe NestJS mais tout son portefeuille est en Express ; **Jaslin a choisi de suivre l'ADR (NestJS)**, en assumant la courbe d'apprentissage. Stack : NestJS + Prisma v5 + PostgreSQL (RLS) + Next.js. Ports 4009 (back) / 3010 (front) / 5433 (Postgres Docker).
+
+**Isolation multi-tenant (ADR-005), le cœur du produit, implémentée et prouvée :** Docker Postgres 16 + pgvector (dès le départ pour le RAG P1). Deux rôles : `nexora_app` (non-superuser, non-BYPASSRLS, soumis au RLS via `FORCE ROW LEVEL SECURITY` même en tant que propriétaire des tables) pour le runtime, et `nexora_auth` (BYPASSRLS) réservé au seul login par email (opération cross-tenant par nature). Schéma Prisma 11 modèles, migration RLS manuelle (policies `tenant_isolation` fail-closed avec `nullif(current_setting('app.current_org', true), '')::uuid`). Tenant posé par transaction via `PrismaService.forTenant()`/`runInTenant()` (pattern d'extension Prisma officiel), toujours issu du token vérifié. **Test d'isolation qui mord (5/5 vert, vraie base) :** tenant B aveugle à A, fail-closed sans contexte, `WITH CHECK` rejetant un `organization_id` étranger.
+
+**Auth complète (vérifiée en HTTP) :** register (crée org + admin ADMIN, id d'org généré côté app pour passer le `WITH CHECK` sans BYPASSRLS), login anti-énumération, refresh par rotation (refresh token = JWT signé `sub`+`org`, hash SHA-256 en base pour révocation réelle), logout, `/me`. Cookie httpOnly, mot de passe 12 car., RBAC, ValidationPipe whitelist, helmet, CORS. Module Organization. Vérifié : 201/401/200/401/409/400/401, rotation (ancien cookie 401), logout→refresh 401, PATCH devise ADMIN, isolation A≠B.
+
+**Bug réel trouvé et corrigé :** `prisma migrate reset` recrée le schéma `public` et efface les droits du script d'init → `nexora_auth` perdait `USAGE`/`SELECT`, login en 500. Corrigé en déplaçant les GRANT minimaux (`USAGE ON SCHEMA public`, `SELECT ON users`) DANS la migration RLS (rejouée à chaque reset). Prisma auto-installé en v7 (breaking), fixé en v5.
+
+`npm run build` (tsc) propre. Guide `DEV.md` écrit.
+
+**Frontend — fondation livrée dans la même session (sur demande explicite d'utiliser les skills design).** Skills `frontend-design` + `ui-ux-pro-max` invoquées ; défaut « bleu SaaS + ambre » écarté au profit d'une direction distinctive ancrée dans le sujet : **teal profond + or chaud** (unique signature), Space Grotesk (display) + Inter (corps) + IBM Plex Mono (chiffres), marque « aiguille de boussole ». Stack Next.js 16 (App Router/Turbopack) + React 19 + Tailwind v4 (tokens `@theme`), port **3011** (3010 pris par ASSOCOTISE, corrigé). Livré : système de design (`globals.css`), primitives, auth client (access token en mémoire + refresh cookie + auto-refresh 401), login/register deux-panneaux, shell responsive (modules « Bientôt »), dashboard branché sur `/organizations/me`, page Paramètres (PATCH ADMIN). **Vérifié** : `tsc` propre, `next build` propre (8 routes), flux complet via l'UI (inscription → cookie → dashboard chargeant le vrai nom d'org scopé RLS, register 201, CORS 204). Clics synthétiques bloqués par le pane navigateur masqué (vérif par soumission programmatique + réseau + arbre d'accessibilité). Compte démo : demo-web@nexora.ht / MotDePasse1!.
+
+**Rien commité** — attente validation Jaslin. Reste des P0 : Clients, Produits, Ventes (backend + UI) ; puis Copilot V1 (P1). Détail complet dans `context/CONTEXT.md`.
+
+---
+
+## 2026-07-26
+
+### NEXORA : audit critique de la documentation, refonte complète en Company OS, réécriture intégrale du contenu
+
+**Découverte** : projet SaaS multi-tenant (Business Copilot IA pour PME) non documenté dans `CONTEXT.md`, dépôt git séparé (`livrables/nexora-platform/`), 100 % documentaire — aucune ligne de code produit, aucun client. Jaslin a demandé un audit critique en rôle CTO/CPO/conseil stratégie, puis validation explicite ("faites tout") pour exécuter la refonte, puis une seconde passe explicite pour lisser et compléter tout le contenu.
+
+**Audit** : trois taxonomies documentaires concurrentes empilées sans réconciliation (dossiers thématiques, dossiers par domaine, couche « bibles »), doublons massifs (3 PRD, 3 GTM, 4 roadmaps, 3 schémas DB), index officiel déjà faux, contradiction technique réelle (MySQL vs PostgreSQL), et le trou le plus critique : aucun modèle d'isolation multi-tenant ni fournisseur de LLM jamais spécifiés malgré leur centralité au produit. Avis critique donné sans complaisance avant d'agir : périmètre trop large pour un MVP, aucune validation client documentée, ratio documentation/produit inversé (85 documents pour zéro client), risque de dispersion vu l'ampleur du reste du portefeuille.
+
+**Exécution en deux passes** : (1) nouvelle arborescence unique `NEXORA-OS/`, suppression des doublons, rédaction des ADR critiques manquants (ADR-005 multi-tenant par Row-Level Security PostgreSQL, ADR-006 fournisseur LLM et architecture RAG) ; (2) sur demande explicite, réécriture en prose fluide de ~48 documents hérités et rédaction intégrale des 30 squelettes restants, avec prudence assumée sur les documents légaux (plans de rédaction, jamais de faux texte juridique) et financiers (méthode fournie sans inventer de chiffres de traction inexistants). Vérification programmatique post-rédaction (caractères corrompus, liens relatifs cassés). Trois commits (sauvegarde, restructuration `75bd378`, réécriture `e4f7b87`). **Statut produit réel inchangé : toujours pré-MVP, zéro code, zéro client** — seule la documentation a changé.
+
+Détail complet dans `context/CONTEXT.md`.
+
+---
+
+### ACADÉMIE (UJEPH) : déblocage de l'accès MySQL, application réelle de la migration frais/faculté, vérification end-to-end
+
+**Suite directe de la session du 2026-07-23** (frais de scolarité par faculté + réductions façon IMFP, bloquée faute d'accès MySQL). Jaslin a mis à jour `DATABASE_URL` dans le `.env` local avec un mot de passe valide, puis a explicitement demandé de vérifier module par module.
+
+**Découverte en lançant `prisma migrate status`** : 9 migrations antérieures au 30 septembre 2025 apparaissaient comme "non appliquées" alors que leurs tables existaient déjà dans la base réelle — la table `_prisma_migrations` ne contient d'enregistrements qu'à partir du 30 septembre (la base a clairement été construite via `prisma db push` avant cette date, puis l'équipe est passée aux migrations proprement dites, sans jamais baseliner l'historique antérieur). Vérifié rigoureusement avant de toucher à quoi que ce soit : `prisma migrate diff --from-url ... --to-schema-datamodel prisma/schema.prisma` a confirmé que le **seul** écart entre la base réelle et le schéma cible était les colonnes de frais ajoutées cette session — donc sans risque, les 9 migrations ont été baselinées une par une (`migrate resolve --applied`), puis la nouvelle migration déployée (`migrate deploy`) proprement, sans toucher au reste de l'historique.
+
+**Vérification end-to-end réelle**, backend démarré et testé via curl avec un compte Admin temporaire (création directe en base bloquée par le classificateur auto-mode — autorisation explicite demandée et obtenue de Jaslin avant de procéder) : login émet un token valide avec le nouveau `JWT_SECRET` ; `/auth/register` et `/audit/audit-logs` renvoient bien 401 sans token (RBAC de la session précédente confirmé intact après la migration) ; création d'une structure de frais avec `facultyId`/`level` persistés ; `assign-faculty` attribue aux inscriptions actives de la bonne faculté/niveau/année et ignore correctement les doublons au second appel ; `applyDiscount` recalcule `totalAmount` depuis `originalAmount`, rejette une réduction supérieure au montant initial (400), et remet le total à zéro-réduction correctement ; modules à rôle restreint (bourses, certificats) toujours accessibles à Admin. Données de test et compte Admin temporaire supprimés après coup, serveur arrêté proprement — base remise dans l'état trouvé, hormis la migration elle-même (voulue).
+
+`tsc --noEmit` propre backend et frontend. **Rien commité ni poussé pour cette passe** — en attente de validation de Jaslin.
+
+---
+
+## 2026-07-23 (suite, 3)
+
+### ACADÉMIE (UJEPH) : frais de scolarité par faculté + réductions (façon IMFP) + revue de code élargie
+
+**Contexte :** Jaslin a demandé de reprendre le modèle de frais de SYGS-IMFP (attribuer un frais à toute une faculté d'un coup, puis pouvoir appliquer des réductions individuelles) et de vérifier plus largement le reste des fichiers du projet ("verifier et trouver ce qui merite d'etre fait... en gros verifier tous les fichiers").
+
+**Découverte clé :** l'historique des migrations d'academie montre que `fee_structures` avait à l'origine des colonnes `faculty`/`level` (avec contrainte unique dessus), supprimées plus tard sans migration Prisma correspondante — dérive schéma/historique pré-existante. Le composant frontend mort `StudentFeeAssignment.tsx` référence encore ces champs disparus, confirmant que la scolarité par faculté existait avant d'être retirée : exactement ce que Jaslin demandait de restaurer, pas une nouveauté.
+
+**Livré :** `FeeStructure.facultyId`/`level` + `StudentFee.originalAmount`/`discountAmount`/`discountReason` (calqués sur IMFP). Nouveau `assignFeeToFaculty` (bulk sur les inscriptions actives d'une faculté/niveau/année, anti-doublon) et `applyDiscount` (recalcule le total depuis le montant d'origine, jamais cumulé). UI : sélecteur Faculté/Niveau dans `FeeStructureManager.tsx`, dialog d'attribution en masse, dialog de réduction dans `StudentFeesSection.tsx`. Bug corrigé au passage : route `/student-fees/assign` appelée par le frontend mais jamais montée côté backend + mauvais nom de champ envoyé — seul appelant confirmé être du code mort, donc correction sans risque.
+
+**Blocage réel : migration jamais appliquée.** Impossible de se connecter à MySQL depuis la session (identifiants du `.env` refusés par le service pourtant démarré). Migration écrite à la main (purement additive), client Prisma régénéré (le code compile), mais rien vérifié en conditions réelles. **Jaslin doit fournir les vrais identifiants MySQL locaux, ou appliquer lui-même la migration**, avant que ce chantier puisse être considéré fiable.
+
+**Revue de code élargie** (agent Explore + vérification manuelle) sur grade/payment/feePayment/enrollment/attendance/schedule/courseAssignment/student/professeur : 5 bugs réels corrigés (statut d'inscription mal normalisé à l'import à cause d'une comparaison de casse ratée, toujours retombé sur "Active" ; validation Zod totalement contournée par un `catch` vide dans la mise à jour d'un paiement de frais ; 5 controllers avec leur propre instance `PrismaClient` au lieu du singleton partagé, risque d'épuisement du pool en prod ; route dupliquée `/grades/grades/...` ; accès non sécurisé à `req.user.id`). Trouvé mais non corrigé, documenté pour Jaslin : deux fonctions frontend appelant des routes de changement de statut qui n'existent pas côté backend (mais confirmées être du code mort, jamais appelées) ; `paymentController.ts` sans aucune validation contrairement à son module frère ; deux autres modules confirmés sans consommateur frontend réel.
+
+`tsc --noEmit` propre backend et frontend après chaque étape. **Rien commité ni poussé pour ce chantier** — en attente de l'accès MySQL de Jaslin pour vérifier réellement avant de commit.
+
+---
+
+## 2026-07-23 (suite, 2)
+
+### ACADÉMIE (UJEPH) : découverte + audit sécurité complet — correctifs reportés
+
+**Contexte :** Jaslin a demandé d'analyser en développeur senior un projet non documenté trouvé dans `livrables/applications/academie/` — système de gestion académique qu'il a développé pour son université (UJEPH) et qui est **déjà en production** (`ujeph-haiti.edu.ht`). Dépôt git séparé déjà poussé sur GitHub (`Jassage/academie-reprise-generator`), stack Express 5 + TypeScript + Prisma + MySQL (backend) / Vite + React 18 + shadcn/ui (frontend, scaffoldé via Lovable), ~40 modules métier (étudiants, notes, présence, inscriptions, finances/bourses, bibliothèque, messagerie, salles, certificats, audit, sauvegardes...).
+
+**Failles critiques trouvées** (détail complet dans `context/CONTEXT.md`) : deux endpoints d'inscription publics sans authentification permettant de créer un compte Admin (`POST /api/auth/register` et `POST /api/users/register`, rôle accepté en clair) ; `JWT_SECRET="change_me"` utilisé tel quel en `.env` ; 23 fichiers de routes sur 39 sans aucun middleware d'authentification (frais étudiants, bourses, messagerie privée, bibliothèque, audit, salles, emplois du temps...) ; une route fantôme non protégée (`GET /api/audit/backup/sql`) dupliquant l'export SQL complet de la base alors que l'équivalent officiel (`/api/backup/export`) est bien protégé ; secrets réels (mot de passe root MySQL, mot de passe d'application Gmail personnel de Jaslin) en clair dans le `.env` local du backend (non poussé sur git, `.gitignore` correct — seul `gestion-frontend/.env`, sans secret sensible, est traqué). RBAC quasi absent : `requireRole` défini mais utilisé dans seulement 2 fichiers de routes sur 39. Bug fonctionnel trouvé au passage : `verifyPassword` inachevée, ne renvoie jamais de réponse (requête bloquée jusqu'au timeout côté client).
+
+**Décision explicite de Jaslin : documenter, corriger plus tard** ("documente les on les fera après") — analyse pure dans un premier temps. Plan d'action priorisé communiqué : (1) neutraliser les deux register publics + rotation `JWT_SECRET` + suppression de la route fantôme d'export SQL, (2) protéger les fichiers de routes ouverts en commençant par l'argent et le privé, (3) RBAC réel sur les actions sensibles. Projet ajouté à `CONTEXT.md` (absent jusqu'ici — découverte de session comme SHOPAY/POSTA/ASSOCOTISE avant lui).
+
+### ACADÉMIE (UJEPH) : correctifs de sécurité appliqués (points 1 et 2, même session, sur "vas y" puis "continue")
+
+**Point 1 (urgent) :** les deux endpoints d'inscription publics (`POST /api/auth/register`, `POST /api/users/register`) protégés par `authenticateToken + requireRole(["Admin"])`. `JWT_SECRET` régénéré (96 caractères hex) dans le `.env` local — Jaslin prévenu qu'il doit reporter la même valeur sur le serveur de production, et que la rotation déconnectera tous les utilisateurs actifs au prochain redémarrage. Route fantôme `GET /api/audit/backup/sql` (dupliquait l'export SQL complet sans protection) supprimée.
+
+**Point 2 :** en réalité 24 fichiers de routes (pas 23) sans aucun middleware d'authentification — corrigé sur tous, `authenticateToken` ajouté systématiquement (attendance, bibliothèque, certificats, documents, messagerie, bourses, salles, emplois du temps, annonces, analytics, rattrapages, prérequis, événements). Deux restrictions de rôle ciblées, les seules jugées sans ambiguïté métier : `/api/audit` réservé Admin/Directeur, actions structurelles d'années académiques (`initialize-base`/`sync`/`create-future`/`set-current`) réservées Admin. `studentFeeRoutes` aligné sur la convention déjà en place de ses modules frères (`authenticateToken, deanPermissions`). Bug `verifyPassword` (trouvé en audit, fonction inachevée qui ne répondait jamais) complété : récupère l'utilisateur via le token, compare le mot de passe par bcrypt, journalise, répond enfin.
+
+**Choix assumé de ne pas pousser le RBAC plus loin** sur les ~20 modules restants (qui gère la bibliothèque, les salles, les bourses au quotidien à l'UJEPH ?) : deviner ces règles sans connaître l'organisation réelle du client risquait de casser des usages légitimes en production — décision explicitée à Jaslin plutôt qu'un choix arbitraire silencieux.
+
+**Vérification anti-régression, sur "continue" (même session)** : avant de considérer les correctifs sûrs, vérification que le frontend envoie bien systématiquement le token — confirmé via l'intercepteur Axios central (`services/api.ts`) et l'absence de toute route publique d'inscription côté React (seules `/login`, `/reset-password`, `/forgot-password` le sont). Découverte au passage d'une logique Doyen à moitié construite dans `UsersManager.tsx`/`usePermissions.ts` ("un doyen ne peut créer que Professeur/Secretaire"), mais l'onglet correspondant n'est accessible qu'à Admin dans `getAccessibleModules()` — donc inatteignable aujourd'hui, ma restriction Admin-only sur `/auth/register` ne casse rien de réel. **Deux vrais bugs pré-existants trouvés en creusant l'impact réel de mes changements** : `documentStore.ts` et `AuditLogsManager.tsx` utilisaient `fetch()` brut sans passer par le client axios central, donc sans jamais envoyer le token d'authentification — corrigés en ajoutant l'en-tête `Authorization` manuellement (bonne clé `localStorage` : `authToken`, différente de la clé `token` utilisée par erreur — et sans effet — dans `PaymentManager.tsx`, bug distinct non corrigé). URL d'export du journal d'audit corrigée au passage (chemin inexistant). Ces deux composants gardent une URL d'API codée en dur (`http://localhost:4000`) qui les rendait déjà non fonctionnels en production avant même cette session — signalé à Jaslin, non corrigé (hors périmètre).
+
+`tsc --noEmit` propre backend et frontend après chaque étape (29 fichiers modifiés au total).
+
+**Commit + push sur "vas y" (2026-07-23, suite)** : commit `06fa6ba` poussé sur `main`. GitHub signale que le dépôt a été renommé vers `Jassage/ujeph.git` (push passé par la redirection automatique). **Toujours pas déployé en prod** : le nouveau `JWT_SECRET` n'existe que dans le `.env` local (jamais commité), il reste à reporter manuellement sur le serveur de production pour clore réellement la faille.
+
+**RBAC fin sur "la suite" (2026-07-23, suite)** : plutôt que de deviner, 4 questions ciblées posées à Jaslin (AskUserQuestion) sur les modules restants les plus sensibles. Réponses : bourses → Admin/Secretaire/Directeur ; certificats → Admin uniquement ; bibliothèque → Admin/Secretaire ; salles → Admin/Secretaire pour la gestion, mais réservations laissées ouvertes à tout connecté. Avant d'appliquer, vérification que rien de réel ne dépend de ces 6 endpoints côté frontend — confirmé par grep exhaustif : les seules références trouvées sont dans `academicStore.ts`, un store Zustand purement local (aucun appel réseau), reliquat d'un prototype antérieur au vrai backend. Restriction appliquée sans risque de régression. Au passage, confirme qu'une partie significative des "~40 modules" du backend est du CRUD auto-généré jamais branché à une vraie page frontend. `tsc --noEmit` propre. Pas encore commité à ce stade de la réponse.
+
+---
+
 ## 2026-07-23 (suite)
 
 ### OTELA : Pages légales + FAQ — dernier chantier actionnable du cahier des charges

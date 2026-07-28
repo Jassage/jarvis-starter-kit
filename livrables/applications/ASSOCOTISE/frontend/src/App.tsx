@@ -42,18 +42,27 @@ function App() {
                 <Route element={<ProtectedRoute />}>
                   <Route element={<AppLayout />}>
                     <Route index element={<Dashboard />} />
-                    <Route path="membres" element={<MembresListe />} />
-                    <Route path="membres/:id" element={<MembreFiche />} />
                     <Route path="cotisations" element={<Cotisations />} />
-                    <Route path="relances" element={<Relances />} />
 
-                    <Route element={<RoleGate roles={['responsable_finances']} />}>
+                    {/* Membres et relances : gestion, pas de lecture seule pour le membre du comité. */}
+                    <Route element={<RoleGate roles={['secretaire', 'responsable_finances', 'tresoriere']} />}>
+                      <Route path="membres" element={<MembresListe />} />
+                      <Route path="membres/:id" element={<MembreFiche />} />
+                      <Route path="relances" element={<Relances />} />
+                    </Route>
+
+                    {/* Finances : coordonnateur et trésorière en écriture, membre du comité en lecture seule. */}
+                    <Route element={<RoleGate roles={['responsable_finances', 'tresoriere', 'membre_comite']} />}>
                       <Route path="depenses" element={<DepensesListe />} />
+                      <Route path="rapports" element={<Rapports />} />
+                    </Route>
+
+                    {/* Administration : réservée au coordonnateur. */}
+                    <Route element={<RoleGate roles={['responsable_finances']} />}>
                       <Route path="utilisateurs" element={<UtilisateursListe />} />
                       <Route path="parametres" element={<Parametres />} />
                       <Route path="journal" element={<Journal />} />
                       <Route path="exercices" element={<Exercices />} />
-                      <Route path="rapports" element={<Rapports />} />
                     </Route>
                   </Route>
                 </Route>

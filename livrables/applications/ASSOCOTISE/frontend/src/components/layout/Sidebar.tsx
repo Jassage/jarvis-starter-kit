@@ -15,32 +15,43 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useParametres } from '../../contexts/ParametresContext';
+import { LABEL_ROLE } from '../../types';
 
-const liensBase = [
-  { to: '/', label: 'Tableau de bord', icon: LayoutDashboard },
-  { to: '/membres', label: 'Membres', icon: Users },
-  { to: '/cotisations', label: 'Cotisations', icon: Wallet },
-  { to: '/relances', label: 'Relances', icon: BellRing },
+const lienDashboard = { to: '/', label: 'Tableau de bord', icon: LayoutDashboard };
+const lienMembres = { to: '/membres', label: 'Membres', icon: Users };
+const lienCotisations = { to: '/cotisations', label: 'Cotisations', icon: Wallet };
+const lienRelances = { to: '/relances', label: 'Relances', icon: BellRing };
+
+// Finances en lecture : coordonnateur, trésorière et membre du comité (lecture seule).
+const liensFinances = [
+  { to: '/depenses', label: 'Dépenses', icon: Receipt },
+  { to: '/rapports', label: 'Rapports', icon: FileBarChart },
 ];
 
-const liensResponsable = [
-  { to: '/depenses', label: 'Dépenses', icon: Receipt },
+// Administration : réservée au coordonnateur.
+const liensAdministration = [
   { to: '/utilisateurs', label: 'Utilisateurs', icon: UserCog },
-  { to: '/rapports', label: 'Rapports', icon: FileBarChart },
   { to: '/exercices', label: 'Exercices', icon: CalendarCheck },
   { to: '/journal', label: 'Journal', icon: ScrollText },
   { to: '/parametres', label: 'Paramètres', icon: Settings },
 ];
 
-const labelRole: Record<string, string> = {
-  secretaire: 'Secrétaire',
-  responsable_finances: 'Responsable Finances',
-};
-
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { profil } = useAuth();
   const { nomAssociation } = useParametres();
-  const liens = profil?.role === 'responsable_finances' ? [...liensBase, ...liensResponsable] : liensBase;
+  const role = profil?.role;
+
+  const estGestion = role === 'secretaire' || role === 'tresoriere' || role === 'responsable_finances';
+  const estLectureFinances = role === 'responsable_finances' || role === 'tresoriere' || role === 'membre_comite';
+
+  const liens = [
+    lienDashboard,
+    ...(estGestion ? [lienMembres] : []),
+    lienCotisations,
+    ...(estGestion ? [lienRelances] : []),
+    ...(estLectureFinances ? liensFinances : []),
+    ...(role === 'responsable_finances' ? liensAdministration : []),
+  ];
 
   return (
     <>
@@ -100,7 +111,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             </div>
             <div className="min-w-0">
               <p className="truncate text-xs font-medium text-[var(--color-ink)]">{profil.nom}</p>
-              <p className="truncate text-[11px] text-[var(--color-muted)]">{labelRole[profil.role]}</p>
+              <p className="truncate text-[11px] text-[var(--color-muted)]">{LABEL_ROLE[profil.role]}</p>
             </div>
           </div>
         )}
