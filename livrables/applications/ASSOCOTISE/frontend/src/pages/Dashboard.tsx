@@ -15,7 +15,7 @@ import { anneeCourante, ecouterExercices } from '../services/exercices.service';
 import { ajouterMois, formatMoisLabel, formatMontant, moisCourant } from '../lib/format';
 import { telechargerCsv } from '../lib/csv';
 import { telechargerRapportPdf } from '../lib/pdf';
-import type { Cotisation, Depense, Exercice, Membre } from '../types';
+import { estGestionnaireFinances, type Cotisation, type Depense, type Exercice, type Membre } from '../types';
 
 /**
  * Fenêtre de lecture du tableau de bord. Elle couvre l'exercice en cours (pour les totaux)
@@ -146,10 +146,10 @@ export function Dashboard() {
     }
   }
 
-  const estGestionnaireFinances = profil?.role === 'responsable_finances' || profil?.role === 'tresoriere';
+  const peutVoirFinancesCompletes = estGestionnaireFinances(profil?.role);
 
-  if (!estGestionnaireFinances) {
-    // Vue résumée pour le secrétaire et le membre du comité : pas d'accès au financier complet.
+  if (!peutVoirFinancesCompletes) {
+    // Vue résumée pour le membre du comité uniquement : pas d'accès au financier complet.
     return (
       <div className="space-y-4">
         <Card className="p-4">

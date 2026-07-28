@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { UserCog } from 'lucide-react';
+import { UserCog, Pencil } from 'lucide-react';
 import { PageToolbar } from '../../components/ui/PageToolbar';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Table, Th, Td, Tr } from '../../components/ui/Table';
 import { Badge } from '../../components/ui/Badge';
-import { NouvelUtilisateurModal } from '../../components/utilisateurs/NouvelUtilisateurModal';
+import { UtilisateurModal } from '../../components/utilisateurs/UtilisateurModal';
 import { ecouterUtilisateurs, changerStatutUtilisateur } from '../../services/users.service';
 import { useAuth } from '../../contexts/AuthContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
@@ -16,6 +16,7 @@ export function UtilisateursListe() {
   const confirmer = useConfirm();
   const [utilisateurs, setUtilisateurs] = useState<UtilisateurBureau[]>([]);
   const [modalOuverte, setModalOuverte] = useState(false);
+  const [utilisateurAEditer, setUtilisateurAEditer] = useState<UtilisateurBureau | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => ecouterUtilisateurs(setUtilisateurs), []);
@@ -83,6 +84,15 @@ export function UtilisateursListe() {
                 </Td>
                 <Td>
                   <div className="flex items-center justify-end gap-3">
+                    {u.id !== profil?.id && (
+                      <button
+                        onClick={() => setUtilisateurAEditer(u)}
+                        aria-label={`Modifier ${u.nom}`}
+                        className="flex items-center gap-1 text-xs font-medium text-[var(--color-brand)] hover:underline"
+                      >
+                        <Pencil size={13} /> Modifier
+                      </button>
+                    )}
                     <button
                       onClick={() => onReinitialiser(u)}
                       className="text-xs font-medium text-[var(--color-brand)] hover:underline"
@@ -105,7 +115,14 @@ export function UtilisateursListe() {
         </Table>
       )}
 
-      <NouvelUtilisateurModal open={modalOuverte} onClose={() => setModalOuverte(false)} />
+      <UtilisateurModal open={modalOuverte} onClose={() => setModalOuverte(false)} />
+      {utilisateurAEditer && (
+        <UtilisateurModal
+          open
+          onClose={() => setUtilisateurAEditer(null)}
+          utilisateur={utilisateurAEditer}
+        />
+      )}
     </div>
   );
 }

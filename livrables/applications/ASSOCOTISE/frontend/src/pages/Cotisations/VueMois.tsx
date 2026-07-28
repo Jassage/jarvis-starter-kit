@@ -10,13 +10,13 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import { ecouterMembres } from '../../services/membres.service';
 import { ecouterCotisationsDuMois, valeursCourantes, annulerCotisation } from '../../services/cotisations.service';
 import { ajouterMois, formatMoisLabel, formatMontant, moisCourant } from '../../lib/format';
-import type { Cotisation, Membre } from '../../types';
+import { estGestionnaireFinances, type Cotisation, type Membre } from '../../types';
 
 export function VueMois() {
   const { profil } = useAuth();
   const { montantCotisation } = useParametres();
   const confirmer = useConfirm();
-  const peutAnnuler = profil?.role === 'responsable_finances' || profil?.role === 'tresoriere';
+  const peutAnnuler = estGestionnaireFinances(profil?.role);
   const peutSaisir = profil?.role !== 'membre_comite';
   const [mois, setMois] = useState(moisCourant());
   const [membres, setMembres] = useState<Membre[]>([]);

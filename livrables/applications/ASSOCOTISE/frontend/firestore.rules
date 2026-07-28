@@ -45,10 +45,12 @@ service cloud.firestore {
       return estSecretaire() || estCoordonateur() || estTresoriere();
     }
 
-    // Coordonnateur + trésorière : les deux rôles qui touchent aux dépenses / à l'annulation
-    // de cotisations. Le secrétaire gère les membres mais jamais l'argent.
+    // Les trois rôles du bureau ont désormais les mêmes droits financiers (dépenses,
+    // annulation de cotisation) : seule l'administration (comptes, paramètres, clôture
+    // d'exercice) reste réservée au coordonnateur. Alias de estMembreDuBureau, gardé comme
+    // fonction séparée pour documenter l'intention à chaque point d'appel.
     function estGestionnaireFinances() {
-      return estCoordonateur() || estTresoriere();
+      return estMembreDuBureau();
     }
 
     // Tout compte actif, y compris le membre du comité en lecture seule : sert de base à

@@ -10,6 +10,17 @@ export const LABEL_ROLE: Record<Role, string> = {
 };
 
 /**
+ * Secrétaire, trésorière et coordonnateur ont les mêmes droits financiers (dépenses,
+ * annulation de cotisation, tableau de bord et rapports complets) — seule l'administration
+ * (comptes, paramètres, clôture d'exercice) reste réservée au coordonnateur seul.
+ */
+export const ROLES_GESTIONNAIRES_FINANCES: Role[] = ['secretaire', 'tresoriere', 'responsable_finances'];
+
+export function estGestionnaireFinances(role: Role | undefined): boolean {
+  return !!role && ROLES_GESTIONNAIRES_FINANCES.includes(role);
+}
+
+/**
  * Paramètres de l'association, document unique `settings/association`.
  * Remplace les constantes qui étaient codées en dur dans les écrans (montant de
  * cotisation, devise), pour que l'application serve une association quelconque.

@@ -11,7 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { ecouterDepenses, annulerDepense } from '../../services/depenses.service';
 import { formatDate, formatMontant } from '../../lib/format';
-import type { CategorieDepense, Depense } from '../../types';
+import { estGestionnaireFinances, type CategorieDepense, type Depense } from '../../types';
 
 const labelCategorie: Record<CategorieDepense, string> = {
   materiel: 'Matériel',
@@ -24,7 +24,7 @@ const labelCategorie: Record<CategorieDepense, string> = {
 export function DepensesListe() {
   const { profil } = useAuth();
   const confirmer = useConfirm();
-  const peutGerer = profil?.role === 'responsable_finances' || profil?.role === 'tresoriere';
+  const peutGerer = estGestionnaireFinances(profil?.role);
   const [depenses, setDepenses] = useState<Depense[]>([]);
   const [filtreCategorie, setFiltreCategorie] = useState<'toutes' | CategorieDepense>('toutes');
   const [modalOuverte, setModalOuverte] = useState(false);

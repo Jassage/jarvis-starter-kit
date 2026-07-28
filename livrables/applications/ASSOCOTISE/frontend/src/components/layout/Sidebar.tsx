@@ -15,14 +15,14 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useParametres } from '../../contexts/ParametresContext';
-import { LABEL_ROLE } from '../../types';
+import { estGestionnaireFinances, LABEL_ROLE } from '../../types';
 
 const lienDashboard = { to: '/', label: 'Tableau de bord', icon: LayoutDashboard };
 const lienMembres = { to: '/membres', label: 'Membres', icon: Users };
 const lienCotisations = { to: '/cotisations', label: 'Cotisations', icon: Wallet };
 const lienRelances = { to: '/relances', label: 'Relances', icon: BellRing };
 
-// Finances en lecture : coordonnateur, trésorière et membre du comité (lecture seule).
+// Finances : coordonnateur, trésorière et secrétaire en écriture, membre du comité en lecture seule.
 const liensFinances = [
   { to: '/depenses', label: 'Dépenses', icon: Receipt },
   { to: '/rapports', label: 'Rapports', icon: FileBarChart },
@@ -41,15 +41,15 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const { nomAssociation } = useParametres();
   const role = profil?.role;
 
-  const estGestion = role === 'secretaire' || role === 'tresoriere' || role === 'responsable_finances';
-  const estLectureFinances = role === 'responsable_finances' || role === 'tresoriere' || role === 'membre_comite';
+  const estGestion = estGestionnaireFinances(role);
+  const accedeFinances = estGestion || role === 'membre_comite';
 
   const liens = [
     lienDashboard,
     ...(estGestion ? [lienMembres] : []),
     lienCotisations,
     ...(estGestion ? [lienRelances] : []),
-    ...(estLectureFinances ? liensFinances : []),
+    ...(accedeFinances ? liensFinances : []),
     ...(role === 'responsable_finances' ? liensAdministration : []),
   ];
 

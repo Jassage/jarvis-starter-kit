@@ -50,3 +50,13 @@ export async function creerCompteSecretaire(params: {
 export async function changerStatutUtilisateur(uid: string, actif: boolean) {
   return updateDoc(doc(db, 'users', uid), { actif });
 }
+
+/**
+ * Modifie le nom et/ou le rôle d'un compte existant. Les règles Firestore interdisent à
+ * un coordonnateur de changer son propre rôle (anti auto-verrouillage) : cette fonction
+ * elle-même n'a pas cette garde, l'écriture échouerait simplement côté serveur si on
+ * l'appelait sur son propre compte avec un rôle différent.
+ */
+export async function modifierUtilisateur(uid: string, params: { nom: string; role: Role }) {
+  return updateDoc(doc(db, 'users', uid), { nom: params.nom, role: params.role });
+}

@@ -15,10 +15,12 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, deleteDoc, collection, addDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, deleteDoc, collection, addDoc, getDocs } from 'firebase/firestore';
 
 const UID_SECRETAIRE = 'uid-secretaire';
 const UID_RESPONSABLE = 'uid-responsable';
+const UID_TRESORIERE = 'uid-tresoriere';
+const UID_MEMBRE_COMITE = 'uid-membre-comite';
 const UID_INACTIF = 'uid-inactif';
 const MEMBRE_ID = 'membre-1';
 
@@ -29,6 +31,12 @@ function secretaire() {
 }
 function responsable() {
   return env.authenticatedContext(UID_RESPONSABLE).firestore();
+}
+function tresoriere() {
+  return env.authenticatedContext(UID_TRESORIERE).firestore();
+}
+function membreComite() {
+  return env.authenticatedContext(UID_MEMBRE_COMITE).firestore();
 }
 function inactif() {
   return env.authenticatedContext(UID_INACTIF).firestore();
@@ -94,6 +102,22 @@ beforeEach(async () => {
       creePar: 'seed',
       creeLe: '2026-01-01T00:00:00.000Z',
     });
+    await setDoc(doc(db, 'users', UID_TRESORIERE), {
+      nom: 'Wideline Charles',
+      email: 'tresoriere@assocotise.ht',
+      role: 'tresoriere',
+      actif: true,
+      creePar: 'seed',
+      creeLe: '2026-01-01T00:00:00.000Z',
+    });
+    await setDoc(doc(db, 'users', UID_MEMBRE_COMITE), {
+      nom: 'Membre du comité',
+      email: 'membre-comite@assocotise.ht',
+      role: 'membre_comite',
+      actif: true,
+      creePar: 'seed',
+      creeLe: '2026-01-01T00:00:00.000Z',
+    });
     await setDoc(doc(db, 'users', UID_INACTIF), {
       nom: 'Compte désactivé',
       email: 'inactif@assocotise.ht',
@@ -118,6 +142,27 @@ describe('accès général', () => {
 
   it('refuse toute écriture à un compte désactivé', async () => {
     await assertFails(addDoc(collection(inactif(), 'contributions'), cotisationValide()));
+  });
+});
+
+describe('membre du comité (lecture seule)', () => {
+  it('peut lire cotisations, dépenses et membres mais ne peut rien écrire', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'contributions', 'c1'), cotisationValide());
+      await setDoc(doc(ctx.firestore(), 'expenses', 'd1'), depenseValide({ saisiPar: UID_RESPONSABLE }));
+    });
+
+    await assertSucceeds(getDocs(collection(membreComite(), 'contributions')));
+    await assertSucceeds(getDocs(collection(membreComite(), 'expenses')));
+    await assertSucceeds(getDocs(collection(membreComite(), 'members')));
+
+    await assertFails(addDoc(collection(membreComite(), 'contributions'), cotisationValide({ saisiPar: UID_MEMBRE_COMITE })));
+    await assertFails(addDoc(collection(membreComite(), 'expenses'), depenseValide({ saisiPar: UID_MEMBRE_COMITE })));
+    await assertFails(addDoc(collection(membreComite(), 'members'), { nom: 'X', telephone: '+509', dateAdhesion: '2026-01-01', statut: 'actif' }));
+  });
+
+  it("n'a pas accès à la liste des comptes du bureau", async () => {
+    await assertFails(getDocs(collection(membreComite(), 'users')));
   });
 });
 
@@ -157,18 +202,51 @@ describe('cotisations', () => {
     );
   });
 
-  it('interdit au secrétaire d’annuler et l’autorise au responsable, avec signature', async () => {
+  it('autorise coordonnateur/trésorière/secrétaire à annuler, avec signature, mais jamais le membre du comité', async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'contributions', 'c1'), cotisationValide());
     });
 
-    await assertFails(updateDoc(doc(secretaire(), 'contributions', 'c1'), { annulee: true }));
-    // Sans signature ni horodatage, même le responsable est refusé.
+    // Sans signature ni horodatage, même le coordonnateur est refusé.
     await assertFails(updateDoc(doc(responsable(), 'contributions', 'c1'), { annulee: true }));
     await assertSucceeds(
       updateDoc(doc(responsable(), 'contributions', 'c1'), {
         annulee: true,
         annuleePar: UID_RESPONSABLE,
+        annuleeLe: '2026-07-20T10:00:00.000Z',
+      })
+    );
+
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'contributions', 'c2'), cotisationValide());
+    });
+    await assertSucceeds(
+      updateDoc(doc(secretaire(), 'contributions', 'c2'), {
+        annulee: true,
+        annuleePar: UID_SECRETAIRE,
+        annuleeLe: '2026-07-20T10:00:00.000Z',
+      })
+    );
+
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'contributions', 'c3'), cotisationValide());
+    });
+    await assertSucceeds(
+      updateDoc(doc(tresoriere(), 'contributions', 'c3'), {
+        annulee: true,
+        annuleePar: UID_TRESORIERE,
+        annuleeLe: '2026-07-20T10:00:00.000Z',
+      })
+    );
+
+    // Le membre du comité est en lecture seule : même correctement signée, sa tentative échoue.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'contributions', 'c4'), cotisationValide());
+    });
+    await assertFails(
+      updateDoc(doc(membreComite(), 'contributions', 'c4'), {
+        annulee: true,
+        annuleePar: UID_MEMBRE_COMITE,
         annuleeLe: '2026-07-20T10:00:00.000Z',
       })
     );
@@ -190,9 +268,20 @@ describe('cotisations', () => {
 });
 
 describe('dépenses', () => {
-  it('réserve la création au responsable finances', async () => {
-    await assertFails(addDoc(collection(secretaire(), 'expenses'), depenseValide()));
-    await assertSucceeds(addDoc(collection(responsable(), 'expenses'), depenseValide()));
+  it('autorise coordonnateur/trésorière/secrétaire à créer une dépense, mais jamais le membre du comité', async () => {
+    await assertSucceeds(
+      addDoc(collection(responsable(), 'expenses'), depenseValide({ saisiPar: UID_RESPONSABLE }))
+    );
+    await assertSucceeds(
+      addDoc(collection(secretaire(), 'expenses'), depenseValide({ saisiPar: UID_SECRETAIRE }))
+    );
+    await assertSucceeds(
+      addDoc(collection(tresoriere(), 'expenses'), depenseValide({ saisiPar: UID_TRESORIERE }))
+    );
+    // Le membre du comité est en lecture seule : même avec un saisiPar correct, refusé.
+    await assertFails(
+      addDoc(collection(membreComite(), 'expenses'), depenseValide({ saisiPar: UID_MEMBRE_COMITE }))
+    );
   });
 
   it("interdit de réécrire l'auteur ou l'horodatage de saisie", async () => {

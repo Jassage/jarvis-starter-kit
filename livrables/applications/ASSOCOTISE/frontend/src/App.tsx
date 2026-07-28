@@ -8,6 +8,7 @@ import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { RoleGate } from './components/layout/RoleGate';
 import { AppLayout } from './components/layout/AppLayout';
 import { Login } from './pages/Login';
+import { ROLES_GESTIONNAIRES_FINANCES } from './types';
 
 // Écrans chargés à la demande. Les graphes (recharts) et les écrans réservés au
 // responsable finances ne sont pas téléchargés tant qu'on n'y va pas : sur une connexion
@@ -47,14 +48,14 @@ function App() {
                       <Route path="cotisations" element={<Cotisations />} />
 
                       {/* Membres et relances : gestion, pas de lecture seule pour le membre du comité. */}
-                      <Route element={<RoleGate roles={['secretaire', 'responsable_finances', 'tresoriere']} />}>
+                      <Route element={<RoleGate roles={ROLES_GESTIONNAIRES_FINANCES} />}>
                         <Route path="membres" element={<MembresListe />} />
                         <Route path="membres/:id" element={<MembreFiche />} />
                         <Route path="relances" element={<Relances />} />
                       </Route>
 
-                      {/* Finances : coordonnateur et trésorière en écriture, membre du comité en lecture seule. */}
-                      <Route element={<RoleGate roles={['responsable_finances', 'tresoriere', 'membre_comite']} />}>
+                      {/* Finances : coordonnateur, trésorière et secrétaire en écriture, membre du comité en lecture seule. */}
+                      <Route element={<RoleGate roles={[...ROLES_GESTIONNAIRES_FINANCES, 'membre_comite']} />}>
                         <Route path="depenses" element={<DepensesListe />} />
                         <Route path="rapports" element={<Rapports />} />
                       </Route>
