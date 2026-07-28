@@ -7,11 +7,13 @@ import { Badge } from '../../components/ui/Badge';
 import { NouvelUtilisateurModal } from '../../components/utilisateurs/NouvelUtilisateurModal';
 import { ecouterUtilisateurs, changerStatutUtilisateur } from '../../services/users.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 import { formatDate } from '../../lib/format';
 import { LABEL_ROLE, type UtilisateurBureau } from '../../types';
 
 export function UtilisateursListe() {
   const { profil, envoyerReinitialisation } = useAuth();
+  const confirmer = useConfirm();
   const [utilisateurs, setUtilisateurs] = useState<UtilisateurBureau[]>([]);
   const [modalOuverte, setModalOuverte] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -19,7 +21,12 @@ export function UtilisateursListe() {
   useEffect(() => ecouterUtilisateurs(setUtilisateurs), []);
 
   async function onReinitialiser(u: UtilisateurBureau) {
-    if (!confirm(`Envoyer un lien de réinitialisation de mot de passe à ${u.email} ?`)) return;
+    const ok = await confirmer({
+      titre: 'Réinitialiser le mot de passe ?',
+      description: `Un lien de réinitialisation sera envoyé à ${u.email}.`,
+      confirmerLabel: 'Envoyer le lien',
+    });
+    if (!ok) return;
     setMessage(null);
     try {
       await envoyerReinitialisation(u.email);
@@ -27,6 +34,19 @@ export function UtilisateursListe() {
     } catch {
       setMessage(`Envoi impossible pour ${u.email}.`);
     }
+  }
+
+  async function onChangerStatut(u: UtilisateurBureau) {
+    if (u.actif) {
+      const ok = await confirmer({
+        titre: `Désactiver le compte de ${u.nom} ?`,
+        description: 'La personne ne pourra plus se connecter tant que le compte ne sera pas réactivé.',
+        confirmerLabel: 'Désactiver',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    await changerStatutUtilisateur(u.id, !u.actif);
   }
 
   return (
@@ -71,7 +91,7 @@ export function UtilisateursListe() {
                     </button>
                     {u.id !== profil?.id && (
                       <button
-                        onClick={() => changerStatutUtilisateur(u.id, !u.actif)}
+                        onClick={() => onChangerStatut(u)}
                         className="text-xs font-medium text-[var(--color-brand)] hover:underline"
                       >
                         {u.actif ? 'Désactiver' : 'Réactiver'}

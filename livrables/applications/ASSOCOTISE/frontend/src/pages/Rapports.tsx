@@ -114,14 +114,20 @@ export function Rapports() {
       .sort((a, b) => b.montant - a.montant);
   }, [depensesActives]);
 
+  // Surplus cumulé (montant payé - minimum) sur la période, pas le total versé : un membre
+  // qui paie toujours exactement le minimum a un surplus de 0 et n'apparaît pas ici, même
+  // après plusieurs mois de régularité — seul ce qui dépasse le dû compte comme "contribution".
   const topContributeurs = useMemo(() => {
-    const totaux = new Map<string, number>();
-    for (const c of courantes) totaux.set(c.memberId, (totaux.get(c.memberId) ?? 0) + c.montant);
-    return [...totaux.entries()]
+    const surplus = new Map<string, number>();
+    for (const c of courantes) {
+      surplus.set(c.memberId, (surplus.get(c.memberId) ?? 0) + (c.montant - montantCotisation));
+    }
+    return [...surplus.entries()]
       .map(([memberId, total]) => ({ nom: nomParMembre.get(memberId) ?? 'Membre supprimé', total }))
+      .filter((c) => c.total > 0)
       .sort((a, b) => b.total - a.total)
       .slice(0, 5);
-  }, [courantes, nomParMembre]);
+  }, [courantes, nomParMembre, montantCotisation]);
 
   const periodeLabel =
     bornes.debut === bornes.fin
@@ -331,9 +337,11 @@ export function Rapports() {
         </Card>
 
         <Card className="p-5">
-          <h3 className="mb-3 text-sm font-semibold text-[var(--color-ink)]">Top contributeurs de la période</h3>
+          <h3 className="mb-3 text-sm font-semibold text-[var(--color-ink)]">
+            Top contributeurs de la période (au-dessus du minimum)
+          </h3>
           {topContributeurs.length === 0 ? (
-            <EmptyState title="Aucune cotisation sur la période" />
+            <EmptyState title="Aucun surplus enregistré sur la période" />
           ) : (
             <div className="divide-y divide-[var(--color-border)]">
               {topContributeurs.map(({ nom, total }, index) => (

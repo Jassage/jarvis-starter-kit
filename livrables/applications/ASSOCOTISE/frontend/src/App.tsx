@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ParametresProvider } from './contexts/ParametresContext';
+import { ConfirmProvider } from './contexts/ConfirmContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { RoleGate } from './components/layout/RoleGate';
 import { AppLayout } from './components/layout/AppLayout';
@@ -35,39 +36,41 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
           <ParametresProvider>
-            <Suspense fallback={<Chargement />}>
-              <Routes>
-                <Route path="/connexion" element={<Login />} />
+            <ConfirmProvider>
+              <Suspense fallback={<Chargement />}>
+                <Routes>
+                  <Route path="/connexion" element={<Login />} />
 
-                <Route element={<ProtectedRoute />}>
-                  <Route element={<AppLayout />}>
-                    <Route index element={<Dashboard />} />
-                    <Route path="cotisations" element={<Cotisations />} />
+                  <Route element={<ProtectedRoute />}>
+                    <Route element={<AppLayout />}>
+                      <Route index element={<Dashboard />} />
+                      <Route path="cotisations" element={<Cotisations />} />
 
-                    {/* Membres et relances : gestion, pas de lecture seule pour le membre du comité. */}
-                    <Route element={<RoleGate roles={['secretaire', 'responsable_finances', 'tresoriere']} />}>
-                      <Route path="membres" element={<MembresListe />} />
-                      <Route path="membres/:id" element={<MembreFiche />} />
-                      <Route path="relances" element={<Relances />} />
-                    </Route>
+                      {/* Membres et relances : gestion, pas de lecture seule pour le membre du comité. */}
+                      <Route element={<RoleGate roles={['secretaire', 'responsable_finances', 'tresoriere']} />}>
+                        <Route path="membres" element={<MembresListe />} />
+                        <Route path="membres/:id" element={<MembreFiche />} />
+                        <Route path="relances" element={<Relances />} />
+                      </Route>
 
-                    {/* Finances : coordonnateur et trésorière en écriture, membre du comité en lecture seule. */}
-                    <Route element={<RoleGate roles={['responsable_finances', 'tresoriere', 'membre_comite']} />}>
-                      <Route path="depenses" element={<DepensesListe />} />
-                      <Route path="rapports" element={<Rapports />} />
-                    </Route>
+                      {/* Finances : coordonnateur et trésorière en écriture, membre du comité en lecture seule. */}
+                      <Route element={<RoleGate roles={['responsable_finances', 'tresoriere', 'membre_comite']} />}>
+                        <Route path="depenses" element={<DepensesListe />} />
+                        <Route path="rapports" element={<Rapports />} />
+                      </Route>
 
-                    {/* Administration : réservée au coordonnateur. */}
-                    <Route element={<RoleGate roles={['responsable_finances']} />}>
-                      <Route path="utilisateurs" element={<UtilisateursListe />} />
-                      <Route path="parametres" element={<Parametres />} />
-                      <Route path="journal" element={<Journal />} />
-                      <Route path="exercices" element={<Exercices />} />
+                      {/* Administration : réservée au coordonnateur. */}
+                      <Route element={<RoleGate roles={['responsable_finances']} />}>
+                        <Route path="utilisateurs" element={<UtilisateursListe />} />
+                        <Route path="parametres" element={<Parametres />} />
+                        <Route path="journal" element={<Journal />} />
+                        <Route path="exercices" element={<Exercices />} />
+                      </Route>
                     </Route>
                   </Route>
-                </Route>
-              </Routes>
-            </Suspense>
+                </Routes>
+              </Suspense>
+            </ConfirmProvider>
           </ParametresProvider>
         </AuthProvider>
       </BrowserRouter>

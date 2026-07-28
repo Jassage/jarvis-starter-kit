@@ -262,13 +262,13 @@ export function RapportPDF({
           <View style={styles.section} wrap={false}>
             <View style={styles.sectionTitreLigne}>
               <View style={styles.sectionPastille} />
-              <Text style={styles.sectionTitre}>Top contributeurs</Text>
+              <Text style={styles.sectionTitre}>Top contributeurs (au-dessus du minimum)</Text>
             </View>
             <View style={styles.table}>
               <View style={styles.tableRowHeader}>
                 <Text style={[styles.th, { flex: 0.5 }]}>#</Text>
                 <Text style={[styles.th, { flex: 3 }]}>Membre</Text>
-                <Text style={styles.th}>Total cotisé</Text>
+                <Text style={styles.th}>Surplus</Text>
               </View>
               {topContributeurs.length === 0 ? (
                 <Text style={styles.videTexte}>Aucun surplus enregistré pour l'instant.</Text>

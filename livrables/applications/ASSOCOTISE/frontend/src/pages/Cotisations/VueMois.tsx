@@ -6,6 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { CotisationModal } from '../../components/cotisations/CotisationModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useParametres } from '../../contexts/ParametresContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 import { ecouterMembres } from '../../services/membres.service';
 import { ecouterCotisationsDuMois, valeursCourantes, annulerCotisation } from '../../services/cotisations.service';
 import { ajouterMois, formatMoisLabel, formatMontant, moisCourant } from '../../lib/format';
@@ -14,6 +15,7 @@ import type { Cotisation, Membre } from '../../types';
 export function VueMois() {
   const { profil } = useAuth();
   const { montantCotisation } = useParametres();
+  const confirmer = useConfirm();
   const peutAnnuler = profil?.role === 'responsable_finances' || profil?.role === 'tresoriere';
   const peutSaisir = profil?.role !== 'membre_comite';
   const [mois, setMois] = useState(moisCourant());
@@ -49,7 +51,13 @@ export function VueMois() {
 
   async function onAnnuler(c: Cotisation) {
     if (!profil) return;
-    if (!confirm('Annuler cette cotisation ? Elle restera visible dans l\'historique du membre mais ne comptera plus comme payée.')) return;
+    const ok = await confirmer({
+      titre: 'Annuler cette cotisation ?',
+      description: 'Elle restera visible dans l\'historique du membre mais ne comptera plus comme payée.',
+      confirmerLabel: 'Annuler la cotisation',
+      danger: true,
+    });
+    if (!ok) return;
     await annulerCotisation(c.id, true, profil.id);
   }
 

@@ -4,6 +4,7 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Table, Th, Td, Tr } from '../components/ui/Table';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirm } from '../contexts/ConfirmContext';
 import { ecouterCotisationsPlage } from '../services/cotisations.service';
 import { ecouterDepensesPlage } from '../services/depenses.service';
 import {
@@ -18,6 +19,7 @@ import type { Cotisation, Depense, Exercice } from '../types';
 
 export function Exercices() {
   const { profil } = useAuth();
+  const confirmer = useConfirm();
   const [exercices, setExercices] = useState<Exercice[]>([]);
   const [anneeSelectionnee, setAnneeSelectionnee] = useState(anneeCourante());
   const [cotisations, setCotisations] = useState<Cotisation[]>([]);
@@ -59,14 +61,15 @@ export function Exercices() {
 
   async function onCloturer() {
     if (!profil) return;
-    if (
-      !confirm(
-        `Clôturer l'exercice ${anneeSelectionnee} ?\n\n` +
-          `Solde final : ${formatMontant(soldeFinal)}, reporté sur ${Number(anneeSelectionnee) + 1}.\n` +
-          `Plus aucune cotisation ni dépense de cette année ne pourra être saisie, corrigée ou annulée.`
-      )
-    )
-      return;
+    const ok = await confirmer({
+      titre: `Clôturer l'exercice ${anneeSelectionnee} ?`,
+      description:
+        `Solde final : ${formatMontant(soldeFinal)}, reporté sur ${Number(anneeSelectionnee) + 1}.\n` +
+        `Plus aucune cotisation ni dépense de cette année ne pourra être saisie, corrigée ou annulée.`,
+      confirmerLabel: 'Clôturer',
+      danger: true,
+    });
+    if (!ok) return;
     setErreur(null);
     setMessage(null);
     setEnvoi(true);
@@ -90,7 +93,13 @@ export function Exercices() {
 
   async function onRouvrir(annee: string) {
     if (!profil) return;
-    if (!confirm(`Rouvrir l'exercice ${annee} ? Les écritures de cette année redeviendront modifiables.`)) return;
+    const ok = await confirmer({
+      titre: `Rouvrir l'exercice ${annee} ?`,
+      description: 'Les écritures de cette année redeviendront modifiables.',
+      confirmerLabel: 'Rouvrir',
+      danger: true,
+    });
+    if (!ok) return;
     setErreur(null);
     setMessage(null);
     try {

@@ -100,14 +100,17 @@ export function Dashboard() {
     [depensesActives]
   );
 
+  // Surplus cumulé (montant payé - minimum), pas le total versé : un membre qui paie
+  // toujours exactement le minimum a un surplus de 0 et n'apparaît pas ici, même après
+  // plusieurs mois de régularité — seul ce qui dépasse le dû compte comme "contribution".
   const topContributeurs = useMemo(() => {
-    const totalParMembre = new Map<string, number>();
+    const surplusParMembre = new Map<string, number>();
     for (const c of courantesParCle.values()) {
-      totalParMembre.set(c.memberId, (totalParMembre.get(c.memberId) ?? 0) + c.montant);
+      surplusParMembre.set(c.memberId, (surplusParMembre.get(c.memberId) ?? 0) + (c.montant - montantCotisation));
     }
-    return [...totalParMembre.entries()]
+    return [...surplusParMembre.entries()]
       .map(([memberId, total]) => ({ membre: membres.find((m) => m.id === memberId), total }))
-      .filter((x): x is { membre: Membre; total: number } => !!x.membre && x.total > montantCotisation)
+      .filter((x): x is { membre: Membre; total: number } => !!x.membre && x.total > 0)
       .sort((a, b) => b.total - a.total)
       .slice(0, 5);
   }, [courantesParCle, membres, montantCotisation]);

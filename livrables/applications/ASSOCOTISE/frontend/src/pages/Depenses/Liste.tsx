@@ -8,6 +8,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Select } from '../../components/ui/Field';
 import { DepenseModal } from '../../components/depenses/DepenseModal';
 import { useAuth } from '../../contexts/AuthContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 import { ecouterDepenses, annulerDepense } from '../../services/depenses.service';
 import { formatDate, formatMontant } from '../../lib/format';
 import type { CategorieDepense, Depense } from '../../types';
@@ -22,6 +23,7 @@ const labelCategorie: Record<CategorieDepense, string> = {
 
 export function DepensesListe() {
   const { profil } = useAuth();
+  const confirmer = useConfirm();
   const peutGerer = profil?.role === 'responsable_finances' || profil?.role === 'tresoriere';
   const [depenses, setDepenses] = useState<Depense[]>([]);
   const [filtreCategorie, setFiltreCategorie] = useState<'toutes' | CategorieDepense>('toutes');
@@ -58,7 +60,13 @@ export function DepensesListe() {
       await annulerDepense(d.id, false, profil.id);
       return;
     }
-    if (!confirm('Annuler cette dépense ? Elle restera visible mais ne comptera plus dans les totaux.')) return;
+    const ok = await confirmer({
+      titre: 'Annuler cette dépense ?',
+      description: 'Elle restera visible mais ne comptera plus dans les totaux.',
+      confirmerLabel: 'Annuler la dépense',
+      danger: true,
+    });
+    if (!ok) return;
     await annulerDepense(d.id, true, profil.id);
   }
 
