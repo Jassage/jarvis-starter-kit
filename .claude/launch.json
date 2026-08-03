@@ -28,10 +28,18 @@
       "autoPort": false
     },
     {
-      "name": "gros-morne",
+      "name": "gros-morne-backend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "livrables/applications/gros-morne", "run", "dev"],
-      "port": 3002
+      "runtimeArgs": ["--prefix", "livrables/applications/gros-morne/backend", "run", "dev"],
+      "port": 4010,
+      "autoPort": false
+    },
+    {
+      "name": "gros-morne-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/gros-morne/frontend", "run", "dev"],
+      "port": 3010,
+      "autoPort": false
     },
     {
       "name": "banka-backend",
@@ -115,6 +123,20 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "livrables/applications/ASSOCOTISE/frontend", "run", "dev"],
       "port": 3010,
+      "autoPort": false
+    },
+    {
+      "name": "nexora-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/nexora-platform/frontend", "run", "dev"],
+      "port": 3011,
+      "autoPort": false
+    },
+    {
+      "name": "portfolio-jaslin",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/sites-web/portfolio-jaslin", "run", "dev"],
+      "port": 3012,
       "autoPort": false
     }
   ]
