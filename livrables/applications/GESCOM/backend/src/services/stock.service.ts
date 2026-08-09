@@ -31,9 +31,9 @@ export async function listMouvements(params: { produitId?: string; emplacementId
   });
 }
 
-export async function listAlertes() {
+export async function listAlertes(emplacementId?: string) {
   const stocks = await prisma.stockEmplacement.findMany({
-    where: { produit: { actif: true } },
+    where: { produit: { actif: true }, ...(emplacementId ? { emplacementId } : {}) },
     include: { produit: true, emplacement: { select: { id: true, nom: true, type: true } } },
   });
 

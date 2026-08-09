@@ -11,6 +11,7 @@ export interface StockInfo {
 export interface Produit {
   id: string;
   reference: string;
+  codeBarres?: string | null;
   nom: string;
   categorie?: string | null;
   unite: string;
@@ -25,6 +26,7 @@ export interface Produit {
 
 export interface ProduitInput {
   reference: string;
+  codeBarres?: string;
   nom: string;
   categorie?: string;
   unite: string;

@@ -2,7 +2,8 @@ import prisma from '../utils/prisma';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
 
-export async function listClients(params: { search?: string; type?: string; actif?: boolean }) {
+// page/limit optionnels et rétrocompatibles : voir le même commentaire dans produit.service.ts.
+export async function listClients(params: { search?: string; type?: string; actif?: boolean; page?: number; limit?: number }) {
   const where: any = {};
   if (params.actif !== undefined) where.actif = params.actif;
   if (params.type) where.type = params.type;
@@ -12,7 +13,17 @@ export async function listClients(params: { search?: string; type?: string; acti
       { telephone: { contains: params.search, mode: 'insensitive' } },
     ];
   }
-  return prisma.client.findMany({ where, orderBy: { nom: 'asc' } });
+
+  const pagine = params.page !== undefined || params.limit !== undefined;
+  if (!pagine) return prisma.client.findMany({ where, orderBy: { nom: 'asc' } });
+
+  const page = params.page ?? 1;
+  const limit = params.limit ?? 50;
+  const [items, total] = await Promise.all([
+    prisma.client.findMany({ where, orderBy: { nom: 'asc' }, skip: (page - 1) * limit, take: limit }),
+    prisma.client.count({ where }),
+  ]);
+  return { items, total, page, limit, pages: Math.ceil(total / limit) };
 }
 
 export async function createClient(data: any, userId: string) {

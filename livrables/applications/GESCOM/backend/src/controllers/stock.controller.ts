@@ -24,7 +24,7 @@ export async function listMouvements(req: AuthRequest, res: Response, next: Next
 
 export async function listAlertes(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const alertes = await stockService.listAlertes();
+    const alertes = await stockService.listAlertes(req.query.emplacementId as string | undefined);
     res.json(ok(alertes));
   } catch (e) { next(e); }
 }

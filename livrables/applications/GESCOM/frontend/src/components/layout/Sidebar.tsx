@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Package, Warehouse, ShoppingCart, Truck, Calculator, Users, Building2, ArrowRightLeft, BarChart3, X } from 'lucide-react';
+import { LayoutDashboard, Package, Warehouse, ShoppingCart, Truck, Calculator, Users, Building2, ArrowRightLeft, BarChart3, Wallet, X } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -10,6 +10,7 @@ const NAV = [
   { href: '/produits', label: 'Produits', icon: Package },
   { href: '/stock', label: 'Stock', icon: Warehouse },
   { href: '/ventes', label: 'Ventes', icon: ShoppingCart },
+  { href: '/caisse', label: 'Caisse', icon: Wallet },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/achats', label: 'Achats', icon: Truck },
   { href: '/fournisseurs', label: 'Fournisseurs', icon: Building2 },

@@ -3,7 +3,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireAdmin } from '../middleware/rbac';
 import { validate } from '../middleware/validate';
 import {
-  loginSchema, refreshSchema, changePasswordSchema, createUtilisateurSchema,
+  loginSchema, refreshSchema, changePasswordSchema, createUtilisateurSchema, updateUtilisateurSchema,
 } from '../validation/auth.schemas';
 import * as ctrl from '../controllers/auth.controller';
 
@@ -17,6 +17,6 @@ router.put('/me/password', requireAuth, validate(changePasswordSchema), ctrl.cha
 
 router.get('/utilisateurs', requireAuth, requireAdmin, ctrl.listUtilisateurs);
 router.post('/utilisateurs', requireAuth, requireAdmin, validate(createUtilisateurSchema), ctrl.createUtilisateur);
-router.put('/utilisateurs/:id', requireAuth, requireAdmin, ctrl.updateUtilisateur);
+router.put('/utilisateurs/:id', requireAuth, requireAdmin, validate(updateUtilisateurSchema), ctrl.updateUtilisateur);
 
 export default router;

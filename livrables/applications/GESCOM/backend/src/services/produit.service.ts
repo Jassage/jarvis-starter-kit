@@ -2,7 +2,10 @@ import prisma from '../utils/prisma';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
 
-export async function listProduits(params: { search?: string; categorie?: string; actif?: boolean }) {
+// page/limit optionnels et rétrocompatibles : sans eux, comportement identique à avant (tableau
+// complet, tel qu'attendu par le frontend actuel) — à activer explicitement quand le catalogue
+// grossira, sans casser les écrans existants qui ne connaissent que la forme "tableau".
+export async function listProduits(params: { search?: string; categorie?: string; actif?: boolean; page?: number; limit?: number }) {
   const where: any = {};
   if (params.actif !== undefined) where.actif = params.actif;
   if (params.categorie) where.categorie = params.categorie;
@@ -10,19 +13,31 @@ export async function listProduits(params: { search?: string; categorie?: string
     where.OR = [
       { nom: { contains: params.search, mode: 'insensitive' } },
       { reference: { contains: params.search, mode: 'insensitive' } },
+      { codeBarres: { contains: params.search, mode: 'insensitive' } },
     ];
   }
 
-  const produits = await prisma.produit.findMany({
-    where,
-    include: { stocks: { include: { emplacement: { select: { id: true, nom: true, type: true } } } } },
-    orderBy: { nom: 'asc' },
-  });
+  const pagine = params.page !== undefined || params.limit !== undefined;
+  const page = params.page ?? 1;
+  const limit = params.limit ?? 50;
 
-  return produits.map((p) => ({
+  const [produits, total] = await Promise.all([
+    prisma.produit.findMany({
+      where,
+      include: { stocks: { include: { emplacement: { select: { id: true, nom: true, type: true } } } } },
+      orderBy: { nom: 'asc' },
+      ...(pagine ? { skip: (page - 1) * limit, take: limit } : {}),
+    }),
+    pagine ? prisma.produit.count({ where }) : Promise.resolve(0),
+  ]);
+
+  const enrichis = produits.map((p) => ({
     ...p,
     stockTotal: p.stocks.reduce((sum, s) => sum + s.quantite, 0),
   }));
+
+  if (!pagine) return enrichis;
+  return { items: enrichis, total, page, limit, pages: Math.ceil(total / limit) };
 }
 
 export async function getProduit(id: string) {

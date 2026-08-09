@@ -1,6 +1,6 @@
 import prisma from '../utils/prisma';
 import { signToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt';
-import { hashPassword, comparePassword } from '../utils/hash';
+import { hashPassword, comparePassword, hashToken } from '../utils/hash';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
 
@@ -22,8 +22,10 @@ async function emettreSession(user: { id: string; email: string; role: any; empl
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 30);
 
+  // Seul le hash est persisté : une fuite de la table refresh_tokens ne donne plus de jeton
+  // directement rejouable (même principe que POSTA/LAKAY/BANKA).
   await prisma.refreshToken.create({
-    data: { token: refreshToken, utilisateurId: user.id, expiresAt },
+    data: { token: hashToken(refreshToken), utilisateurId: user.id, expiresAt },
   });
 
   return { token, refreshToken };
@@ -55,7 +57,7 @@ export async function refresh(refreshToken: string) {
   }
 
   const stored = await prisma.refreshToken.findUnique({
-    where: { token: refreshToken },
+    where: { token: hashToken(refreshToken) },
     include: { utilisateur: true },
   });
 
@@ -73,7 +75,7 @@ export async function refresh(refreshToken: string) {
 
   await prisma.$transaction([
     prisma.refreshToken.update({ where: { id: stored.id }, data: { revoked: true } }),
-    prisma.refreshToken.create({ data: { token: newRefreshToken, utilisateurId: user.id, expiresAt } }),
+    prisma.refreshToken.create({ data: { token: hashToken(newRefreshToken), utilisateurId: user.id, expiresAt } }),
   ]);
 
   const token = signToken({ userId: user.id, email: user.email, role: user.role, emplacementId: user.emplacementId });
@@ -82,7 +84,7 @@ export async function refresh(refreshToken: string) {
 
 export async function logout(refreshToken: string) {
   await prisma.refreshToken.updateMany({
-    where: { token: refreshToken },
+    where: { token: hashToken(refreshToken) },
     data: { revoked: true },
   });
 }

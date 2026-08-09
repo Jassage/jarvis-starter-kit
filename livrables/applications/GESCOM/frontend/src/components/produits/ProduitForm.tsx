@@ -6,6 +6,7 @@ export default function ProduitForm({ produit, onDone }: { produit?: Produit; on
   const { createProduit, updateProduit } = useProduitStore();
   const [form, setForm] = useState({
     reference: produit?.reference ?? '',
+    codeBarres: produit?.codeBarres ?? '',
     nom: produit?.nom ?? '',
     categorie: produit?.categorie ?? '',
     unite: produit?.unite ?? 'unité',
@@ -24,6 +25,7 @@ export default function ProduitForm({ produit, onDone }: { produit?: Produit; on
     try {
       const payload: ProduitInput = {
         reference: form.reference.trim(),
+        codeBarres: form.codeBarres.trim() || undefined,
         nom: form.nom.trim(),
         categorie: form.categorie.trim() || undefined,
         unite: form.unite.trim() || 'unité',
@@ -61,6 +63,11 @@ export default function ProduitForm({ produit, onDone }: { produit?: Produit; on
       <div>
         <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-ink-2)' }}>Nom du produit</label>
         <input className="input" required value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} />
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--color-ink-2)' }}>Code-barres (optionnel)</label>
+        <input className="input" placeholder="Scanner ou saisir le code-barres" value={form.codeBarres} onChange={(e) => setForm({ ...form, codeBarres: e.target.value })} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">

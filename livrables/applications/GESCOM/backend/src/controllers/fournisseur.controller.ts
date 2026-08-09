@@ -4,7 +4,12 @@ import * as fournisseurService from '../services/fournisseur.service';
 
 export async function list(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const fournisseurs = await fournisseurService.listFournisseurs(req.query.search as string | undefined);
+    const { search, page, limit } = req.query;
+    const fournisseurs = await fournisseurService.listFournisseurs(
+      search as string | undefined,
+      page ? Number(page) : undefined,
+      limit ? Number(limit) : undefined
+    );
     res.json(ok(fournisseurs));
   } catch (e) { next(e); }
 }

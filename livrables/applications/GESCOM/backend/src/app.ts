@@ -18,6 +18,7 @@ import achatRoutes from './routes/achat.routes';
 import transfertRoutes from './routes/transfert.routes';
 import comptaRoutes from './routes/compta.routes';
 import rapportRoutes from './routes/rapport.routes';
+import caisseRoutes from './routes/caisse.routes';
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use('/api/achats', achatRoutes);
 app.use('/api/transferts', transfertRoutes);
 app.use('/api/compta', comptaRoutes);
 app.use('/api/rapports', rapportRoutes);
+app.use('/api/caisse', caisseRoutes);
 
 app.use(errorHandler);
 

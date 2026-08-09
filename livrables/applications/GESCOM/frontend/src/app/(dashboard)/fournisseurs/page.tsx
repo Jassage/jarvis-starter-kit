@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { Building2 } from 'lucide-react';
 import { useFournisseurStore, Fournisseur } from '@/stores/fournisseurStore';
 import Modal from '@/components/ui/Modal';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import Banner from '@/components/ui/Banner';
 import PageToolbar from '@/components/ui/PageToolbar';
 import EmptyState from '@/components/ui/EmptyState';
 
@@ -55,18 +57,28 @@ export default function FournisseursPage() {
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Fournisseur | undefined>(undefined);
+  const [toArchive, setToArchive] = useState<Fournisseur | null>(null);
+  const [banner, setBanner] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => { fetchFournisseurs(); }, [fetchFournisseurs]);
 
   const handleSearch = async (v: string) => { setSearch(v); await fetchFournisseurs(v || undefined); };
 
-  const handleArchive = async (f: Fournisseur) => {
-    if (!confirm(`Archiver "${f.nom}" ?`)) return;
-    try { await archiveFournisseur(f.id); } catch (err: any) { alert(err.response?.data?.error || 'Erreur'); }
+  const handleArchive = async () => {
+    if (!toArchive) return;
+    try {
+      await archiveFournisseur(toArchive.id);
+      setBanner({ message: `Fournisseur "${toArchive.nom}" archivé.`, type: 'success' });
+      setToArchive(null);
+    } catch (err: any) {
+      setBanner({ message: err.response?.data?.error || 'Erreur', type: 'error' });
+    }
   };
 
   return (
     <div className="space-y-6">
+      {banner && <Banner message={banner.message} type={banner.type} onClose={() => setBanner(null)} />}
+
       <PageToolbar search={search} onSearch={handleSearch} searchPlaceholder="Rechercher un fournisseur..." actionLabel="Nouveau fournisseur" onAction={() => { setEditing(undefined); setModalOpen(true); }} />
 
       <div className="card overflow-hidden">
@@ -87,7 +99,7 @@ export default function FournisseursPage() {
                   <td>{f.adresse || '—'}</td>
                   <td className="text-right space-x-3 whitespace-nowrap">
                     <button onClick={() => { setEditing(f); setModalOpen(true); }} className="text-xs font-semibold" style={{ color: 'var(--color-primary-2)' }}>Modifier</button>
-                    <button onClick={() => handleArchive(f)} className="text-xs font-semibold" style={{ color: 'var(--color-danger)' }}>Archiver</button>
+                    <button onClick={() => setToArchive(f)} className="text-xs font-semibold" style={{ color: 'var(--color-danger)' }}>Archiver</button>
                   </td>
                 </tr>
               ))}
@@ -102,6 +114,16 @@ export default function FournisseursPage() {
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Modifier le fournisseur' : 'Nouveau fournisseur'}>
         <FournisseurForm fournisseur={editing} onDone={() => setModalOpen(false)} />
       </Modal>
+
+      <ConfirmDialog
+        open={!!toArchive}
+        title="Archiver le fournisseur"
+        message={toArchive ? `Archiver "${toArchive.nom}" ?` : ''}
+        confirmLabel="Archiver"
+        danger
+        onConfirm={handleArchive}
+        onClose={() => setToArchive(null)}
+      />
     </div>
   );
 }

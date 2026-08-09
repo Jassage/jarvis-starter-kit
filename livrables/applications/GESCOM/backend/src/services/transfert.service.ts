@@ -2,14 +2,19 @@ import { Prisma } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { AppError } from "../types";
 import { createAuditLog } from "../utils/audit";
+import { assertOwnEmplacement } from "../middleware/emplacementScope";
 
-async function genNumeroTransfert(
-  tx: Prisma.TransactionClient,
-): Promise<string> {
-  await tx.$executeRawUnsafe(
+type RequestingUser = { role: string; emplacementId?: string | null };
+
+// Le DDL est transactionnel en PostgreSQL : créer la séquence à l'intérieur de la transaction
+// qui échoue ensuite (contrainte d'unicité) annule aussi sa création, et la séquence repart de
+// zéro à chaque tentative — collision infinie avec un numéro déjà pris. La séquence doit donc
+// être créée hors transaction, une fois pour toutes (IF NOT EXISTS la rend inoffensive ensuite).
+async function genNumeroTransfert(): Promise<string> {
+  await prisma.$executeRawUnsafe(
     "CREATE SEQUENCE IF NOT EXISTS transfert_numero_seq",
   );
-  const rows = await tx.$queryRawUnsafe<{ value: bigint | number }[]>(
+  const rows = await prisma.$queryRawUnsafe<{ value: bigint | number }[]>(
     "SELECT nextval('transfert_numero_seq') AS value",
   );
   const value = Number(rows[0]?.value ?? 0);
@@ -25,9 +30,9 @@ export async function createTransfert(
   },
   userId: string,
 ) {
-  const transfert = await prisma.$transaction(async (tx) => {
-    const numero = await genNumeroTransfert(tx);
+  const numero = await genNumeroTransfert();
 
+  const transfert = await prisma.$transaction(async (tx) => {
     const created = await tx.transfert.create({
       data: {
         numero,
@@ -119,12 +124,14 @@ export async function listTransferts(params: {
   });
 }
 
-export async function recevoirTransfert(id: string, userId: string) {
+export async function recevoirTransfert(id: string, userId: string, requestingUser?: RequestingUser) {
   const transfert = await prisma.transfert.findUnique({
     where: { id },
     include: { lignes: true },
   });
   if (!transfert) throw new AppError(404, "Transfert introuvable");
+  // La réception se fait au site destination : seul le staff de ce site peut confirmer l'arrivée.
+  assertOwnEmplacement(requestingUser, transfert.emplacementDestId);
   if (transfert.statut !== "EN_TRANSIT")
     throw new AppError(
       400,
@@ -179,12 +186,14 @@ export async function recevoirTransfert(id: string, userId: string) {
   });
 }
 
-export async function annulerTransfert(id: string, userId: string) {
+export async function annulerTransfert(id: string, userId: string, requestingUser?: RequestingUser) {
   const transfert = await prisma.transfert.findUnique({
     where: { id },
     include: { lignes: true },
   });
   if (!transfert) throw new AppError(404, "Transfert introuvable");
+  // L'annulation restitue le stock à la source : seul le staff du site source peut l'initier.
+  assertOwnEmplacement(requestingUser, transfert.emplacementSourceId);
   if (transfert.statut !== "EN_TRANSIT")
     throw new AppError(400, "Seul un transfert en transit peut être annulé");
 

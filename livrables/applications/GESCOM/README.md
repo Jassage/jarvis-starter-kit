@@ -8,13 +8,15 @@ Modules cibles : Stock/inventaire, Ventes/facturation, Achats/fournisseurs, Comp
 
 Stack : Next.js (App Router) + Express 4 + TypeScript + Prisma 5 + PostgreSQL — mêmes patterns que BANKA et MEDIKA (RBAC, audit log, soft delete, Decimal(15,2) pour les montants).
 
-## État actuel (Phase 0 — socle)
+## État actuel
 
-- Schéma Prisma complet pour les 4 modules (voir `backend/prisma/schema.prisma`)
 - Auth JWT (cookie httpOnly + refresh token rotatif) + RBAC (5 rôles : SUPER_ADMIN, GERANT, VENDEUR, MAGASINIER, COMPTABLE) + audit log
-- Frontend : login + layout dashboard de base, pas encore d'écrans métier
+- Modules livrés : Produits (avec code-barres), Stock (multi-emplacement), Transferts inter-sites, Ventes (POS, scan code-barres), **Caisse** (sessions journalières, ouverture/fermeture, écart), **Facture PDF**, **Retours/avoirs** (partiels, ligne par ligne, avec restock et écriture comptable inverse), Clients, Achats/Fournisseurs, Comptabilité (journal, grand livre, bilan, compte de résultat), Rapports (ventes/stock/achats/clients), Dashboard
+- Toute vente doit être rattachée à une session de caisse ouverte sur son emplacement (`/caisse`)
+- Facture PDF téléchargeable depuis chaque vente (`GET /api/ventes/:id/facture`)
+- Une vente ayant déjà des retours ne peut plus être annulée globalement (seul le retour reste possible)
 
-Pas encore implémenté : CRUD Produits/Stock, Ventes, Achats, Transferts, Comptabilité, Rapports. Voir le plan de la session dans `.claude/plans` ou demander à Claude le détail des phases suivantes.
+Non implémenté : tests automatisés, suivi de dette fournisseur, module Paramètres/Entreprise (l'en-tête de facture se configure via `ENTREPRISE_NOM`/`ENTREPRISE_ADRESSE` en variable d'environnement).
 
 ## Mise en route
 

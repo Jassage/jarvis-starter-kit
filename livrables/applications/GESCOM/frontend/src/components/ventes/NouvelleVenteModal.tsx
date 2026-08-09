@@ -52,9 +52,25 @@ export default function NouvelleVenteModal({ onDone }: NouvelleVenteModalProps) 
   const produitsFiltres = produits.filter((p) =>
     p.actif && (
       p.nom.toLowerCase().includes(recherche.toLowerCase()) ||
-      p.reference.toLowerCase().includes(recherche.toLowerCase())
+      p.reference.toLowerCase().includes(recherche.toLowerCase()) ||
+      (p.codeBarres || '').toLowerCase().includes(recherche.toLowerCase())
     )
   );
+
+  // Workflow scanner USB : le scanner "tape" le code puis envoie Entrée. Match exact sur
+  // codeBarres seulement (pas de correspondance partielle) pour éviter d'ajouter le mauvais
+  // produit si deux codes se chevauchent.
+  const handleRechercheKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    const code = recherche.trim();
+    if (!code) return;
+    const match = produits.find((p) => p.actif && p.codeBarres && p.codeBarres.toLowerCase() === code.toLowerCase());
+    if (match) {
+      e.preventDefault();
+      ajouterProduit(match);
+      setRecherche('');
+    }
+  };
 
   const montantTotal = lignes.reduce((sum, l) => sum + l.quantite * l.prixUnitaire, 0);
 
@@ -155,9 +171,11 @@ export default function NouvelleVenteModal({ onDone }: NouvelleVenteModalProps) 
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--color-ink-3)' }} />
             <input
               className="input pl-9"
-              placeholder="Rechercher un produit..."
+              placeholder="Nom, référence ou scanner un code-barres..."
               value={recherche}
               onChange={(e) => setRecherche(e.target.value)}
+              onKeyDown={handleRechercheKeyDown}
+              autoFocus
             />
           </div>
           <div className="space-y-2 max-h-56 overflow-y-auto">

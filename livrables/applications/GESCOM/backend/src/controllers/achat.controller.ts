@@ -21,21 +21,21 @@ export async function create(req: AuthRequest, res: Response, next: NextFunction
 
 export async function envoyer(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    await achatService.envoyerCommande(req.params.id, req.user!.userId);
+    await achatService.envoyerCommande(req.params.id, req.user!.userId, req.user);
     res.json(ok(null, 'Commande envoyée au fournisseur'));
   } catch (e) { next(e); }
 }
 
 export async function recevoir(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    await achatService.recevoirCommande(req.params.id, req.body.lignes, req.user!.userId);
+    await achatService.recevoirCommande(req.params.id, req.body.lignes, req.user!.userId, req.user);
     res.json(ok(null, 'Réception enregistrée'));
   } catch (e) { next(e); }
 }
 
 export async function annuler(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    await achatService.annulerCommande(req.params.id, req.user!.userId);
+    await achatService.annulerCommande(req.params.id, req.user!.userId, req.user);
     res.json(ok(null, 'Commande annulée'));
   } catch (e) { next(e); }
 }

@@ -4,11 +4,13 @@ import * as produitService from '../services/produit.service';
 
 export async function list(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { search, categorie, actif } = req.query;
+    const { search, categorie, actif, page, limit } = req.query;
     const produits = await produitService.listProduits({
       search: search as string | undefined,
       categorie: categorie as string | undefined,
       actif: actif === undefined ? undefined : actif === 'true',
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
     });
     res.json(ok(produits));
   } catch (e) { next(e); }

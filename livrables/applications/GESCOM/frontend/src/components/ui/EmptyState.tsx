@@ -1,4 +1,16 @@
-export default function EmptyState({ icon: Icon, title, hint }: { icon?: React.ComponentType<{ className?: string }>; title: string; hint?: string }) {
+export default function EmptyState({
+  icon: Icon,
+  title,
+  hint,
+  description,
+  action,
+}: {
+  icon?: React.ComponentType<{ className?: string }>;
+  title: string;
+  hint?: string;
+  description?: string;
+  action?: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col items-center justify-center text-center py-14 px-4">
       {Icon && (
@@ -8,6 +20,8 @@ export default function EmptyState({ icon: Icon, title, hint }: { icon?: React.C
       )}
       <p className="text-sm font-semibold" style={{ color: 'var(--color-ink-2)' }}>{title}</p>
       {hint && <p className="text-xs mt-1" style={{ color: 'var(--color-ink-3)' }}>{hint}</p>}
+      {description && <p className="text-xs mt-1" style={{ color: 'var(--color-ink-3)' }}>{description}</p>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }

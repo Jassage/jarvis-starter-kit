@@ -1,12 +1,11 @@
 import prisma from '../utils/prisma';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
+import { assertOwnEmplacement } from '../middleware/emplacementScope';
+import { genererNumeroSequence } from '../utils/numero';
 import { Prisma } from '@prisma/client';
 
-async function genNumeroCommande(): Promise<string> {
-  const count = await prisma.commandeFournisseur.count();
-  return `CMD-${String(count + 1).padStart(6, '0')}`;
-}
+type RequestingUser = { role: string; emplacementId?: string | null };
 
 export async function createCommande(
   data: {
@@ -18,7 +17,7 @@ export async function createCommande(
   },
   userId: string
 ) {
-  const numero = await genNumeroCommande();
+  const numero = await genererNumeroSequence('commande_numero_seq', 'CMD');
   const commande = await prisma.commandeFournisseur.create({
     data: {
       numero,
@@ -60,9 +59,10 @@ export async function listCommandes(params: { emplacementId?: string; statut?: s
   });
 }
 
-export async function envoyerCommande(id: string, userId: string) {
+export async function envoyerCommande(id: string, userId: string, requestingUser?: RequestingUser) {
   const commande = await prisma.commandeFournisseur.findUnique({ where: { id } });
   if (!commande) throw new AppError(404, 'Commande introuvable');
+  assertOwnEmplacement(requestingUser, commande.emplacementId);
   if (commande.statut !== 'BROUILLON') throw new AppError(400, 'Seule une commande en brouillon peut être envoyée');
   const updated = await prisma.commandeFournisseur.update({ where: { id }, data: { statut: 'ENVOYEE' } });
   await createAuditLog({ userId, table: 'commandes_fournisseur', action: 'ENVOYER', entiteId: id });
@@ -72,13 +72,15 @@ export async function envoyerCommande(id: string, userId: string) {
 export async function recevoirCommande(
   id: string,
   lignesReception: { ligneId: string; quantiteRecue: number }[],
-  userId: string
+  userId: string,
+  requestingUser?: RequestingUser
 ) {
   const commande = await prisma.commandeFournisseur.findUnique({
     where: { id },
     include: { lignes: { include: { produit: true } } },
   });
   if (!commande) throw new AppError(404, 'Commande introuvable');
+  assertOwnEmplacement(requestingUser, commande.emplacementId);
   if (['RECUE', 'ANNULEE'].includes(commande.statut)) {
     throw new AppError(400, 'Cette commande est déjà reçue ou annulée');
   }
@@ -189,9 +191,10 @@ export async function recevoirCommande(
   await createAuditLog({ userId, table: 'commandes_fournisseur', action: 'RECEPTION', entiteId: id });
 }
 
-export async function annulerCommande(id: string, userId: string) {
+export async function annulerCommande(id: string, userId: string, requestingUser?: RequestingUser) {
   const commande = await prisma.commandeFournisseur.findUnique({ where: { id } });
   if (!commande) throw new AppError(404, 'Commande introuvable');
+  assertOwnEmplacement(requestingUser, commande.emplacementId);
   if (['RECUE', 'ANNULEE'].includes(commande.statut)) {
     throw new AppError(400, 'Impossible d\'annuler une commande reçue ou déjà annulée');
   }

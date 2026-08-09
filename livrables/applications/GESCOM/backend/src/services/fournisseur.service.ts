@@ -2,11 +2,23 @@ import prisma from '../utils/prisma';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
 
-export async function listFournisseurs(search?: string) {
-  const where = search
+// page/limit optionnels et rétrocompatibles : voir le même commentaire dans produit.service.ts.
+export async function listFournisseurs(search?: string, page?: number, limit?: number) {
+  const whereBase = search
     ? { OR: [{ nom: { contains: search, mode: 'insensitive' as const } }, { telephone: { contains: search, mode: 'insensitive' as const } }] }
     : {};
-  return prisma.fournisseur.findMany({ where: { ...where, actif: true }, orderBy: { nom: 'asc' } });
+  const where = { ...whereBase, actif: true };
+
+  const pagine = page !== undefined || limit !== undefined;
+  if (!pagine) return prisma.fournisseur.findMany({ where, orderBy: { nom: 'asc' } });
+
+  const pageEff = page ?? 1;
+  const limitEff = limit ?? 50;
+  const [items, total] = await Promise.all([
+    prisma.fournisseur.findMany({ where, orderBy: { nom: 'asc' }, skip: (pageEff - 1) * limitEff, take: limitEff }),
+    prisma.fournisseur.count({ where }),
+  ]);
+  return { items, total, page: pageEff, limit: limitEff, pages: Math.ceil(total / limitEff) };
 }
 
 export async function createFournisseur(data: any, userId: string) {

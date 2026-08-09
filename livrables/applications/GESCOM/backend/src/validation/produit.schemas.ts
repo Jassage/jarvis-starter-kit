@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const createProduitSchema = z.object({
   reference: z.string().min(1, 'Référence requise').max(50),
+  codeBarres: z.union([z.string().max(50), z.literal('')]).optional().transform((v) => (v === '' ? null : v)),
   nom: z.string().min(1, 'Nom requis').max(150),
   categorie: z.string().max(100).optional(),
   unite: z.string().min(1).max(30).default('unité'),

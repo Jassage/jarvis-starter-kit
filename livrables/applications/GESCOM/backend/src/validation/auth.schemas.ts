@@ -28,6 +28,23 @@ export const createUtilisateurSchema = z.object({
   nom: z.string().min(1).max(100).trim(),
   prenom: z.string().min(1).max(100).trim(),
   role: z.enum(['SUPER_ADMIN', 'GERANT', 'VENDEUR', 'MAGASINIER', 'COMPTABLE']),
-  emplacementId: z.string().cuid().optional(),
+  // .string().min(1) et non .cuid() : les emplacements du seed utilisent des id personnalisés
+  // ("seed-boutique"/"seed-entrepot"), pas des cuid Prisma — cohérent avec vente/stock.schemas.ts.
+  emplacementId: z.string().min(1).optional(),
   telephone: z.string().max(20).optional(),
 });
+
+// Whitelist stricte : la mise à jour d'un compte ne doit jamais pouvoir toucher email/motDePasse
+// (ces champs ont leurs propres flux dédiés — createUtilisateur / changePassword — avec hash et
+// règles de complexité). .strict() rejette explicitement tout champ hors de cette liste plutôt
+// que de le laisser passer tel quel jusqu'à Prisma.
+export const updateUtilisateurSchema = z
+  .object({
+    nom: z.string().min(1).max(100).trim().optional(),
+    prenom: z.string().min(1).max(100).trim().optional(),
+    telephone: z.string().max(20).optional(),
+    role: z.enum(['SUPER_ADMIN', 'GERANT', 'VENDEUR', 'MAGASINIER', 'COMPTABLE']).optional(),
+    emplacementId: z.string().min(1).nullable().optional(),
+    actif: z.boolean().optional(),
+  })
+  .strict();

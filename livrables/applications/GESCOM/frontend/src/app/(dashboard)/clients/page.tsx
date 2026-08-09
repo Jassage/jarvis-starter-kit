@@ -4,6 +4,8 @@ import { Users } from 'lucide-react';
 import { useClientStore, Client } from '@/stores/clientStore';
 import { formatMontant } from '@/lib/utils';
 import Modal from '@/components/ui/Modal';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import Banner from '@/components/ui/Banner';
 import Badge from '@/components/ui/Badge';
 import PageToolbar from '@/components/ui/PageToolbar';
 import EmptyState from '@/components/ui/EmptyState';
@@ -14,6 +16,8 @@ export default function ClientsPage() {
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Client | undefined>(undefined);
+  const [toArchive, setToArchive] = useState<Client | null>(null);
+  const [banner, setBanner] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
 
@@ -25,17 +29,21 @@ export default function ClientsPage() {
   const openEdit = (c: Client) => { setEditing(c); setModalOpen(true); };
   const openCreate = () => { setEditing(undefined); setModalOpen(true); };
 
-  const handleArchive = async (c: Client) => {
-    if (!confirm(`Archiver le client "${c.nom}" ?`)) return;
+  const handleArchive = async () => {
+    if (!toArchive) return;
     try {
-      await archiveClient(c.id);
+      await archiveClient(toArchive.id);
+      setBanner({ message: `Client "${toArchive.nom}" archivé.`, type: 'success' });
+      setToArchive(null);
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Erreur');
+      setBanner({ message: err.response?.data?.error || 'Erreur', type: 'error' });
     }
   };
 
   return (
     <div className="space-y-6">
+      {banner && <Banner message={banner.message} type={banner.type} onClose={() => setBanner(null)} />}
+
       <PageToolbar search={search} onSearch={handleSearch} searchPlaceholder="Rechercher un client..." actionLabel="Nouveau client" onAction={openCreate} />
 
       <div className="card overflow-hidden">
@@ -59,7 +67,7 @@ export default function ClientsPage() {
                   </td>
                   <td className="text-right space-x-3 whitespace-nowrap">
                     <button onClick={() => openEdit(c)} className="text-xs font-semibold" style={{ color: 'var(--color-primary-2)' }}>Modifier</button>
-                    <button onClick={() => handleArchive(c)} className="text-xs font-semibold" style={{ color: 'var(--color-danger)' }}>Archiver</button>
+                    <button onClick={() => setToArchive(c)} className="text-xs font-semibold" style={{ color: 'var(--color-danger)' }}>Archiver</button>
                   </td>
                 </tr>
               ))}
@@ -74,6 +82,16 @@ export default function ClientsPage() {
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Modifier le client' : 'Nouveau client'}>
         <ClientForm client={editing} onDone={() => setModalOpen(false)} />
       </Modal>
+
+      <ConfirmDialog
+        open={!!toArchive}
+        title="Archiver le client"
+        message={toArchive ? `Archiver le client "${toArchive.nom}" ?` : ''}
+        confirmLabel="Archiver"
+        danger
+        onConfirm={handleArchive}
+        onClose={() => setToArchive(null)}
+      />
     </div>
   );
 }

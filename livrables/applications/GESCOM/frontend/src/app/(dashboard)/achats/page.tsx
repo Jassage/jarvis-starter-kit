@@ -4,6 +4,8 @@ import { Truck, Clock, PackageCheck, ShoppingBag } from 'lucide-react';
 import { useAchatStore, Commande } from '@/stores/achatStore';
 import { formatMontant, formatRelativeTime } from '@/lib/utils';
 import Modal from '@/components/ui/Modal';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import Banner from '@/components/ui/Banner';
 import Badge, { BadgeTone } from '@/components/ui/Badge';
 import StatCard from '@/components/ui/StatCard';
 import PageToolbar from '@/components/ui/PageToolbar';
@@ -23,6 +25,8 @@ export default function AchatsPage() {
   const { commandes, isLoading, fetchCommandes, envoyerCommande, annulerCommande } = useAchatStore();
   const [modalCreer, setModalCreer] = useState(false);
   const [commandeReception, setCommandeReception] = useState<Commande | null>(null);
+  const [action, setAction] = useState<{ commande: Commande; type: 'envoyer' | 'annuler' } | null>(null);
+  const [banner, setBanner] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => { fetchCommandes(); }, [fetchCommandes]);
 
@@ -35,18 +39,26 @@ export default function AchatsPage() {
   const canEnvoyer = (c: Commande) => c.statut === 'BROUILLON';
   const canAnnuler = (c: Commande) => ['BROUILLON', 'ENVOYEE'].includes(c.statut);
 
-  const handleEnvoyer = async (c: Commande) => {
-    if (!confirm(`Marquer la commande ${c.numero} comme envoyée au fournisseur ?`)) return;
-    try { await envoyerCommande(c.id); } catch (err: any) { alert(err.response?.data?.error || 'Erreur'); }
-  };
-
-  const handleAnnuler = async (c: Commande) => {
-    if (!confirm(`Annuler la commande ${c.numero} ?`)) return;
-    try { await annulerCommande(c.id); } catch (err: any) { alert(err.response?.data?.error || 'Erreur'); }
+  const handleConfirmAction = async () => {
+    if (!action) return;
+    try {
+      if (action.type === 'envoyer') {
+        await envoyerCommande(action.commande.id);
+        setBanner({ message: `Commande ${action.commande.numero} envoyée au fournisseur.`, type: 'success' });
+      } else {
+        await annulerCommande(action.commande.id);
+        setBanner({ message: `Commande ${action.commande.numero} annulée.`, type: 'success' });
+      }
+      setAction(null);
+    } catch (err: any) {
+      setBanner({ message: err.response?.data?.error || 'Erreur', type: 'error' });
+    }
   };
 
   return (
     <div className="space-y-6">
+      {banner && <Banner message={banner.message} type={banner.type} onClose={() => setBanner(null)} />}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard compact icon={Clock} theme="blue" label="EN ATTENTE" value={String(enAttente)} />
         <StatCard compact icon={PackageCheck} theme="brand" label="REÇUES" value={String(commandes.filter((c) => c.statut === 'RECUE').length)} />
@@ -87,12 +99,12 @@ export default function AchatsPage() {
                         </button>
                       )}
                       {canEnvoyer(c) && (
-                        <button onClick={() => handleEnvoyer(c)} className="text-xs font-semibold" style={{ color: 'var(--color-info)' }}>
+                        <button onClick={() => setAction({ commande: c, type: 'envoyer' })} className="text-xs font-semibold" style={{ color: 'var(--color-info)' }}>
                           Envoyer
                         </button>
                       )}
                       {canAnnuler(c) && (
-                        <button onClick={() => handleAnnuler(c)} className="text-xs font-semibold" style={{ color: 'var(--color-danger)' }}>
+                        <button onClick={() => setAction({ commande: c, type: 'annuler' })} className="text-xs font-semibold" style={{ color: 'var(--color-danger)' }}>
                           Annuler
                         </button>
                       )}
@@ -115,6 +127,22 @@ export default function AchatsPage() {
       <Modal open={!!commandeReception} onClose={() => setCommandeReception(null)} title="Réceptionner la commande" maxWidth={700}>
         {commandeReception && <ReceptionModal commande={commandeReception} onDone={() => setCommandeReception(null)} />}
       </Modal>
+
+      <ConfirmDialog
+        open={!!action}
+        title={action?.type === 'envoyer' ? 'Envoyer la commande' : 'Annuler la commande'}
+        message={
+          action
+            ? action.type === 'envoyer'
+              ? `Marquer la commande ${action.commande.numero} comme envoyée au fournisseur ?`
+              : `Annuler la commande ${action.commande.numero} ?`
+            : ''
+        }
+        confirmLabel={action?.type === 'envoyer' ? 'Envoyer' : 'Annuler la commande'}
+        danger={action?.type === 'annuler'}
+        onConfirm={handleConfirmAction}
+        onClose={() => setAction(null)}
+      />
     </div>
   );
 }

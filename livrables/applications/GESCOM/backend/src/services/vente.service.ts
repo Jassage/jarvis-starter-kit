@@ -1,12 +1,11 @@
 import prisma from '../utils/prisma';
 import { AppError } from '../types';
 import { createAuditLog } from '../utils/audit';
+import { assertOwnEmplacement } from '../middleware/emplacementScope';
+import { genererNumeroSequence } from '../utils/numero';
 import { Prisma } from '@prisma/client';
 
-async function genererNumeroVente(): Promise<string> {
-  const count = await prisma.vente.count();
-  return `VNT-${String(count + 1).padStart(6, '0')}`;
-}
+type RequestingUser = { role: string; emplacementId?: string | null };
 
 async function resolveCompteId(numero: string): Promise<string | null> {
   const compte = await prisma.compteComptable.findUnique({ where: { numero } });
@@ -27,6 +26,16 @@ export async function createVente(
     throw new AppError(400, 'Un client est requis pour une vente à crédit');
   }
 
+  // Toute vente doit être rattachée à une session de caisse ouverte sur son emplacement,
+  // même en CREDIT/CHEQUE/VIREMENT : c'est la traçabilité de la journée de vente qui compte,
+  // pas seulement l'espèce (cf. écart de caisse calculé à la fermeture).
+  const sessionCaisse = await prisma.sessionCaisse.findFirst({
+    where: { emplacementId: data.emplacementId, statut: 'OUVERTE' },
+  });
+  if (!sessionCaisse) {
+    throw new AppError(400, "Aucune session de caisse ouverte sur cet emplacement. Ouvrez la caisse avant d'enregistrer une vente.");
+  }
+
   const montantTotal = data.lignes.reduce((sum, l) => sum + l.quantite * l.prixUnitaire, 0);
   const montantPaye = data.modePaiement === 'CREDIT' ? (data.montantPaye ?? 0) : montantTotal;
 
@@ -41,7 +50,7 @@ export async function createVente(
     }
   }
 
-  const numero = await genererNumeroVente();
+  const numero = await genererNumeroSequence('vente_numero_seq', 'VNT');
 
   // Transaction atomique : vente + lignes + stock + mouvements + comptabilité + soldeDu
   const vente = await prisma.$transaction(async (tx) => {
@@ -56,6 +65,7 @@ export async function createVente(
         montantTotal: new Prisma.Decimal(montantTotal),
         montantPaye: new Prisma.Decimal(montantPaye),
         dateVente: new Date(),
+        sessionCaisseId: sessionCaisse.id,
         lignes: {
           create: data.lignes.map((l) => ({
             produitId: l.produitId,
@@ -162,13 +172,14 @@ export async function listVentes(params: { emplacementId?: string; statut?: stri
       emplacement: { select: { id: true, nom: true, type: true } },
       utilisateur: { select: { nom: true, prenom: true } },
       lignes: { include: { produit: { select: { nom: true, reference: true, unite: true } } } },
+      _count: { select: { retours: true } },
     },
     orderBy: { dateVente: 'desc' },
     take: 100,
   });
 }
 
-export async function getVente(id: string) {
+export async function getVente(id: string, requestingUser?: RequestingUser) {
   const vente = await prisma.vente.findUnique({
     where: { id },
     include: {
@@ -179,16 +190,25 @@ export async function getVente(id: string) {
     },
   });
   if (!vente) throw new AppError(404, 'Vente introuvable');
+  assertOwnEmplacement(requestingUser, vente.emplacementId);
   return vente;
 }
 
-export async function cancelVente(id: string, userId: string) {
+export async function cancelVente(id: string, userId: string, requestingUser?: RequestingUser) {
   const vente = await prisma.vente.findUnique({
     where: { id },
-    include: { lignes: true },
+    include: { lignes: true, _count: { select: { retours: true } } },
   });
   if (!vente) throw new AppError(404, 'Vente introuvable');
+  assertOwnEmplacement(requestingUser, vente.emplacementId);
   if (vente.statut === 'ANNULEE') throw new AppError(400, 'Vente déjà annulée');
+  // Une vente déjà retournée (même partiellement) ne peut plus être annulée globalement :
+  // l'annulation restitue systématiquement la quantité totale d'origine, ce qui doublerait
+  // le stock déjà restitué par les retours. Le retour est le seul mécanisme de correction
+  // possible une fois qu'il a commencé.
+  if (vente._count.retours > 0) {
+    throw new AppError(400, 'Cette vente a déjà des retours enregistrés et ne peut plus être annulée globalement');
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.vente.update({ where: { id }, data: { statut: 'ANNULEE' } });
@@ -223,6 +243,41 @@ export async function cancelVente(id: string, userId: string) {
             data: { soldeDu: { decrement: new Prisma.Decimal(soldeRestant) } },
           });
         }
+      }
+
+      // Contrepassation de l'écriture comptable d'origine (même défaut que celui corrigé sur
+      // les retours : sans ceci, une vente annulée reste comptabilisée comme vendue).
+      try {
+        const compteVentesId = await resolveCompteId('701');
+        const compteContrepartieId = vente.modePaiement === 'CREDIT'
+          ? await resolveCompteId('411')
+          : await resolveCompteId('571');
+
+        if (compteVentesId && compteContrepartieId) {
+          await tx.ecritureComptable.create({
+            data: {
+              compteDebitId: compteVentesId,
+              compteCreditId: compteContrepartieId,
+              montant: new Prisma.Decimal(vente.montantTotal),
+              libelle: `Annulation vente ${vente.numero}`,
+              userId,
+              referenceType: 'VENTE',
+              referenceId: vente.id,
+            },
+          });
+        }
+      } catch {
+        await tx.ecritureEchec.create({
+          data: {
+            compteDebitNumero: '701',
+            compteCreditNumero: vente.modePaiement === 'CREDIT' ? '411' : '571',
+            montant: new Prisma.Decimal(vente.montantTotal),
+            libelle: `Annulation vente ${vente.numero}`,
+            erreur: 'Compte introuvable',
+            referenceType: 'VENTE',
+            referenceId: vente.id,
+          },
+        });
       }
     }
   });

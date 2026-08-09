@@ -4,7 +4,7 @@ import * as dashboardService from '../services/dashboard.service';
 
 export async function getStats(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const stats = await dashboardService.getDashboardStats();
+    const stats = await dashboardService.getDashboardStats(req.user);
     res.json(ok(stats));
   } catch (e) { next(e); }
 }

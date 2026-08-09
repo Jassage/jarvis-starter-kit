@@ -41,6 +41,9 @@ model Utilisateur {
   commandesCreees  CommandeFournisseur[]
   transfertsCrees  Transfert[]
   ecritures        EcritureComptable[]
+  sessionsOuvertes SessionCaisse[]        @relation("SessionCaisseOuvertePar")
+  sessionsFermees  SessionCaisse[]        @relation("SessionCaisseFermeePar")
+  retoursCrees     RetourVente[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -99,6 +102,7 @@ model Emplacement {
   commandes        CommandeFournisseur[]
   transfertsSource Transfert[]           @relation("TransfertSource")
   transfertsDest   Transfert[]           @relation("TransfertDestination")
+  sessionsCaisse   SessionCaisse[]
 
   createdAt DateTime @default(now())
 
@@ -110,6 +114,7 @@ model Emplacement {
 model Produit {
   id              String   @id @default(cuid())
   reference       String   @unique
+  codeBarres      String?  @unique
   nom             String
   categorie       String?
   unite           String   @default("unité")
@@ -264,12 +269,58 @@ model Vente {
   montantPaye   Decimal      @default(0) @db.Decimal(15, 2)
   dateVente     DateTime     @default(now())
 
-  lignes LigneVente[]
+  sessionCaisseId String?
+  sessionCaisse   SessionCaisse? @relation(fields: [sessionCaisseId], references: [id])
+
+  lignes  LigneVente[]
+  retours RetourVente[]
 
   createdAt DateTime @default(now())
 
   @@index([emplacementId, dateVente])
+  @@index([sessionCaisseId])
   @@map("ventes")
+}
+
+// ───────────────────────────── Caisse ─────────────────────────────
+
+enum StatutSessionCaisse {
+  OUVERTE
+  FERMEE
+}
+
+model SessionCaisse {
+  id            String              @id @default(cuid())
+  emplacementId String
+  emplacement   Emplacement         @relation(fields: [emplacementId], references: [id])
+  statut        StatutSessionCaisse @default(OUVERTE)
+
+  // Fond de caisse compté et saisi manuellement à l'ouverture (pas de report automatique :
+  // la caissière recompte le tiroir chaque jour, pratique de commerce de détail standard)
+  soldeOuverture Decimal @db.Decimal(15, 2)
+
+  // Calculés uniquement à la fermeture : soldeTheorique = soldeOuverture + ventes ESPECES
+  // validées de la session (CHEQUE/VIREMENT/CREDIT n'affectent jamais le tiroir physique)
+  soldeTheorique Decimal? @db.Decimal(15, 2)
+  soldeFermeture Decimal? @db.Decimal(15, 2)
+  ecartConstate  Decimal? @db.Decimal(15, 2)
+
+  notes String?
+
+  ouvertParId String
+  ouvertPar   Utilisateur @relation("SessionCaisseOuvertePar", fields: [ouvertParId], references: [id])
+  fermeParId  String?
+  fermePar    Utilisateur? @relation("SessionCaisseFermeePar", fields: [fermeParId], references: [id])
+
+  ventes Vente[]
+
+  dateOuverture DateTime  @default(now())
+  dateFermeture DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([emplacementId, statut])
+  @@map("sessions_caisse")
 }
 
 model LigneVente {
@@ -282,7 +333,43 @@ model LigneVente {
   prixUnitaire Decimal @db.Decimal(15, 2)
   montantLigne Decimal @db.Decimal(15, 2)
 
+  retours LigneRetour[]
+
   @@map("lignes_vente")
+}
+
+// ───────────────────────────── Retours / avoirs ─────────────────────────────
+
+model RetourVente {
+  id      String  @id @default(cuid())
+  numero  String  @unique
+  venteId String
+  vente   Vente   @relation(fields: [venteId], references: [id])
+  userId  String
+  utilisateur Utilisateur @relation(fields: [userId], references: [id])
+  motif   String?
+
+  montantTotal Decimal @db.Decimal(15, 2)
+
+  lignes LigneRetour[]
+
+  createdAt DateTime @default(now())
+
+  @@index([venteId])
+  @@map("retours_vente")
+}
+
+model LigneRetour {
+  id           String     @id @default(cuid())
+  retourId     String
+  retour       RetourVente @relation(fields: [retourId], references: [id])
+  ligneVenteId String
+  ligneVente   LigneVente @relation(fields: [ligneVenteId], references: [id])
+  quantite     Int
+  montantLigne Decimal    @db.Decimal(15, 2)
+
+  @@index([ligneVenteId])
+  @@map("lignes_retour")
 }
 
 // ───────────────────────────── Achats / Fournisseurs ─────────────────────────────

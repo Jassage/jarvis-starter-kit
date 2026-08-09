@@ -1,5 +1,9 @@
 import prisma from "../utils/prisma";
 
+// VENDEUR/MAGASINIER voient le dashboard (actions rapides, ventes du jour, alertes stock)
+// mais pas les indicateurs financiers de pilotage réservés à GERANT/COMPTABLE/SUPER_ADMIN.
+const ROLES_FINANCE = new Set(["SUPER_ADMIN", "GERANT", "COMPTABLE"]);
+
 function startOfDay(d: Date): Date {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -10,7 +14,8 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function getDashboardStats() {
+export async function getDashboardStats(requestingUser?: { role: string }) {
+  const voitFinances = !requestingUser || ROLES_FINANCE.has(requestingUser.role);
   const maintenant = new Date();
   const debutJour = startOfDay(maintenant);
   const debutHier = new Date(debutJour);
@@ -228,7 +233,10 @@ export async function getDashboardStats() {
 
   return {
     totalProduits: produits.length,
-    valeurStockTotal,
+    // Indicateurs de pilotage financier — jamais renvoyés à VENDEUR/MAGASINIER, même si
+    // le champ est demandé : un VENDEUR n'a pas à voir la valeur du stock de l'entreprise
+    // ni la liste nominative des clients endettés.
+    valeurStockTotal: voitFinances ? valeurStockTotal : undefined,
     produitsSousAlerte,
     alertesStock,
     repartitionParEmplacement,
@@ -237,9 +245,9 @@ export async function getDashboardStats() {
     tendanceVentes: { montantHier, variationPct },
     ventes7Jours,
     topProduits,
-    clientsRisque,
+    clientsRisque: voitFinances ? clientsRisque : [],
     clientsRisqueCount,
-    encoursCreditTotal,
+    encoursCreditTotal: voitFinances ? encoursCreditTotal : undefined,
     commandesEnAttente: commandesEnAttenteCount,
     commandesEnRetard: commandesEnRetardCount,
     commandesListe,

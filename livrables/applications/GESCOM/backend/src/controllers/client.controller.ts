@@ -4,11 +4,13 @@ import * as clientService from '../services/client.service';
 
 export async function list(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { search, type, actif } = req.query;
+    const { search, type, actif, page, limit } = req.query;
     const clients = await clientService.listClients({
       search: search as string | undefined,
       type: type as string | undefined,
       actif: actif === undefined ? undefined : actif === 'true',
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
     });
     res.json(ok(clients));
   } catch (e) { next(e); }

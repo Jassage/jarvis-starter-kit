@@ -4,6 +4,8 @@ import { ArrowRightLeft, Clock, PackageCheck, XCircle } from 'lucide-react';
 import { useTransfertStore, Transfert } from '@/stores/transfertStore';
 import { formatRelativeTime } from '@/lib/utils';
 import Modal from '@/components/ui/Modal';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import Banner from '@/components/ui/Banner';
 import Badge, { BadgeTone } from '@/components/ui/Badge';
 import StatCard from '@/components/ui/StatCard';
 import PageToolbar from '@/components/ui/PageToolbar';
@@ -19,24 +21,34 @@ const STATUT_STYLE: Record<string, { tone: BadgeTone; label: string }> = {
 export default function TransfertsPage() {
   const { transferts, isLoading, fetchTransferts, recevoirTransfert, annulerTransfert } = useTransfertStore();
   const [modalCreer, setModalCreer] = useState(false);
+  const [action, setAction] = useState<{ transfert: Transfert; type: 'recevoir' | 'annuler' } | null>(null);
+  const [banner, setBanner] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => { fetchTransferts(); }, [fetchTransferts]);
 
   const enTransit = transferts.filter((t) => t.statut === 'EN_TRANSIT').length;
   const recus = transferts.filter((t) => t.statut === 'RECU').length;
 
-  const handleRecevoir = async (t: Transfert) => {
-    if (!confirm(`Confirmer la réception du transfert ${t.numero} à ${t.emplacementDest.nom} ?`)) return;
-    try { await recevoirTransfert(t.id); } catch (err: any) { alert(err.response?.data?.error || 'Erreur'); }
-  };
-
-  const handleAnnuler = async (t: Transfert) => {
-    if (!confirm(`Annuler le transfert ${t.numero} ? Le stock sera restitué à ${t.emplacementSource.nom}.`)) return;
-    try { await annulerTransfert(t.id); } catch (err: any) { alert(err.response?.data?.error || 'Erreur'); }
+  const handleConfirmAction = async () => {
+    if (!action) return;
+    try {
+      if (action.type === 'recevoir') {
+        await recevoirTransfert(action.transfert.id);
+        setBanner({ message: `Transfert ${action.transfert.numero} réceptionné.`, type: 'success' });
+      } else {
+        await annulerTransfert(action.transfert.id);
+        setBanner({ message: `Transfert ${action.transfert.numero} annulé.`, type: 'success' });
+      }
+      setAction(null);
+    } catch (err: any) {
+      setBanner({ message: err.response?.data?.error || 'Erreur', type: 'error' });
+    }
   };
 
   return (
     <div className="space-y-6">
+      {banner && <Banner message={banner.message} type={banner.type} onClose={() => setBanner(null)} />}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard compact icon={Clock} theme="blue" label="EN TRANSIT" value={String(enTransit)} />
         <StatCard compact icon={PackageCheck} theme="brand" label="REÇUS" value={String(recus)} />
@@ -69,11 +81,11 @@ export default function TransfertsPage() {
                     <td className="whitespace-nowrap space-x-3">
                       {t.statut === 'EN_TRANSIT' && (
                         <>
-                          <button onClick={() => handleRecevoir(t)} className="text-xs font-semibold inline-flex items-center gap-1"
+                          <button onClick={() => setAction({ transfert: t, type: 'recevoir' })} className="text-xs font-semibold inline-flex items-center gap-1"
                             style={{ color: 'var(--color-primary-2)' }}>
                             <PackageCheck className="w-3.5 h-3.5" /> Réceptionner
                           </button>
-                          <button onClick={() => handleAnnuler(t)} className="text-xs font-semibold inline-flex items-center gap-1"
+                          <button onClick={() => setAction({ transfert: t, type: 'annuler' })} className="text-xs font-semibold inline-flex items-center gap-1"
                             style={{ color: 'var(--color-danger)' }}>
                             <XCircle className="w-3.5 h-3.5" /> Annuler
                           </button>
@@ -94,6 +106,22 @@ export default function TransfertsPage() {
       <Modal open={modalCreer} onClose={() => setModalCreer(false)} title="Nouveau transfert inter-sites" maxWidth={700}>
         <NouveauTransfertModal onDone={() => setModalCreer(false)} />
       </Modal>
+
+      <ConfirmDialog
+        open={!!action}
+        title={action?.type === 'recevoir' ? 'Réceptionner le transfert' : 'Annuler le transfert'}
+        message={
+          action
+            ? action.type === 'recevoir'
+              ? `Confirmer la réception du transfert ${action.transfert.numero} à ${action.transfert.emplacementDest.nom} ?`
+              : `Annuler le transfert ${action.transfert.numero} ? Le stock sera restitué à ${action.transfert.emplacementSource.nom}.`
+            : ''
+        }
+        confirmLabel={action?.type === 'recevoir' ? 'Réceptionner' : 'Annuler le transfert'}
+        danger={action?.type === 'annuler'}
+        onConfirm={handleConfirmAction}
+        onClose={() => setAction(null)}
+      />
     </div>
   );
 }

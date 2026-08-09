@@ -57,7 +57,7 @@ export async function recevoir(
   next: NextFunction,
 ) {
   try {
-    await transfertService.recevoirTransfert(req.params.id, req.user!.userId);
+    await transfertService.recevoirTransfert(req.params.id, req.user!.userId, req.user);
     res.json(ok(null, "Transfert réceptionné"));
   } catch (e) {
     next(e);
@@ -70,7 +70,7 @@ export async function annuler(
   next: NextFunction,
 ) {
   try {
-    await transfertService.annulerTransfert(req.params.id, req.user!.userId);
+    await transfertService.annulerTransfert(req.params.id, req.user!.userId, req.user);
     res.json(ok(null, "Transfert annulé"));
   } catch (e) {
     next(e);

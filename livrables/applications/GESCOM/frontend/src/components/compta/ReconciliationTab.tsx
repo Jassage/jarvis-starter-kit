@@ -1,18 +1,28 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, ShieldCheck } from 'lucide-react';
-import { useComptaStore } from '@/stores/comptaStore';
+import { useComptaStore, EcritureEchec } from '@/stores/comptaStore';
 import { formatMontant, formatRelativeTime } from '@/lib/utils';
 import EmptyState from '@/components/ui/EmptyState';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import Banner from '@/components/ui/Banner';
 
 export default function ReconciliationTab() {
   const { echecs, fetchEchecs, resoudreEchec } = useComptaStore();
+  const [toResoudre, setToResoudre] = useState<EcritureEchec | null>(null);
+  const [banner, setBanner] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => { fetchEchecs(); }, [fetchEchecs]);
 
-  const handleResoudre = async (id: string) => {
-    if (!confirm('Marquer cette écriture en échec comme résolue ?')) return;
-    try { await resoudreEchec(id); } catch (err: any) { alert(err.response?.data?.error || 'Erreur'); }
+  const handleResoudre = async () => {
+    if (!toResoudre) return;
+    try {
+      await resoudreEchec(toResoudre.id);
+      setBanner({ message: 'Écriture marquée comme résolue.', type: 'success' });
+      setToResoudre(null);
+    } catch (err: any) {
+      setBanner({ message: err.response?.data?.error || 'Erreur', type: 'error' });
+    }
   };
 
   const nonResolus = echecs.filter((e) => !e.resolu);
@@ -20,6 +30,7 @@ export default function ReconciliationTab() {
 
   return (
     <div className="space-y-6">
+      {banner && <Banner message={banner.message} type={banner.type} onClose={() => setBanner(null)} />}
       <div>
         <h2 className="text-sm font-bold mb-3" style={{ color: 'var(--color-ink-2)' }}>À réconcilier ({nonResolus.length})</h2>
         <div className="card overflow-hidden">
@@ -45,7 +56,7 @@ export default function ReconciliationTab() {
                       <span className="badge" style={{ background: 'var(--color-line-2)', color: 'var(--color-ink-3)' }}>{e.referenceType || '—'}</span>
                     </td>
                     <td className="whitespace-nowrap">
-                      <button onClick={() => handleResoudre(e.id)} className="text-xs font-semibold inline-flex items-center gap-1" style={{ color: 'var(--color-primary-2)' }}>
+                      <button onClick={() => setToResoudre(e)} className="text-xs font-semibold inline-flex items-center gap-1" style={{ color: 'var(--color-primary-2)' }}>
                         <CheckCircle2 className="w-3.5 h-3.5" /> Résoudre
                       </button>
                     </td>
@@ -80,6 +91,15 @@ export default function ReconciliationTab() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!toResoudre}
+        title="Résoudre l'écriture"
+        message="Marquer cette écriture en échec comme résolue ?"
+        confirmLabel="Résoudre"
+        onConfirm={handleResoudre}
+        onClose={() => setToResoudre(null)}
+      />
     </div>
   );
 }
