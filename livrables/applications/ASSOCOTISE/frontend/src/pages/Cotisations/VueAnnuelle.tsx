@@ -19,6 +19,7 @@ export function VueAnnuelle() {
   const [annee, setAnnee] = useState(new Date().getFullYear());
   const [montantsParMois, setMontantsParMois] = useState<Map<string, number>>(new Map());
   const [chargement, setChargement] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
 
   useEffect(() => ecouterMembres(setMembres), []);
 
@@ -28,6 +29,7 @@ export function VueAnnuelle() {
       return;
     }
     setChargement(true);
+    setErreur(null);
     listerCotisationsMembre(memberId)
       .then((cotisations) => {
         const courantes = valeursCourantes(cotisations);
@@ -35,6 +37,7 @@ export function VueAnnuelle() {
         for (const c of courantes.values()) map.set(c.mois, c.montant);
         setMontantsParMois(map);
       })
+      .catch(() => setErreur("Impossible de charger l'historique de ce membre."))
       .finally(() => setChargement(false));
   }, [memberId]);
 
@@ -72,11 +75,17 @@ export function VueAnnuelle() {
         </Select>
       </div>
 
+      {erreur && (
+        <p className="rounded-lg bg-[var(--color-danger-bg)] px-3 py-2 text-sm text-[var(--color-danger)]">
+          {erreur}
+        </p>
+      )}
+
       {!memberId ? (
         <EmptyState title="Choisis un membre" hint="Sélectionne un membre pour voir son historique annuel." />
       ) : chargement ? (
         <p className="text-sm text-[var(--color-muted)]">Chargement…</p>
-      ) : (
+      ) : erreur ? null : (
         <>
           <Table>
             <thead>

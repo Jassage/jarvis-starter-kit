@@ -18,6 +18,14 @@
       ]
     },
     {
+      "collectionGroup": "contributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberId", "order": "ASCENDING" },
+        { "fieldPath": "saisiLe", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "reminders",
       "queryScope": "COLLECTION",
       "fields": [

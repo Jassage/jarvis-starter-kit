@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users } from 'lucide-react';
+import { Users, Pencil } from 'lucide-react';
 import { PageToolbar } from '../../components/ui/PageToolbar';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Table, Th, Td, Tr } from '../../components/ui/Table';
@@ -20,6 +20,7 @@ export function MembresListe() {
   const [recherche, setRecherche] = useState('');
   const [filtreStatut, setFiltreStatut] = useState<'tous' | 'actif' | 'inactif'>('tous');
   const [modalOuverte, setModalOuverte] = useState(false);
+  const [membreAEditer, setMembreAEditer] = useState<Membre | null>(null);
 
   useEffect(() => ecouterMembres(setMembres), []);
 
@@ -76,6 +77,7 @@ export function MembresListe() {
               <Th className="hidden md:table-cell">Adhésion</Th>
               <Th>Statut</Th>
               <Th>Ce mois-ci</Th>
+              <Th></Th>
             </tr>
           </thead>
           <tbody>
@@ -103,6 +105,15 @@ export function MembresListe() {
                     <Badge tone="danger">En retard</Badge>
                   )}
                 </Td>
+                <Td>
+                  <button
+                    onClick={() => setMembreAEditer(m)}
+                    aria-label={`Modifier ${m.nom}`}
+                    className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)]"
+                  >
+                    <Pencil size={15} />
+                  </button>
+                </Td>
               </Tr>
             ))}
           </tbody>
@@ -110,6 +121,13 @@ export function MembresListe() {
       )}
 
       <MembreModal open={modalOuverte} onClose={() => setModalOuverte(false)} />
+      {membreAEditer && (
+        <MembreModal
+          open
+          onClose={() => setMembreAEditer(null)}
+          membre={membreAEditer}
+        />
+      )}
     </div>
   );
 }

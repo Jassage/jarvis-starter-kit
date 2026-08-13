@@ -21,9 +21,11 @@ export function MembreModal({
   );
   const [statut, setStatut] = useState(membre?.statut ?? 'actif');
   const [envoi, setEnvoi] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    setErreur(null);
     setEnvoi(true);
     try {
       if (membre) {
@@ -32,6 +34,8 @@ export function MembreModal({
         await creerMembre({ nom, telephone, email: email || undefined, dateAdhesion, statut });
       }
       onClose();
+    } catch {
+      setErreur("Impossible d'enregistrer ce membre. Vérifie ta connexion et réessaie.");
     } finally {
       setEnvoi(false);
     }
@@ -40,6 +44,11 @@ export function MembreModal({
   return (
     <Modal open={open} onClose={onClose} title={membre ? 'Modifier le membre' : 'Nouveau membre'}>
       <form onSubmit={onSubmit}>
+        {erreur && (
+          <p className="mb-4 rounded-lg bg-[var(--color-danger-bg)] px-3 py-2 text-sm text-[var(--color-danger)]">
+            {erreur}
+          </p>
+        )}
         <Field label="Nom complet" required>
           <Input required value={nom} onChange={(e) => setNom(e.target.value)} />
         </Field>
