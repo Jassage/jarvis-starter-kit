@@ -1,0 +1,66 @@
+﻿Rendu des diagrammes Mermaid...
+Diagrammes Mermaid rendus : 0 (dans C:\Users\ingja\Desktop\jarvis-starter-kit\livrables\formations\manuel-word\assets\diagrams)
+Chapitres transformes ecrits dans : C:\Users\ingja\Desktop\jarvis-starter-kit\livrables\formations\manuel-word\.tmp-mermaid\chapitres
+Chapitres assembles (59) :
+ - 01-presentation-word.md
+ - 02-installation-configuration.md
+ - 03-decouverte-interface.md
+ - 04-personnalisation-interface-options.md
+ - 05-creer-ouvrir-enregistrer-gerer-documents.md
+ - 06-modes-affichage-navigation-zoom.md
+ - 07-selection-presse-papiers-deplacement-texte.md
+ - 08-correction-automatique-orthographe-grammaire.md
+ - 09-mise-en-forme-caracteres.md
+ - 10-mise-en-forme-paragraphes.md
+ - 11-listes-puces-numerotees-multiniveaux.md
+ - 12-tabulations.md
+ - 13-mise-en-page-marges-orientation-format-sections.md
+ - 14-en-tetes-pieds-de-page-numerotation.md
+ - 15-sauts-de-page-et-de-section.md
+ - 16-colonnes-et-mises-en-page-avancees.md
+ - 17-styles-de-texte-et-styles-rapides.md
+ - 18-themes-du-document.md
+ - 19-modeles-creer-utiliser-personnaliser.md
+ - 20-coherence-visuelle-et-jeux-de-styles.md
+ - 21-images-insertion-et-mise-en-forme.md
+ - 22-formes-zones-de-texte-wordart.md
+ - 23-smartart.md
+ - 24-graphiques.md
+ - 25-icones-captures-ecran-medias-en-ligne.md
+ - 26-creer-mettre-en-forme-tableau.md
+ - 27-tableaux-avances-formules-tri-conversion.md
+ - 28-table-des-matieres-automatique.md
+ - 29-notes-de-bas-de-page-et-notes-de-fin.md
+ - 30-citations-et-bibliographie.md
+ - 31-index-et-table-des-illustrations.md
+ - 32-signets-renvois-liens-hypertexte.md
+ - 33-gerer-document-long-plan-sous-documents.md
+ - 34-publipostage-lettres-etiquettes-enveloppes-emails.md
+ - 35-champs-et-quickparts.md
+ - 36-initiation-aux-macros.md
+ - 37-introduction-vba-pour-word.md
+ - 38-suivi-des-modifications-mode-revision.md
+ - 39-commentaires.md
+ - 40-comparer-fusionner-documents.md
+ - 41-coauteur-temps-reel-onedrive-sharepoint-teams.md
+ - 42-protection-documents-mot-de-passe-restriction-edition.md
+ - 43-signatures-numeriques-authenticite.md
+ - 44-impression-avancee.md
+ - 45-export-pdf-autres-formats.md
+ - 46-accessibilite-des-documents.md
+ - 47-word-ecosysteme-microsoft-365.md
+ - 48-word-online-face-a-word-desktop.md
+ - 49-copilot-intelligence-artificielle-word.md
+ - 50-projet-rapport-professionnel-complet.md
+ - 51-projet-memoire-academique.md
+ - 52-projet-campagne-publipostage.md
+ - 53-vue-ensemble-methode-preparation-mos.md
+ - 54-examen-blanc-1-corrige.md
+ - 55-examen-blanc-2-corrige.md
+ - annexe-a-aide-memoire-raccourcis.md
+ - annexe-b-glossaire.md
+ - annexe-c-tableaux-comparatifs.md
+ - annexe-d-ressources-complementaires.md
+HTML genere : C:\Users\ingja\Desktop\jarvis-starter-kit\livrables\formations\manuel-word\export\manuel-word.html
+DOCX genere : C:\Users\ingja\Desktop\jarvis-starter-kit\livrables\formations\manuel-word\export\manuel-word.docx
+PDF genere avec pied de page personnalise : C:\Users\ingja\Desktop\jarvis-starter-kit\livrables\formations\manuel-word\export\manuel-word.pdf

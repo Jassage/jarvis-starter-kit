@@ -1,0 +1,23 @@
+body {
+  font-family: "Segoe UI", Calibri, Arial, sans-serif;
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 0 20px;
+  color: #1a1a1a;
+  line-height: 1.4;
+}
+h1 { font-size: 1.6em; border-bottom: 2px solid #1B4F72; padding-bottom: 6px; }
+h2 { font-size: 1.25em; color: #1B4F72; }
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 14px 0;
+}
+table, th, td {
+  border: 1px solid #999;
+}
+th, td {
+  padding: 8px 10px;
+  text-align: left;
+}
+img { max-width: 100%; }
