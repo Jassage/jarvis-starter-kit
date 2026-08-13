@@ -1,0 +1,9 @@
+{
+  "name": "manuel-admin-systeme",
+  "version": "1.0.0",
+  "description": "Manuel Professionnel d'Administration Système — Haitech Solutions",
+  "type": "commonjs",
+  "dependencies": {
+    "puppeteer-core": "^25.3.0"
+  }
+}
