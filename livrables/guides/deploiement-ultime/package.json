@@ -1,0 +1,16 @@
+{
+  "name": "guide-ultime-deploiement",
+  "version": "1.0.0",
+  "description": "Build HTML/DOCX/PDF du Guide Ultime du Deploiement",
+  "main": "print-pdf.js",
+  "scripts": {
+    "build": "powershell -File build.ps1"
+  },
+  "keywords": [],
+  "author": "Jaslin Occius",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "puppeteer-core": "^25.3.0"
+  }
+}

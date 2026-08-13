@@ -1,0 +1,283 @@
+/* Guide Ultime du Déploiement — feuille de style pour l'export HTML/PDF/DOCX */
+
+@page {
+  margin: 2.2cm 2cm;
+}
+
+:root {
+  --color-text: #1f2430;
+  --color-muted: #5b6472;
+  --color-bg: #ffffff;
+  --color-brand: #2f5fd4;
+  --color-brand-dark: #1e3f99;
+  --color-code-bg: #0d1117;
+  --color-code-text: #e6edf3;
+  --color-warn-bg: #fff4e5;
+  --color-warn-border: #f0a93a;
+  --color-tip-bg: #eef4ff;
+  --color-tip-border: #4c7bef;
+  --color-good-bg: #eafbf1;
+  --color-good-border: #1fae66;
+  --color-bad-bg: #fdecec;
+  --color-bad-border: #e5484d;
+  --color-retenir-bg: #f4f5f7;
+  --color-retenir-border: #7c8794;
+  --color-objectif-bg: #eef1fd;
+  --color-objectif-border: #2f6fed;
+  --font-body: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", "SFMono-Regular", Menlo, monospace;
+}
+
+html, body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 12.5pt;
+  line-height: 1.55;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+h1, h2, h3, h4 {
+  color: #10131a;
+  font-weight: 700;
+  line-height: 1.25;
+  page-break-after: avoid;
+}
+
+h1 {
+  font-size: 2rem;
+  border-bottom: 3px solid var(--color-brand);
+  padding-bottom: 0.4rem;
+  margin-top: 3rem;
+}
+
+h2 {
+  font-size: 1.4rem;
+  color: var(--color-brand-dark);
+  margin-top: 2.4rem;
+  border-left: 5px solid var(--color-brand);
+  padding-left: 0.6rem;
+}
+
+h3 {
+  font-size: 1.15rem;
+  margin-top: 1.8rem;
+}
+
+p { margin: 0.8rem 0; }
+
+a { color: var(--color-brand-dark); }
+
+/* Blocs de code style terminal */
+pre {
+  background: var(--color-code-bg);
+  color: var(--color-code-text);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  page-break-inside: avoid;
+}
+
+code {
+  font-family: var(--font-mono);
+  background: rgba(47, 95, 212, 0.10);
+  color: #1e3f99;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* Schémas ASCII (architecture, arborescences) : blocs de code non colorés, verbatim */
+pre.ascii {
+  background: #f7f8fa;
+  border: 1px dashed #9aa5b1;
+  border-radius: 6px;
+  padding: 1rem 1.2rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #1f2430;
+  page-break-inside: avoid;
+  white-space: pre;
+}
+
+/* Encadrés pédagogiques */
+.encadre {
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+  margin: 1.4rem 0;
+  page-break-inside: avoid;
+}
+
+.encadre-titre {
+  font-weight: 700;
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.objectif { background: var(--color-objectif-bg); border: 1px solid var(--color-objectif-border); }
+.objectif .encadre-titre { color: #1d4fb8; }
+
+.analogie { background: var(--color-tip-bg); border: 1px solid var(--color-tip-border); }
+.analogie .encadre-titre { color: #2a4fb0; }
+
+.retenir { background: var(--color-retenir-bg); border: 1px solid var(--color-retenir-border); }
+.retenir .encadre-titre { color: #4a525c; }
+
+.bonne-pratique { background: var(--color-good-bg); border: 1px solid var(--color-good-border); }
+.bonne-pratique .encadre-titre { color: #157a45; }
+
+.attention { background: var(--color-warn-bg); border: 1px solid var(--color-warn-border); }
+.attention .encadre-titre { color: #a15c00; }
+
+.erreur { background: var(--color-bad-bg); border: 1px solid var(--color-bad-border); }
+.erreur .encadre-titre { color: #b3211f; }
+
+/* Checklist de fin de partie */
+.checklist { list-style: none; padding-left: 0; }
+.checklist li { padding: 0.3rem 0; }
+ul.task-list { list-style: none; padding-left: 0.2rem; }
+ul.task-list li { padding: 0.25rem 0; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.2rem 0;
+  font-size: 0.92rem;
+}
+
+th, td {
+  border: 1px solid #d7dce3;
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+}
+
+th {
+  background: #f2f5fa;
+  color: #10131a;
+}
+
+blockquote {
+  border-left: 4px solid var(--color-muted);
+  margin: 1rem 0;
+  padding: 0.3rem 1rem;
+  color: var(--color-muted);
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #e2e6ec;
+  margin: 2.5rem 0;
+}
+
+.page-de-garde {
+  text-align: center;
+  margin: 6vh 0 3rem;
+  padding: 4rem 2.5rem 3rem;
+  border-radius: 20px;
+  background: radial-gradient(circle at 30% 0%, #16233a 0%, #0d1420 45%, #0a0c0e 100%);
+  color: #eef2f7;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+.page-de-garde::before {
+  content: "";
+  position: absolute;
+  top: -40%;
+  right: -20%;
+  width: 70%;
+  height: 70%;
+  background: radial-gradient(circle, rgba(47,95,212,0.30) 0%, transparent 70%);
+}
+
+.page-de-garde .icone-couverture {
+  font-size: 3.6rem;
+  line-height: 1;
+  margin-bottom: 1rem;
+  position: relative;
+}
+
+.page-de-garde .kicker {
+  color: #6f9bff;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  margin-bottom: 0.8rem;
+  position: relative;
+}
+
+.page-de-garde h1 {
+  border: none;
+  font-size: 2.5rem;
+  color: #ffffff;
+  margin: 0.3rem 0 0.6rem;
+  position: relative;
+}
+
+.page-de-garde .sous-titre {
+  color: #aebdcf;
+  font-size: 1.1rem;
+  max-width: 640px;
+  margin: 0 auto 1.6rem;
+  position: relative;
+}
+
+.page-de-garde .tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.6rem auto 0;
+  max-width: 640px;
+  position: relative;
+}
+
+.page-de-garde .tag {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: #cdd8e6;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.page-de-garde .auteur-bloc {
+  margin-top: 2.6rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid rgba(255,255,255,0.14);
+  position: relative;
+}
+
+.page-de-garde .auteur-nom {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.page-de-garde .auteur-role {
+  color: #8a9bb0;
+  font-size: 0.9rem;
+  margin-top: 0.2rem;
+}
+
+@media print {
+  body { max-width: 100%; padding: 0; }
+  h1 { page-break-before: always; page-break-after: avoid; }
+  .page-de-garde h1 { page-break-before: avoid; }
+}
