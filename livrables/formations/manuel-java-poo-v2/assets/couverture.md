@@ -1,0 +1,37 @@
+<div class="page-de-garde">
+
+<div class="icone-couverture">☕</div>
+
+<div class="kicker">Manuel de formation — Édition grand débutant</div>
+
+# Java — De Zéro à Développeur Java
+
+<p class="sous-titre">Version 2. Apprends la programmation, la Programmation Orientée Objet et le développement d'applications Java complètes, en partant de rien — avec des centaines d'exemples, d'exercices corrigés et de projets guidés pas à pas.</p>
+
+<div class="tags">
+<span class="tag">Bases de la programmation</span>
+<span class="tag">Classes &amp; Objets</span>
+<span class="tag">Héritage</span>
+<span class="tag">Polymorphisme</span>
+<span class="tag">Interfaces</span>
+<span class="tag">Collections</span>
+<span class="tag">Exceptions</span>
+<span class="tag">Java moderne</span>
+<span class="tag">UML</span>
+<span class="tag">SQL &amp; JDBC</span>
+<span class="tag">Architecture MVC</span>
+<span class="tag">SOLID</span>
+<span class="tag">Design Patterns</span>
+<span class="tag">Tests JUnit</span>
+<span class="tag">Git &amp; Maven</span>
+<span class="tag">7 projets progressifs</span>
+</div>
+
+<div class="auteur-bloc">
+<div class="auteur-nom">Jaslin Occius</div>
+<div class="auteur-role">Rédigé pour l'enseignement de la programmation</div>
+</div>
+
+</div>
+
+<div style="page-break-after: always;"></div>
