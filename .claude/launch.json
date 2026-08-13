@@ -138,6 +138,20 @@
       "runtimeArgs": ["--prefix", "livrables/sites-web/portfolio-jaslin", "run", "dev"],
       "port": 3012,
       "autoPort": false
+    },
+    {
+      "name": "remed-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/REMED/backend", "run", "dev"],
+      "port": 4011,
+      "autoPort": false
+    },
+    {
+      "name": "remed-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "livrables/applications/REMED/frontend", "run", "dev"],
+      "port": 3013,
+      "autoPort": false
     }
   ]
 }
