@@ -15,6 +15,7 @@
     },
     "android": {
       "package": "ht.tcheke.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0B2A6B",
         "foregroundImage": "./assets/android-icon-foreground.png",

@@ -140,7 +140,12 @@ date, vil, achatMwayen, venteMwayen, nbKontribisyon
 
 **Cycle complet worker → Firestore vérifié en conditions réelles (2026-07-22) :** clé de compte de service générée par Jaslin, `worker/.env` configuré, `npm start` (RUN_MODE=once) exécuté réellement — scraping du vrai site, calcul des lots, publication sur le vrai Firestore. `tirages/2026-07-22_NY_MIDI` et `tirages/2026-07-22_FL_MIDI` confirmés lisibles publiquement via l'API Firestore (donc visibles par l'app mobile telle quelle). **Bug de configuration trouvé et corrigé au passage** : `.env` n'était jamais chargé par le worker (aucun `dotenv`/`--env-file` câblé) — corrigé en ajoutant `--env-file=.env` aux scripts npm (`dev`/`start`/`backfill`).
 
-EAS déjà connecté (compte `jassage`), `eas.json` et `expo-dev-client` prêts. **Reste avant un test complet sur appareil réel :** premier build dev (`eas build --profile development --platform android`), pas encore lancé.
+**Premier build EAS réussi et vérifié le 2026-07-23** : APK réel compilé et installable produit par EAS (compte `jassage`). Trois blocages réels rencontrés et corrigés en chemin :
+1. TCHEKE n'avait jamais été commité en git — EAS Build archive le projet à partir de l'état git, corrigé par un premier commit (`5e481c0`).
+2. Bug connu d'EAS CLI sur les monorepos profonds (`projectRootDirectory` mal calculé depuis la racine `.git` du monorepo géant, décalage avec l'archive locale). Contournement documenté dans `mobile/README.md` : construire depuis une copie avec son propre dépôt git le temps du build.
+3. `npm ci` (utilisé par EAS, plus strict que `npm install`) échouait sur le conflit de peer dependency TypeScript — corrigé par `.npmrc` (`legacy-peer-deps=true`). Plus une icône de notification référencée mais jamais créée, et `expo-font` manquante (peer dependency de `@expo/vector-icons`).
+
+**Reste :** installer l'APK sur un vrai téléphone et tester les notifications push en conditions réelles (pas encore fait).
 
 ## Points de vigilance
 
