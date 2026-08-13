@@ -2,6 +2,25 @@
 
 # Aide-mémoire syntaxe Node.js/Express
 
+<div class="encadre astuce">
+<span class="encadre-titre">💡 Comment utiliser cette annexe</span>
+Cette annexe est un aide-mémoire de consultation rapide, pas un chapitre à lire de bout en bout — utilise la table ci-dessous pour sauter directement à la syntaxe recherchée, plutôt que de faire défiler l'ensemble de la page.
+</div>
+
+## Sommaire rapide
+
+- [npm](#npm-chapitres-3-4)
+- [Async/Await](#asyncawait-chapitres-8-10)
+- [Express — routage et middlewares](#express--routage-et-middlewares-chapitres-13-14)
+- [Architecture en couches](#architecture-en-couches-chapitres-15-17)
+- [Validation Zod](#validation-zod-chapitre-18)
+- [Gestion d'erreurs](#gestion-derreurs-chapitre-19)
+- [JWT](#jwt-chapitre-23)
+- [bcrypt](#bcrypt-chapitre-22)
+- [Prisma](#prisma-chapitre-34)
+- [Docker](#docker-chapitres-37-38)
+- [Tests](#tests-chapitres-29-30)
+
 ## npm (chapitres 3-4)
 
 ```

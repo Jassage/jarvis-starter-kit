@@ -22,17 +22,25 @@
 
 **ES Modules** — Système de modules standardisé du langage JavaScript (`import`/`export`). Chapitre 6.
 
+**Healthcheck** — Route ou mécanisme (comme `HEALTHCHECK` dans Docker) permettant de vérifier automatiquement qu'une application est opérationnelle, utilisé notamment par Docker Compose (`condition: service_healthy`) pour séquencer le démarrage de services dépendants. Chapitres 37-38, 44, 47.
+
 **Helmet** — Middleware Express configurant automatiquement des en-têtes HTTP de sécurité. Chapitre 25.
+
+**IDOR** — *Insecure Direct Object Reference*, faille où un utilisateur authentifié accède à une ressource appartenant à quelqu'un d'autre en modifiant simplement un identifiant dans la requête, faute de vérification de propriété côté serveur. Chapitre 24.
 
 **JWT** — *JSON Web Token*, jeton encodé (non chiffré) transportant des informations d'authentification signées. Chapitre 23.
 
 **Middleware** — Fonction Express avec accès à `req`, `res` et `next()`, formant une chaîne de traitement d'une requête. Chapitre 14.
+
+**Middleware chain (chaîne de middlewares)** — Suite ordonnée de middlewares exécutés séquentiellement pour une même route, chacun appelant `next()` pour transmettre la main au suivant (ou interrompant la chaîne en renvoyant une réponse). Chapitre 14.
 
 **MongoDB** — Base de données NoSQL orientée documents. Chapitre 33.
 
 **Mongoose** — ODM imposant un schéma structuré et validé pour MongoDB. Chapitre 36.
 
 **MVC** — Modèle-Vue-Contrôleur, pattern de répartition des responsabilités (sans "vue" classique dans une API REST). Chapitre 16.
+
+**N+1 (problème du)** — Anti-pattern de performance où une requête initiale (1) déclenche une requête supplémentaire par résultat (N), au lieu d'une seule requête groupée (résolu via `include`/`populate`/jointure). Chapitres 34, 36.
 
 **Node.js** — Environnement d'exécution JavaScript côté serveur, basé sur le moteur V8. Chapitre 1.
 
@@ -51,6 +59,8 @@
 **Refresh token** — Jeton longue durée, vérifié en base de données et révocable, permettant d'obtenir un nouvel access token. Chapitre 23.
 
 **Repository** — Couche encapsulant l'accès aux données, isolant le service de la technologie de stockage précise. Chapitre 17.
+
+**semver** — *Semantic Versioning*, convention de numérotation `MAJEUR.MINEUR.CORRECTIF` (ex. `4.18.2`) où chaque segment signale l'ampleur du changement ; utilisée par npm pour les plages de versions (`^`, `~`) dans `package.json`. Chapitre 3.
 
 **Sequelize** — ORM orienté classes pour bases de données relationnelles. Chapitre 35.
 

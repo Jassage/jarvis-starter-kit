@@ -8,10 +8,21 @@ $exportDir = Join-Path $root "export"
 $cssPath = Join-Path $root "assets\style.css"
 $couverturePath = Join-Path $root "assets\couverture.md"
 $couvertureFragmentPath = Join-Path $root "assets\cover-fragment.html"
+$diagramsDir = Join-Path $root "assets\diagrams"
+$chapitresRendusDir = Join-Path $root ".tmp-mermaid\chapitres"
+
+# --- Pre-rendu des diagrammes Mermaid en SVG (voir render-mermaid.js) ---
+# Ni pandoc ni le PDF (Puppeteer sur un HTML deja fige) n'executent de JavaScript : un <script>
+# mermaid.js resterait invisible en DOCX et ne serait fiable qu'en HTML. On rend donc chaque
+# diagramme en image AVANT pandoc, pour un rendu identique dans les 3 exports. Les fichiers
+# sources dans chapitres/ ne sont jamais modifies par cette etape.
+Write-Output "Rendu des diagrammes Mermaid..."
+node (Join-Path $root "render-mermaid.js") "$chapitresDir" "$chapitresRendusDir" "$diagramsDir"
+if ($LASTEXITCODE -ne 0) { throw "Echec du rendu Mermaid (render-mermaid.js)" }
 
 New-Item -ItemType Directory -Force -Path $exportDir | Out-Null
 
-$fichiers = @(Get-ChildItem $chapitresDir -Filter "*.md" | Sort-Object Name)
+$fichiers = @(Get-ChildItem $chapitresRendusDir -Filter "*.md" | Sort-Object Name)
 Write-Output "Chapitres assembles ($($fichiers.Count)) :"
 $fichiers | ForEach-Object { Write-Output " - $($_.Name)" }
 

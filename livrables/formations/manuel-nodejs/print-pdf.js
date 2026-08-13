@@ -20,12 +20,15 @@ async function main() {
   const browser = await puppeteer.launch({
     executablePath: EDGE_PATH,
     headless: true,
-    protocolTimeout: 120000,
+    protocolTimeout: 180000,
+    timeout: 90000, // le lancement d'Edge peut depasser les 30s par defaut sous charge systeme
   });
 
   try {
     const page = await browser.newPage();
-    await page.goto(urlHtml, { waitUntil: "load", timeout: 60000 });
+    page.setDefaultTimeout(120000); // remplace le defaut interne de 30s pour TOUTES les operations (goto, pdf...)
+    page.setDefaultNavigationTimeout(120000);
+    await page.goto(urlHtml, { waitUntil: "load" });
 
     await page.pdf({
       path: cheminPdf,
