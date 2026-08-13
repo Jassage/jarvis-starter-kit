@@ -1,0 +1,1052 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Locale {
+  FR
+  HT
+}
+
+enum AdminRole {
+  ADMIN
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+enum CategorieTourisme {
+  NATURE
+  CASCADE
+  RIVIERE
+  MONTAGNE
+  GROTTE
+  EGLISE
+  SITE_HISTORIQUE
+  SENTIER
+  HEBERGEMENT
+  RESTAURANT
+  CULTURE
+  EVENEMENT
+  AUTRE
+}
+
+enum StatutPublication {
+  BROUILLON
+  PUBLIE
+  ARCHIVE
+}
+
+enum CategorieArticle {
+  COMMUNIQUE
+  INTERVIEW
+  REPORTAGE
+  CULTURE
+  SPORT
+  SANTE
+  AGRICULTURE
+  EDUCATION
+  POLITIQUE
+  DEVELOPPEMENT
+  INFRASTRUCTURE
+  AUTRE
+}
+
+enum CategorieEvenement {
+  FESTIVAL
+  CARNAVAL
+  REUNION
+  MATCH
+  FORMATION
+  CONFERENCE
+  CULTUREL
+  SPORT
+  ECONOMIE
+  FETE
+  AUTRE
+}
+
+enum CategorieGalerie {
+  NATURE
+  CULTURE
+  HISTOIRE
+  EVENEMENTS
+  TOURISME
+  DRONE
+  VIE_LOCALE
+  ARCHITECTURE
+  AUTRE
+}
+
+enum CategorieEconomique {
+  COMMERCE
+  CONSTRUCTION
+  AGROALIMENTAIRE
+  ARTISANAT
+  SERVICES
+  AUTRE
+}
+
+enum TypeEcole {
+  LYCEE
+  COLLEGE
+  UNIVERSITE
+  CENTRE_FORMATION
+  BIBLIOTHEQUE
+  AUTRE
+}
+
+enum TypeSante {
+  HOPITAL
+  CENTRE_SANTE
+  PHARMACIE
+  CLINIQUE
+  AUTRE
+}
+
+enum TypeServiceMunicipal {
+  MAIRIE
+  PROTECTION_CIVILE
+  POLICE
+  SANTE
+  EAU
+  ELECTRICITE
+  JUSTICE
+  AUTRE
+}
+
+enum CategorieAnnuaire {
+  BANQUE
+  EGLISE
+  ONG
+  STATION_SERVICE
+  BOUTIQUE
+  GARAGE
+  PROFESSIONNEL
+  TRANSPORT
+  AUTRE
+}
+
+enum CategorieHonneur {
+  POLITIQUE
+  CULTURE
+  EDUCATION
+  SPORT
+  ENTREPRENEURIAT
+  AUTRE
+}
+
+enum CategoriePartenaire {
+  INSTITUTIONNEL
+  ENTREPRISE
+  SPONSOR
+  ONG
+  MECENE
+  MEDIA
+}
+
+enum NiveauPartenaire {
+  PLATINE
+  OR
+  ARGENT
+  BRONZE
+}
+
+// Emplacements où un partenaire publié peut apparaître. Volontairement restreint aux deux
+// endroits réels du site qui affichaient déjà des partenaires en dur (SponsorsSection sur
+// l'accueil, bandeau "Partenaires & soutiens" sur À propos) — pas d'emplacement spéculatif
+// non consommé par un composant existant.
+enum EmplacementAffichage {
+  ACCUEIL
+  A_PROPOS
+}
+
+enum CategorieFaq {
+  TOURISME
+  SERVICES
+  INVESTISSEMENT
+  DEMARCHES
+  FONCTIONNEMENT_SITE
+}
+
+enum StatutMessage {
+  NOUVEAU
+  LU
+  TRAITE
+  ARCHIVE
+}
+
+model AdminUser {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  nom           String
+  role          AdminRole      @default(ADMIN)
+  actif         Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+  medias        Media[]
+  activityLogs  ActivityLog[]
+
+  @@map("admin_users")
+}
+
+model RefreshToken {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique
+  adminUserId String
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id])
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  @@index([adminUserId])
+  @@map("refresh_tokens")
+}
+
+// Bloc de contenu générique et multilingue : le mécanisme réutilisable que les Phases 1-5
+// utiliseront pour tout texte libre (hero, slogan, mot de bienvenue, pages légales, FAQ...).
+// Les entités répétitives à venir (Tourisme, Annuaire, Actualités...) auront leurs propres
+// modèles Prisma + table de traduction suivant exactement ce même schéma (une ligne par
+// locale, contrainte unique sur (parentId, locale)).
+model PageSection {
+  id          String                  @id @default(cuid())
+  page        String
+  cle         String
+  ordre       Int                     @default(0)
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  traductions PageSectionTraduction[]
+
+  @@unique([page, cle])
+  @@map("page_sections")
+}
+
+model PageSectionTraduction {
+  id            String      @id @default(cuid())
+  pageSectionId String
+  pageSection   PageSection @relation(fields: [pageSectionId], references: [id], onDelete: Cascade)
+  locale        Locale
+  titre         String?
+  contenu       String      @db.Text
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([pageSectionId, locale])
+  @@map("page_section_traductions")
+}
+
+model Media {
+  id                 String              @id @default(cuid())
+  type               MediaType
+  url                String
+  nomOriginal        String
+  mimeType           String
+  tailleOctets       Int
+  alt                String?
+  uploadedById       String
+  uploadedBy         AdminUser           @relation(fields: [uploadedById], references: [id])
+  createdAt          DateTime            @default(now())
+  tourismPhotos      TourismPlacePhoto[]
+  articles           Article[]
+  evenements         Evenement[]
+  albumsCouverture   GalerieAlbum[]
+  galerieMedias      GalerieMedia[]
+  videos             Video[]
+  businesses         Business[]
+  hotels             Hotel[]
+  restaurants        Restaurant[]
+  schools            School[]
+  healthFacilities   HealthFacility[]
+  associations       Association[]
+  annuaireEntries    AnnuaireEntry[]
+  heroImages         PageHeroImage[]
+  personnalitePhotos PersonnalitePhoto[]
+  temoignages        Temoignage[]
+  partenaires        Partenaire[]
+  documents          Document[]
+
+  @@index([uploadedById])
+  @@map("medias")
+}
+
+// Phase 2a : les 8 sections communales (nom propre invariant par langue sur le parent,
+// description/activités traduites FR/HT sur la table fille, même schéma que PageSection/
+// PageSectionTraduction — une ligne par locale, contrainte unique (parentId, locale)).
+model SectionCommunale {
+  id          String                       @id @default(cuid())
+  nom         String
+  principale  Boolean                      @default(false)
+  couleur     String
+  population  Int?
+  photoUrl    String?
+  ordre       Int                          @default(0)
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+  traductions SectionCommunaleTraduction[]
+
+  @@map("sections_communales")
+}
+
+model SectionCommunaleTraduction {
+  id                   String           @id @default(cuid())
+  sectionCommunaleId   String
+  sectionCommunale     SectionCommunale @relation(fields: [sectionCommunaleId], references: [id], onDelete: Cascade)
+  locale               Locale
+  description          String           @db.Text
+  activitesPrincipales String[]
+  updatedAt            DateTime         @updatedAt
+
+  @@unique([sectionCommunaleId, locale])
+  @@map("sections_communales_traductions")
+}
+
+// Phase 2a : les personnalités de Gros-Morne (nom propre invariant, domaine/biographie traduits).
+// Champs enrichis (page de détail) : catégorie fixe pour le filtre, informations biographiques
+// factuelles sur le parent (invariantes par langue), réalisations/citation traduites.
+model Personnalite {
+  id              String                   @id @default(cuid())
+  nom             String
+  periode         String?
+  photoUrl        String?
+  categorie       CategorieHonneur         @default(AUTRE)
+  dateNaissance   DateTime?
+  lieuNaissance   String?
+  nationalite     String?
+  profession      String?
+  periodeActivite String?
+  ordre           Int                      @default(0)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  traductions     PersonnaliteTraduction[]
+  etapes          PersonnaliteEtape[]
+  photos          PersonnalitePhoto[]
+
+  @@map("personnalites")
+}
+
+// Onglet "Parcours" de la fiche détail : chronologie libre (année + titre + description),
+// distincte des `realisations` (liste courte de faits marquants) déjà sur la traduction.
+model PersonnaliteEtape {
+  id             String                        @id @default(cuid())
+  personnaliteId String
+  personnalite   Personnalite                  @relation(fields: [personnaliteId], references: [id], onDelete: Cascade)
+  annee          String
+  ordre          Int                           @default(0)
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
+  traductions    PersonnaliteEtapeTraduction[]
+
+  @@index([personnaliteId])
+  @@map("personnalites_etapes")
+}
+
+model PersonnaliteEtapeTraduction {
+  id          String            @id @default(cuid())
+  etapeId     String
+  etape       PersonnaliteEtape @relation(fields: [etapeId], references: [id], onDelete: Cascade)
+  locale      Locale
+  titre       String
+  description String            @db.Text
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([etapeId, locale])
+  @@map("personnalites_etapes_traductions")
+}
+
+// Onglet "Galerie" de la fiche détail : réutilise le mécanisme Media générique (comme
+// TourismPlacePhoto), pas de stockage dédié.
+model PersonnalitePhoto {
+  id             String       @id @default(cuid())
+  personnaliteId String
+  personnalite   Personnalite @relation(fields: [personnaliteId], references: [id], onDelete: Cascade)
+  mediaId        String
+  media          Media        @relation(fields: [mediaId], references: [id])
+  ordre          Int          @default(0)
+
+  @@unique([personnaliteId, mediaId])
+  @@index([mediaId])
+  @@map("personnalites_photos")
+}
+
+model PersonnaliteTraduction {
+  id             String       @id @default(cuid())
+  personnaliteId String
+  personnalite   Personnalite @relation(fields: [personnaliteId], references: [id], onDelete: Cascade)
+  locale         Locale
+  domaine        String
+  biographie     String       @db.Text
+  realisations   String[]     @default([])
+  citation       String?      @db.Text
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([personnaliteId, locale])
+  @@map("personnalites_traductions")
+}
+
+// Phase 2b : lieux touristiques (nom propre invariant sur le parent, description/conseils
+// traduits FR/HT sur la table fille). Photos réutilisant le mécanisme Media déjà existant
+// (upload générique) via une table de jonction ordonnée plutôt qu'un tableau d'URLs brutes.
+model TourismPlace {
+  id                  String                   @id @default(cuid())
+  nom                 String
+  categorie           CategorieTourisme
+  duree               String?
+  difficulte          String?
+  tags                String[]
+  latitude            Float?
+  longitude           Float?
+  horaires            String?
+  tarif               String?
+  telephone           String?
+  servicesDisponibles String[]
+  statutPublication   StatutPublication        @default(BROUILLON)
+  ordre               Int                      @default(0)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  traductions         TourismPlaceTraduction[]
+  photos              TourismPlacePhoto[]
+
+  @@map("tourism_places")
+}
+
+model TourismPlaceTraduction {
+  id             String       @id @default(cuid())
+  tourismPlaceId String
+  tourismPlace   TourismPlace @relation(fields: [tourismPlaceId], references: [id], onDelete: Cascade)
+  locale         Locale
+  description    String       @db.Text
+  conseils       String?      @db.Text
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([tourismPlaceId, locale])
+  @@map("tourism_places_traductions")
+}
+
+model TourismPlacePhoto {
+  id             String       @id @default(cuid())
+  tourismPlaceId String
+  tourismPlace   TourismPlace @relation(fields: [tourismPlaceId], references: [id], onDelete: Cascade)
+  mediaId        String
+  media          Media        @relation(fields: [mediaId], references: [id])
+  ordre          Int          @default(0)
+
+  @@unique([tourismPlaceId, mediaId])
+  @@index([mediaId])
+  @@map("tourism_places_photos")
+}
+
+// Phase 2c : Actualités. Titre/auteur/tags invariants sur le parent, résumé+contenu traduits
+// FR/HT. `datePublication` distincte de `createdAt` (permet une date éditoriale différente
+// de la date de saisie) ; visibilité publique strictement gouvernée par `statutPublication`
+// (pas de moteur de planification automatique — décision assumée, cf. plan).
+model Article {
+  id                String              @id @default(cuid())
+  titre             String
+  auteur            String?
+  categorie         CategorieArticle
+  tags              String[]
+  datePublication   DateTime
+  statutPublication StatutPublication   @default(BROUILLON)
+  imagePrincipaleId String?
+  imagePrincipale   Media?              @relation(fields: [imagePrincipaleId], references: [id])
+  ordre             Int                 @default(0)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  traductions       ArticleTraduction[]
+
+  @@index([imagePrincipaleId])
+  @@map("articles")
+}
+
+model ArticleTraduction {
+  id        String   @id @default(cuid())
+  articleId String
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  locale    Locale
+  resume    String   @db.Text
+  contenu   String?  @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@unique([articleId, locale])
+  @@map("articles_traductions")
+}
+
+// Phase 2c : Agenda. `heureAffichage` reste un texte libre (ex. "Toute la journée") plutôt
+// qu'une contrainte d'heure stricte, fidèle aux données réelles existantes.
+model Evenement {
+  id                String                @id @default(cuid())
+  nom               String
+  categorie         CategorieEvenement
+  date              DateTime
+  heureAffichage    String?
+  lieu              String
+  organisateur      String?
+  latitude          Float?
+  longitude         Float?
+  statutPublication StatutPublication     @default(BROUILLON)
+  imagePrincipaleId String?
+  imagePrincipale   Media?                @relation(fields: [imagePrincipaleId], references: [id])
+  ordre             Int                   @default(0)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  traductions       EvenementTraduction[]
+
+  @@index([imagePrincipaleId])
+  @@map("evenements")
+}
+
+model EvenementTraduction {
+  id          String    @id @default(cuid())
+  evenementId String
+  evenement   Evenement @relation(fields: [evenementId], references: [id], onDelete: Cascade)
+  locale      Locale
+  description String    @db.Text
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([evenementId, locale])
+  @@map("evenements_traductions")
+}
+
+// Phase 2d : Galerie. Un album regroupe des médias (photos) autour d'un thème/catégorie ;
+// `GalerieMedia.mediaId` reste nullable + `icone` (emoji) en repli — aucune vraie photo
+// n'existe encore dans le contenu hérité (uniquement des émojis de substitution), l'admin
+// remplacera progressivement par de vraies photos via le sélecteur Media déjà en place.
+model GalerieAlbum {
+  id                String                   @id @default(cuid())
+  nom               String
+  categorie         CategorieGalerie
+  photoCouvertureId String?
+  photoCouverture   Media?                   @relation(fields: [photoCouvertureId], references: [id])
+  statutPublication StatutPublication        @default(BROUILLON)
+  ordre             Int                      @default(0)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  traductions       GalerieAlbumTraduction[]
+  medias            GalerieMedia[]
+
+  @@index([photoCouvertureId])
+  @@map("galerie_albums")
+}
+
+model GalerieAlbumTraduction {
+  id          String       @id @default(cuid())
+  albumId     String
+  album       GalerieAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  locale      Locale
+  description String       @db.Text
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([albumId, locale])
+  @@map("galerie_albums_traductions")
+}
+
+model GalerieMedia {
+  id        String       @id @default(cuid())
+  albumId   String
+  album     GalerieAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  mediaId   String?
+  media     Media?       @relation(fields: [mediaId], references: [id])
+  icone     String?
+  titre     String
+  auteur    String?
+  lieu      String?
+  ordre     Int          @default(0)
+  createdAt DateTime     @default(now())
+
+  @@index([mediaId])
+  @@map("galerie_medias")
+}
+
+// Phase 2d : Vidéos, module admin distinct de la Galerie (lien externe YouTube/Vimeo,
+// jamais d'upload vidéo lourd — cohérent avec la contrainte data mobile du portefeuille).
+model Video {
+  id                String            @id @default(cuid())
+  titre             String
+  url               String
+  categorie         CategorieGalerie
+  miseEnAvant       Boolean           @default(false)
+  statutPublication StatutPublication @default(BROUILLON)
+  miniatureId       String?
+  miniature         Media?            @relation(fields: [miniatureId], references: [id])
+  ordre             Int               @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  traductions       VideoTraduction[]
+
+  @@index([miniatureId])
+  @@map("videos")
+}
+
+model VideoTraduction {
+  id          String   @id @default(cuid())
+  videoId     String
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  locale      Locale
+  description String   @db.Text
+  updatedAt   DateTime @updatedAt
+
+  @@unique([videoId, locale])
+  @@map("videos_traductions")
+}
+
+// Phase 2e : répertoires métier. Un modèle dédié par vertical ayant son propre module admin
+// dans le cahier des charges (Entreprises/Hôtels/Restaurants/Écoles/Santé/Associations/
+// Services municipaux), consommés à la fois par leur page dédiée et agrégés par /annuaire
+// (sauf MunicipalService, absent de la liste de catégories de l'Annuaire). `AnnuaireEntry`
+// reste le catch-all générique pour les catégories sans module dédié (banques, églises,
+// ONG, stations-service, boutiques, garages, professionnels, transport).
+
+model Business {
+  id                String               @id @default(cuid())
+  nom               String
+  categorie         CategorieEconomique
+  adresse           String?
+  telephone         String?
+  email             String?
+  siteWeb           String?
+  latitude          Float?
+  longitude         Float?
+  statutPublication StatutPublication    @default(BROUILLON)
+  photoId           String?
+  photo             Media?               @relation(fields: [photoId], references: [id])
+  ordre             Int                  @default(0)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  traductions       BusinessTraduction[]
+
+  @@index([photoId])
+  @@map("businesses")
+}
+
+model BusinessTraduction {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  locale      Locale
+  description String   @db.Text
+  updatedAt   DateTime @updatedAt
+
+  @@unique([businessId, locale])
+  @@map("businesses_traductions")
+}
+
+model Hotel {
+  id                  String            @id @default(cuid())
+  nom                 String
+  nombreChambres      Int?
+  servicesDisponibles String[]
+  prixMin             Int?
+  prixMax             Int?
+  adresse             String?
+  telephone           String?
+  latitude            Float?
+  longitude           Float?
+  statutPublication   StatutPublication @default(BROUILLON)
+  photoId             String?
+  photo               Media?            @relation(fields: [photoId], references: [id])
+  ordre               Int               @default(0)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  traductions         HotelTraduction[]
+
+  @@index([photoId])
+  @@map("hotels")
+}
+
+model HotelTraduction {
+  id          String   @id @default(cuid())
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  locale      Locale
+  description String   @db.Text
+  updatedAt   DateTime @updatedAt
+
+  @@unique([hotelId, locale])
+  @@map("hotels_traductions")
+}
+
+model Restaurant {
+  id                String                 @id @default(cuid())
+  nom               String
+  cuisine           String?
+  prix              String?
+  adresse           String?
+  telephone         String?
+  horaires          String?
+  latitude          Float?
+  longitude         Float?
+  statutPublication StatutPublication      @default(BROUILLON)
+  photoId           String?
+  photo             Media?                 @relation(fields: [photoId], references: [id])
+  ordre             Int                    @default(0)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  traductions       RestaurantTraduction[]
+
+  @@index([photoId])
+  @@map("restaurants")
+}
+
+model RestaurantTraduction {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  locale       Locale
+  description  String     @db.Text
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([restaurantId, locale])
+  @@map("restaurants_traductions")
+}
+
+model School {
+  id                String             @id @default(cuid())
+  nom               String
+  type              TypeEcole
+  directeur         String?
+  adresse           String?
+  telephone         String?
+  email             String?
+  nombreEleves      Int?
+  statutPublication StatutPublication  @default(BROUILLON)
+  photoId           String?
+  photo             Media?             @relation(fields: [photoId], references: [id])
+  ordre             Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  traductions       SchoolTraduction[]
+
+  @@index([photoId])
+  @@map("schools")
+}
+
+model SchoolTraduction {
+  id          String   @id @default(cuid())
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  locale      Locale
+  description String   @db.Text
+  updatedAt   DateTime @updatedAt
+
+  @@unique([schoolId, locale])
+  @@map("schools_traductions")
+}
+
+model HealthFacility {
+  id                String                     @id @default(cuid())
+  nom               String
+  type              TypeSante
+  services          String[]
+  medecins          String?
+  adresse           String?
+  telephone         String?
+  urgence           Boolean                    @default(false)
+  horaires          String?
+  latitude          Float?
+  longitude         Float?
+  statutPublication StatutPublication          @default(BROUILLON)
+  photoId           String?
+  photo             Media?                     @relation(fields: [photoId], references: [id])
+  ordre             Int                        @default(0)
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  traductions       HealthFacilityTraduction[]
+
+  @@index([photoId])
+  @@map("health_facilities")
+}
+
+model HealthFacilityTraduction {
+  id               String         @id @default(cuid())
+  healthFacilityId String
+  healthFacility   HealthFacility @relation(fields: [healthFacilityId], references: [id], onDelete: Cascade)
+  locale           Locale
+  description      String         @db.Text
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([healthFacilityId, locale])
+  @@map("health_facilities_traductions")
+}
+
+model Association {
+  id                String                  @id @default(cuid())
+  nom               String
+  president         String?
+  domainesAction    String[]
+  adresse           String?
+  telephone         String?
+  email             String?
+  statutPublication StatutPublication       @default(BROUILLON)
+  photoId           String?
+  photo             Media?                  @relation(fields: [photoId], references: [id])
+  ordre             Int                     @default(0)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  traductions       AssociationTraduction[]
+
+  @@index([photoId])
+  @@map("associations")
+}
+
+model AssociationTraduction {
+  id            String      @id @default(cuid())
+  associationId String
+  association   Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  locale        Locale
+  mission       String      @db.Text
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([associationId, locale])
+  @@map("associations_traductions")
+}
+
+model MunicipalService {
+  id                String                       @id @default(cuid())
+  nom               String
+  type              TypeServiceMunicipal
+  responsable       String?
+  adresse           String?
+  telephone         String?
+  horaires          String?
+  latitude          Float?
+  longitude         Float?
+  statutPublication StatutPublication            @default(BROUILLON)
+  ordre             Int                          @default(0)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  traductions       MunicipalServiceTraduction[]
+
+  @@map("municipal_services")
+}
+
+model MunicipalServiceTraduction {
+  id                 String           @id @default(cuid())
+  municipalServiceId String
+  municipalService   MunicipalService @relation(fields: [municipalServiceId], references: [id], onDelete: Cascade)
+  locale             Locale
+  presentation       String           @db.Text
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([municipalServiceId, locale])
+  @@map("municipal_services_traductions")
+}
+
+model AnnuaireEntry {
+  id                String                    @id @default(cuid())
+  nom               String
+  categorie         CategorieAnnuaire
+  adresse           String?
+  telephone         String?
+  whatsapp          String?
+  email             String?
+  siteWeb           String?
+  horaires          String?
+  latitude          Float?
+  longitude         Float?
+  statutPublication StatutPublication         @default(BROUILLON)
+  photoId           String?
+  photo             Media?                    @relation(fields: [photoId], references: [id])
+  ordre             Int                       @default(0)
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  traductions       AnnuaireEntryTraduction[]
+
+  @@index([photoId])
+  @@map("annuaire_entries")
+}
+
+model AnnuaireEntryTraduction {
+  id              String        @id @default(cuid())
+  annuaireEntryId String
+  annuaireEntry   AnnuaireEntry @relation(fields: [annuaireEntryId], references: [id], onDelete: Cascade)
+  locale          Locale
+  description     String        @db.Text
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([annuaireEntryId, locale])
+  @@map("annuaire_entries_traductions")
+}
+
+// Image de fond du hero de chaque page publique, gérée depuis l'admin (upload réutilisant
+// le mécanisme Media déjà en place). Une ligne par page, absente = fond neutre par défaut
+// (dégradé) côté public tant que l'admin n'a pas uploadé de vraie photo.
+model PageHeroImage {
+  id        String   @id @default(cuid())
+  page      String   @unique
+  mediaId   String
+  media     Media    @relation(fields: [mediaId], references: [id])
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@index([mediaId])
+  @@map("page_hero_images")
+}
+
+// Phase 2f : témoignages (section Accueil du cahier des charges). Nom/fonction/photo/note
+// invariants sur le parent, seul le contenu du témoignage est traduit FR/HT.
+model Temoignage {
+  id                String                 @id @default(cuid())
+  nom               String
+  fonction          String?
+  photoId           String?
+  photo             Media?                 @relation(fields: [photoId], references: [id])
+  note              Int?
+  statutPublication StatutPublication      @default(BROUILLON)
+  ordre             Int                    @default(0)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  traductions       TemoignageTraduction[]
+
+  @@index([photoId])
+  @@map("temoignages")
+}
+
+model TemoignageTraduction {
+  id           String     @id @default(cuid())
+  temoignageId String
+  temoignage   Temoignage @relation(fields: [temoignageId], references: [id], onDelete: Cascade)
+  locale       Locale
+  contenu      String     @db.Text
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([temoignageId, locale])
+  @@map("temoignages_traductions")
+}
+
+// Phase 2f : partenaires + sponsors fusionnés en un seul modèle (décision validée avec
+// Jaslin, cf. plan). Pas de table de traduction : nom propre et lien, rien à traduire.
+model Partenaire {
+  id                String                 @id @default(cuid())
+  nom               String
+  categorie         CategoriePartenaire
+  niveau            NiveauPartenaire?
+  lienSiteWeb       String?
+  logoId            String?
+  logo              Media?                 @relation(fields: [logoId], references: [id])
+  emplacements      EmplacementAffichage[]
+  statutPublication StatutPublication      @default(BROUILLON)
+  ordre             Int                    @default(0)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@index([logoId])
+  @@map("partenaires")
+}
+
+// Phase 2f : messages du formulaire de contact public. Aucune authentification requise pour
+// écrire (formulaire public), lecture/traitement réservés à l'admin.
+model MessageContact {
+  id        String        @id @default(cuid())
+  nom       String
+  email     String
+  telephone String?
+  sujet     String?
+  message   String        @db.Text
+  statut    StatutMessage @default(NOUVEAU)
+  createdAt DateTime      @default(now())
+
+  @@map("messages_contact")
+}
+
+// Phase 2f : abonnés newsletter. Collecte uniquement — pas de moteur d'envoi de campagne
+// (décision assumée, cf. plan), `actif` permet un désabonnement sans supprimer l'historique.
+model AbonneNewsletter {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("abonnes_newsletter")
+}
+
+// Phase 2f : FAQ, catégorie fixe (enum) pour retrouver les onglets déjà utilisés par la page
+// publique existante (Tourisme/Services/Investissements), étendue aux deux catégories du
+// cahier des charges pas encore illustrées par du contenu réel (Démarches, Fonctionnement).
+model Faq {
+  id                String            @id @default(cuid())
+  categorie         CategorieFaq
+  statutPublication StatutPublication @default(BROUILLON)
+  ordre             Int               @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  traductions       FaqTraduction[]
+
+  @@map("faqs")
+}
+
+model FaqTraduction {
+  id        String   @id @default(cuid())
+  faqId     String
+  faq       Faq      @relation(fields: [faqId], references: [id], onDelete: Cascade)
+  locale    Locale
+  question  String
+  reponse   String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@unique([faqId, locale])
+  @@map("faqs_traductions")
+}
+
+// Phase 2f : paramètres globaux du site (singleton — une seule ligne, id fixe imposé par le
+// service applicatif, jamais par le client). Alimente le footer et la page Contact.
+model SiteSettings {
+  id           String   @id @default("singleton")
+  adresse      String?
+  telephone    String?
+  email        String?
+  horaires     String?
+  facebookUrl  String?
+  instagramUrl String?
+  whatsappUrl  String?
+  siteWebUrl   String?
+  updatedAt    DateTime @updatedAt
+
+  @@map("site_settings")
+}
+
+// Phase 2f : journal d'activité admin. Alimenté automatiquement par un middleware générique
+// (toute requête admin mutante réussie), plutôt que retrofit manuellement dans chacun des
+// ~20 modules existants. `adminNom` dénormalisé pour rester lisible même si le compte admin
+// est supprimé plus tard.
+model ActivityLog {
+  id          String     @id @default(cuid())
+  adminUserId String?
+  adminUser   AdminUser? @relation(fields: [adminUserId], references: [id])
+  adminNom    String
+  action      String
+  entite      String
+  entiteId    String?
+  chemin      String
+  createdAt   DateTime   @default(now())
+
+  @@index([adminUserId])
+  @@index([entite])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// Phase 4 : bibliothèque de fichiers générique (formulaires administratifs, comptes-rendus,
+// documents officiels...). Réutilise le mécanisme Media déjà en place (upload PDF déjà
+// autorisé par upload.middleware.ts) plutôt qu'un nouveau stockage dédié. Pas de traduction :
+// un document officiel est déjà rédigé dans sa langue, un titre unique suffit.
+model Document {
+  id                String            @id @default(cuid())
+  titre             String
+  description       String?
+  mediaId           String
+  media             Media             @relation(fields: [mediaId], references: [id])
+  statutPublication StatutPublication @default(BROUILLON)
+  ordre             Int               @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([mediaId])
+  @@map("documents")
+}

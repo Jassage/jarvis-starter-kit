@@ -1,0 +1,307 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a;
+
+  /* Palette Gros-Morne */
+  --gm-green: #166534;
+  --gm-green-light: #22c55e;
+  --gm-gold: #d97706;
+  --gm-gold-light: #fbbf24;
+  --gm-blue: #1e40af;
+  --gm-blue-light: #3b82f6;
+  --gm-earth: #92400e;
+  --gm-sky: #0ea5e9;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Scrollbar custom */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #166534;
+  border-radius: 3px;
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.7s ease-out forwards;
+}
+.animate-fade-in {
+  animation: fadeIn 0.8s ease-out forwards;
+}
+.animate-slide-left {
+  animation: slideInLeft 0.7s ease-out forwards;
+}
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #166534, #22c55e, #d97706);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Hero gradient */
+.hero-gradient {
+  background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+}
+
+/* Card hover */
+.card-hover {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.card-hover:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+}
+
+/* Section divider */
+.wave-divider {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Delay utilities */
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
+.delay-600 { animation-delay: 0.6s; }
+
+/* Ticker / marquee */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(60px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slideUp 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes ticker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker 40s linear infinite;
+  will-change: transform;
+}
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+/* Donation progress bar */
+@keyframes progressFill {
+  from { width: 0%; }
+  to   { width: var(--progress); }
+}
+.progress-bar {
+  animation: progressFill 1.8s ease-out forwards;
+}
+
+/* =========================================================================
+   Design system Admin (Phase 0 SMART GROS-MORNE)
+   Scopé sous .gm-admin pour ne jamais affecter le site vitrine public
+   (notamment .card-hover, déjà utilisé par les sections publiques avec un
+   effet différent). Palette dérivée de --gm-green plutôt qu'un nouveau ton.
+   ========================================================================= */
+:root {
+  --color-bg: #f5f6f2;
+  --color-surface: #ffffff;
+  --color-surface-2: #fafbf7;
+  --color-ink: #10201a;
+  --color-ink-2: #4c5a53;
+  --color-ink-3: #8b9791;
+  --color-line: #e3e7de;
+  --color-line-2: #edf0e9;
+
+  --color-primary: #166534;
+  --color-primary-2: #15803d;
+  --color-primary-3: #22c55e;
+  --color-primary-soft: #e7f5ec;
+
+  --color-accent: #d97706;
+  --color-accent-soft: #fef3e2;
+
+  --color-success: #16a34a;
+  --color-success-soft: #eefdf3;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fef2f2;
+  --color-warning: #d97706;
+  --color-warning-soft: #fffaeb;
+  --color-info: #2563eb;
+  --color-info-soft: #eff6ff;
+  --color-violet: #7c3aed;
+  --color-violet-soft: #f5f0ff;
+  --color-rose: #e11d48;
+  --color-rose-soft: #fff1f3;
+
+  --shadow-card: 0 1px 2px rgba(16, 32, 26, 0.04), 0 0 0 1px rgba(16, 32, 26, 0.05);
+  --shadow-card-hover: 0 8px 24px rgba(16, 32, 26, 0.09), 0 0 0 1px rgba(16, 32, 26, 0.06);
+  --shadow-lg: 0 24px 60px rgba(10, 20, 16, 0.18);
+
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  --gradient-brand: linear-gradient(135deg, #166534, #22c55e);
+  --gradient-blue: linear-gradient(135deg, #3b82f6, #2563eb);
+  --gradient-amber: linear-gradient(135deg, #f59e0b, #d97706);
+  --gradient-violet: linear-gradient(135deg, #a78bfa, #7c3aed);
+  --gradient-rose: linear-gradient(135deg, #fb7185, #e11d48);
+}
+
+.gm-admin {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  min-height: 100vh;
+}
+
+.gm-admin .card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.gm-admin .card-hover:hover { box-shadow: var(--shadow-card-hover); }
+
+.gm-admin .card-accent-green  { border-left: 3px solid var(--color-primary-2); }
+.gm-admin .card-accent-amber  { border-left: 3px solid var(--color-warning); }
+.gm-admin .card-accent-blue   { border-left: 3px solid var(--color-info); }
+.gm-admin .card-accent-violet { border-left: 3px solid var(--color-violet); }
+.gm-admin .card-accent-rose   { border-left: 3px solid var(--color-rose); }
+
+.gm-admin :where(.input) {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: 0.875rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.gm-admin .input:focus {
+  outline: none;
+  border-color: var(--color-primary-2);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.gm-admin .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  border-radius: var(--radius);
+  padding: 0.65rem 1.1rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+.gm-admin .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.gm-admin .btn-primary {
+  background: var(--gradient-brand);
+  color: white;
+  box-shadow: 0 1px 2px rgba(22, 101, 52, 0.15), 0 4px 12px rgba(22, 101, 52, 0.18);
+}
+.gm-admin .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(22, 101, 52, 0.28); }
+.gm-admin .btn-secondary {
+  background: var(--color-surface-2);
+  color: var(--color-ink-2);
+  border: 1px solid var(--color-line);
+}
+.gm-admin .btn-secondary:hover:not(:disabled) { background: var(--color-line-2); }
+
+.gm-admin .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.gm-admin .table-shell thead tr { background: var(--color-surface-2); }
+.gm-admin .table-shell th {
+  text-align: left;
+  padding: 0.8rem 1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+  white-space: nowrap;
+}
+.gm-admin .table-shell td {
+  padding: 0.85rem 1rem;
+  border-top: 1px solid var(--color-line-2);
+  font-size: 0.875rem;
+  color: var(--color-ink-2);
+}
+.gm-admin .table-shell tbody tr { transition: background-color 0.12s ease; }
+.gm-admin .table-shell tbody tr:hover { background: var(--color-surface-2); }
