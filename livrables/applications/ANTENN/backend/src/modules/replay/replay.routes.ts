@@ -3,6 +3,7 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import * as ctrl from './replay.controller';
 import { validate } from '../../middlewares/validate.middleware';
 import { requireAuth } from '../../middlewares/auth.middleware';
+import { requireAdministrateur } from '../../middlewares/rbac.middleware';
 import { uploadVignette } from '../../middlewares/upload.middleware';
 import {
   createReplaySchema,
@@ -33,11 +34,15 @@ router.patch('/:id', requireAuth, validate(updateReplaySchema), asyncHandler(ctr
 router.post('/:id/vignette', requireAuth, uploadVignette.single('vignette'), asyncHandler(ctrl.uploadVignette));
 router.post('/:id/publier', requireAuth, validate(idParamSchema), asyncHandler(ctrl.publier));
 router.post('/:id/retirer', requireAuth, validate(idParamSchema), asyncHandler(ctrl.retirer));
-router.delete('/:id', requireAuth, validate(idParamSchema), asyncHandler(ctrl.remove));
+// Suppression définitive réservée à l'administrateur : retirer du catalogue (statut
+// RETIRE) suffit à l'exploitation courante et reste réversible, alors qu'un delete
+// efface aussi les vues accumulées, qui comptent dans le rapport sponsor.
+router.delete('/:id', requireAuth, requireAdministrateur, validate(idParamSchema), asyncHandler(ctrl.remove));
 
 // ── Public (sans auth) ──
+// Le comptage des vues n'est plus ici : il passe par POST /api/audience/ping, qui
+// déduplique par session (cf. replay.service).
 router.get('/', validate(catalogueQuerySchema), asyncHandler(ctrl.catalogue));
-router.post('/:id/vue', validate(idParamSchema), asyncHandler(ctrl.compterVue));
 router.get('/:id', validate(idParamSchema), asyncHandler(ctrl.detailPublic));
 
 export default router;

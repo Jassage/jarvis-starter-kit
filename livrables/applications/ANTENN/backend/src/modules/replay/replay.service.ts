@@ -109,19 +109,15 @@ export async function getReplayPublic(id: string) {
   };
 }
 
-// Compteur de vues du catalogue à la demande. Volontairement distinct des
-// DiffusionLog de l'antenne : une vue replay n'est pas une diffusion linéaire, les
-// deux ne doivent jamais être additionnées dans les rapports sponsors.
-export async function incrementerVue(id: string) {
-  const visible = await prisma.replay.findFirst({ where: { id, ...filtrePublic() }, select: { id: true } });
-  if (!visible) throw new AppError('Replay non trouvé', 404);
-  const replay = await prisma.replay.update({
-    where: { id },
-    data: { nombreVues: { increment: 1 } },
-    select: { id: true, nombreVues: true },
-  });
-  return replay;
-}
+// Le comptage des vues replay passe désormais par le heartbeat d'audience
+// (POST /api/audience/ping avec un replayId) : `nombreVues` n'est incrémenté qu'à
+// l'ouverture d'une session de visionnage, une seule fois par sessionKey. L'ancien
+// endpoint POST /api/replay/:id/vue a été retiré : public et sans déduplication, il
+// permettait de gonfler à volonté un chiffre qui remonte dans le rapport sponsor.
+//
+// Comme les DiffusionLog de l'antenne, ces vues restent des estimations et ne sont
+// jamais additionnées aux vues linéaires : une vue VOD et une diffusion en direct ne
+// se valorisent pas de la même façon.
 
 // ─────────────────────────────────────────
 // RÉGIE

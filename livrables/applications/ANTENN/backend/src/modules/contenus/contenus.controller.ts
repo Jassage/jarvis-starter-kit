@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import * as service from './contenus.service';
 import { sendSuccess } from '../../utils/response';
+import { logAudit } from '../audit/audit.service';
 
 export async function list(_req: Request, res: Response) {
   const contenus = await service.listContenus();
@@ -23,7 +24,13 @@ export async function update(req: Request, res: Response) {
 }
 
 export async function remove(req: Request, res: Response) {
+  const contenu = await service.getContenu(req.params.id);
   await service.deleteContenu(req.params.id);
+  await logAudit(req, 'CONTENU_SUPPRIME', {
+    cible: 'Contenu',
+    cibleId: req.params.id,
+    details: `« ${contenu.titre} » (${contenu.typeContenu}) supprimé de la médiathèque`,
+  });
   sendSuccess(res, null, 'Contenu supprimé');
 }
 

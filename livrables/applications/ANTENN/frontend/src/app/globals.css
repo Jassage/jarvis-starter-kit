@@ -9,7 +9,11 @@
   --color-surface-2: #10203f;
   --color-ink: #e8edf7;
   --color-ink-2: #93a1c0;
-  --color-ink-3: #5d6b8a;
+  /* Texte tertiaire (libellés de tableau, légendes). L'ancienne valeur #5d6b8a ne
+     donnait que ~3,4:1 sur --color-surface, sous le seuil AA de 4,5:1 — et elle sert
+     précisément aux plus petits textes de l'interface (0,72rem, 11px). Relevée à
+     ~5,2:1 sans changer la teinte du thème. */
+  --color-ink-3: #8494b5;
   --color-line: rgba(255, 255, 255, 0.08);
   --color-line-2: rgba(255, 255, 255, 0.05);
 
@@ -62,6 +66,30 @@
 }
 
 * { box-sizing: border-box; }
+
+/* Focus clavier visible partout. Sur un fond navy, l'anneau par défaut du navigateur
+   est illisible : sans cette règle, un opérateur qui navigue au clavier ne sait jamais
+   où il se trouve. `:focus-visible` n'apparaît qu'au clavier, la souris ne le déclenche
+   pas. */
+:where(a, button, [role='button'], input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Respect du réglage système « réduire les animations ». La régie est une interface
+   qu'un opérateur garde ouverte toute une journée de diffusion : un badge qui clignote
+   en continu (badge-live) est exactement ce que ce réglage sert à neutraliser. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 html, body {
   background-color: var(--color-bg);
@@ -167,6 +195,15 @@ html, body {
 @keyframes pulse-live {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
+}
+
+/* Entrée des toasts : discrète, et neutralisée par le bloc reduced-motion ci-dessus. */
+.toast-item {
+  animation: toast-in 0.18s ease-out;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .table-shell thead tr { background: var(--color-surface-2); }

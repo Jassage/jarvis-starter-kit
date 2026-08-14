@@ -3,6 +3,7 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import * as ctrl from './contenus.controller';
 import { validate } from '../../middlewares/validate.middleware';
 import { requireAuth } from '../../middlewares/auth.middleware';
+import { requireAdministrateur } from '../../middlewares/rbac.middleware';
 import { createContenuSchema, updateContenuSchema, idParamSchema } from './contenus.schemas';
 
 const router = Router();
@@ -13,7 +14,10 @@ router.get('/', asyncHandler(ctrl.list));
 router.get('/:id', validate(idParamSchema), asyncHandler(ctrl.getOne));
 router.post('/', validate(createContenuSchema), asyncHandler(ctrl.create));
 router.patch('/:id', validate(updateContenuSchema), asyncHandler(ctrl.update));
-router.delete('/:id', validate(idParamSchema), asyncHandler(ctrl.remove));
+// Suppression réservée à l'administrateur : un spot publicitaire supprimé est une
+// exposition sponsor perdue, et la suppression détache aussi les créneaux passés qui
+// le référencent (onDelete: SetNull), donc appauvrit l'historique de diffusion.
+router.delete('/:id', requireAdministrateur, validate(idParamSchema), asyncHandler(ctrl.remove));
 
 // Repli d'antenne (continuité) : les deux rôles gèrent la grille au quotidien
 router.post('/:id/repli', validate(idParamSchema), asyncHandler(ctrl.definirRepli));

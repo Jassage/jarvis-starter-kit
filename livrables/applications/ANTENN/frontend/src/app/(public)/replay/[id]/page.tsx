@@ -6,6 +6,7 @@ import { Tv, ChevronLeft, Eye, Trophy, PlayCircle } from 'lucide-react';
 import VodPlayer from '@/components/player/VodPlayer';
 import Overlay from '@/components/player/Overlay';
 import Badge from '@/components/ui/Badge';
+import { pingAudience } from '@/lib/audience';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -43,10 +44,13 @@ export default function ReplayLecturePage() {
       .catch(() => setIntrouvable(true));
   }, [id]);
 
+  // Le comptage passe par le heartbeat d'audience : côté serveur, une session ne peut
+  // ouvrir qu'une seule vue par replay, ce qui rend le chiffre affiché (et repris dans
+  // le rapport sponsor) non gonflable par de simples appels répétés.
   function compterVue() {
     if (vueComptee.current || !id) return;
     vueComptee.current = true;
-    fetch(`${API_URL}/replay/${id}/vue`, { method: 'POST' }).catch(() => {});
+    pingAudience({ replayId: id });
   }
 
   const nomChaine = detail?.configChaine?.nomChaine || 'ANTENN';

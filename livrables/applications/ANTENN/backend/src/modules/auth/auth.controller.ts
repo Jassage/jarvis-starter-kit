@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import * as authService from './auth.service';
 import { sendSuccess } from '../../utils/response';
 import { AppError } from '../../middlewares/errorHandler.middleware';
+import { logAudit } from '../audit/audit.service';
 import { env } from '../../config/env';
 
 const REFRESH_COOKIE_NAME = 'antenn_refresh_token';
@@ -25,7 +26,24 @@ function clearRefreshCookie(res: Response) {
 export async function login(req: Request, res: Response) {
   const { refreshToken, ...result } = await authService.login(req.body.email, req.body.password);
   setRefreshCookie(res, refreshToken);
+  // Auteur passé explicitement : le middleware d'authentification n'est pas encore
+  // passé sur cette requête, `req.user` n'existe donc pas.
+  await logAudit(req, 'CONNEXION', { auteur: result.user, details: 'Connexion à la régie' });
   sendSuccess(res, result, 'Connexion réussie');
+}
+
+// Consommation d'un lien de réinitialisation généré par un administrateur. Public par
+// nature (l'utilisateur est justement celui qui ne peut pas se connecter), donc soumis
+// au limiteur d'authentification.
+export async function resetPassword(req: Request, res: Response) {
+  const utilisateur = await authService.resetPassword(req.body.token, req.body.newPassword);
+  await logAudit(req, 'UTILISATEUR_MOT_DE_PASSE_REINITIALISE', {
+    auteur: { id: utilisateur.id, email: utilisateur.email, nom: utilisateur.nom },
+    cible: 'User',
+    cibleId: utilisateur.id,
+    details: 'Mot de passe redéfini via un lien de réinitialisation',
+  });
+  sendSuccess(res, null, 'Mot de passe redéfini. Vous pouvez vous connecter.');
 }
 
 export async function refresh(req: Request, res: Response) {

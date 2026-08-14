@@ -1,11 +1,17 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarClock, Trophy, Handshake, Film, Sparkles, BarChart3, RadioTower, History, X, Tv } from 'lucide-react';
+import { CalendarClock, Trophy, Handshake, Film, Sparkles, BarChart3, RadioTower, History, X, Tv, MonitorPlay, Users, ScrollText } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 
+// `adminSeul` : entrées dont toutes les actions sont réservées à l'administrateur côté
+// backend. Les afficher à un opérateur ne servirait qu'à lui faire découvrir un 403
+// après coup. Les autres pages restent visibles par les deux rôles, même quand
+// certaines actions y sont restreintes (l'opérateur doit voir les sponsors pour poser
+// un habillage, par exemple).
 const NAV = [
+  { href: '/moniteur', label: 'Moniteur', icon: MonitorPlay },
   { href: '/grille', label: 'Grille', icon: CalendarClock },
   { href: '/matchs', label: 'Matchs', icon: Trophy },
   { href: '/sponsors', label: 'Sponsors', icon: Handshake },
@@ -15,7 +21,9 @@ const NAV = [
   // résoudre le même chemin, même dans des groupes de routes différents).
   { href: '/catalogue', label: 'Replay', icon: History },
   { href: '/rapports', label: 'Rapports', icon: BarChart3 },
-  { href: '/parametres', label: 'Chaîne', icon: RadioTower },
+  { href: '/parametres', label: 'Chaîne', icon: RadioTower, adminSeul: true },
+  { href: '/utilisateurs', label: 'Comptes', icon: Users, adminSeul: true },
+  { href: '/journal', label: 'Journal', icon: ScrollText, adminSeul: true },
 ];
 
 export default function Sidebar() {
@@ -54,14 +62,14 @@ export default function Sidebar() {
               <p className="text-[11px] font-medium mt-0.5" style={{ color: 'var(--color-ink-3)' }}>Régie de diffusion</p>
             </div>
           </div>
-          <button onClick={closeSidebar} className="lg:hidden p-1.5 rounded-lg" style={{ color: 'var(--color-ink-3)' }}>
+          <button onClick={closeSidebar} className="lg:hidden p-1.5 rounded-lg" style={{ color: 'var(--color-ink-3)' }} aria-label="Fermer le menu">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
           <p className="px-3 mb-2 text-[11px] font-bold tracking-widest" style={{ color: 'var(--color-ink-3)' }}>MENU</p>
-          {NAV.map((item) => {
+          {NAV.filter((item) => !item.adminSeul || utilisateur?.role === 'ADMINISTRATEUR').map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
             return (

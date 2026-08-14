@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import prisma from '../../config/database';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../utils/jwt';
 import { AppError } from '../../middlewares/errorHandler.middleware';
+import { consommerLienReinitialisation } from '../utilisateurs/utilisateurs.service';
 
 const SALT_ROUNDS = 12;
 
@@ -75,6 +76,13 @@ export async function refresh(refreshTokenValue: string) {
 
 export async function logout(refreshTokenValue: string) {
   await prisma.refreshToken.deleteMany({ where: { token: hashRefreshToken(refreshTokenValue) } });
+}
+
+// Réinitialisation via le lien à usage unique généré par un administrateur. La
+// mécanique vit dans le module utilisateurs (qui possède les jetons) ; l'auth se
+// contente de l'exposer sur sa route publique.
+export async function resetPassword(token: string, nouveauMotDePasse: string) {
+  return consommerLienReinitialisation(token, nouveauMotDePasse);
 }
 
 export async function getMe(userId: string) {

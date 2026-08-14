@@ -1,9 +1,17 @@
 import prisma from '../../config/database';
+import { synchroniserDiffusionLogs, purgerAnciennesSessions } from '../audience/audience.service';
 
 // Un sponsor est exposé de 3 façons distinctes : ses spots publicitaires (Contenu),
 // ses incrustations logo (IncrustationLogo) et son sponsoring de match. On agrège
 // les DiffusionLog des créneaux/matchs qui portent l'une de ces expositions.
 export async function getRapportSponsors(from?: string, to?: string) {
+  // Le projet n'a pas de tâche de fond : les preuves de diffusion des créneaux
+  // terminés depuis la dernière consultation sont générées ici, à la lecture. Sans
+  // cet appel, le rapport n'agrégerait que ce qui a été produit avant, et un rapport
+  // ouvert juste après une soirée de diffusion serait vide.
+  await synchroniserDiffusionLogs();
+  await purgerAnciennesSessions();
+
   const sponsors = await prisma.sponsor.findMany({
     include: {
       contenus: { select: { id: true } },

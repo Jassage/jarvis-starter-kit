@@ -66,6 +66,39 @@ enum PositionOverlay {
   BAS_DROITE
 }
 
+// Provenance d'une session d'audience — le rapport sponsor distingue le player web
+// du player mobile, les deux n'ayant pas la même valeur commerciale.
+enum SourceAudience {
+  WEB
+  MOBILE
+}
+
+// Actions tracées au journal d'audit. Volontairement centrées sur ce qui engage la
+// chaîne vis-à-vis d'un tiers (contrat sponsor, habillage réellement à l'antenne,
+// grille, comptes) plutôt que sur toute écriture.
+enum ActionAudit {
+  CONNEXION
+  CRENEAU_CREE
+  CRENEAU_MODIFIE
+  CRENEAU_SUPPRIME
+  CRENEAU_SYNCHRONISE
+  SPONSOR_CREE
+  SPONSOR_MODIFIE
+  SPONSOR_SUPPRIME
+  HABILLAGE_CREE
+  HABILLAGE_SUPPRIME
+  CONFIG_CHAINE_MODIFIEE
+  CONTENU_SUPPRIME
+  REPLAY_PUBLIE
+  REPLAY_RETIRE
+  REPLAY_SUPPRIME
+  UTILISATEUR_CREE
+  UTILISATEUR_MODIFIE
+  UTILISATEUR_MOT_DE_PASSE_REINITIALISE
+  MATCH_DEMARRE
+  MATCH_TERMINE
+}
+
 // ─────────────────────────────────────────
 // CONFIGURATION DE LA CHAÎNE (singleton)
 // ─────────────────────────────────────────
@@ -106,8 +139,25 @@ model User {
   updatedAt DateTime @updatedAt
 
   refreshTokens RefreshToken[]
+  resetTokens   PasswordResetToken[]
 
   @@map("users")
+}
+
+// Réinitialisation de mot de passe. Le jeton n'est jamais stocké en clair (SHA-256 du
+// jeton opaque envoyé au porteur), à usage unique et court : sans cela, un opérateur
+// qui perd son mot de passe reste bloqué jusqu'à une intervention directe en base.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 model RefreshToken {
@@ -215,6 +265,7 @@ model CreneauGrille {
   bandeaux       BandeauSponsor[]
   diffusionLogs  DiffusionLog[]
   replay         Replay?
+  audienceSessions AudienceSession[]
 
   @@index([dateHeureDebut])
   @@index([dateHeureFin])
@@ -262,20 +313,99 @@ model BandeauSponsor {
 // RAPPORTS DE DIFFUSION
 // ─────────────────────────────────────────
 
+// Preuve de diffusion d'un créneau réellement passé à l'antenne : c'est la base du
+// rapport sponsor, donc du document qui justifie une facturation. Généré par
+// `audience.service.synchroniserDiffusionLogs()` une fois le créneau terminé, jamais
+// saisi à la main. `creneauId` est unique : c'est ce qui rend la génération idempotente
+// au niveau base (deux synchronisations concurrentes ne peuvent pas doubler un log).
 model DiffusionLog {
   id                       String          @id @default(cuid())
-  creneauId                String?
+  creneauId                String?         @unique
   creneau                  CreneauGrille?  @relation(fields: [creneauId], references: [id], onDelete: SetNull)
   matchId                  String?
   match                    Match?          @relation(fields: [matchId], references: [id], onDelete: SetNull)
   dateHeureReelle          DateTime
+  // Somme des secondes réellement visionnées par l'ensemble des sessions présentes
+  // pendant le créneau (pas la durée du créneau : un programme d'une heure vu par
+  // personne pèse 0).
   dureeVisionneeEstimee    Int
+  // Nombre de sessions distinctes ayant regardé pendant le créneau.
   nombreVuesEstimees       Int
   createdAt                DateTime        @default(now())
 
-  @@index([creneauId])
   @@index([matchId])
   @@map("diffusion_logs")
+}
+
+// ─────────────────────────────────────────
+// AUDIENCE
+// ─────────────────────────────────────────
+
+// Une session de visionnage, alimentée par le heartbeat des players (web et mobile).
+// C'est la seule source de chiffres d'audience du produit : sans elle, DiffusionLog
+// n'a rien à agréger et le rapport sponsor reste vide.
+//
+// Ce qu'elle n'est pas : une mesure d'audience certifiée. Les pings sont déclaratifs
+// (émis par le client), la durée est bornée côté serveur (cf. audience.service) et le
+// document sponsor doit les présenter comme des estimations, jamais comme un relevé.
+//
+// `sessionKey` est un identifiant opaque tiré par le player et conservé dans son
+// stockage local : il n'identifie jamais une personne, aucune donnée personnelle n'est
+// stockée ici. Une ligne par couple (session, créneau) : un viewer qui reste devant
+// trois programmes d'affilée produit trois lignes, ce qui permet de compter les vues
+// programme par programme.
+model AudienceSession {
+  id            String          @id @default(cuid())
+  sessionKey    String
+  source        SourceAudience  @default(WEB)
+
+  // Antenne (direct) : le créneau regardé au moment du ping.
+  creneauId     String?
+  creneau       CreneauGrille?  @relation(fields: [creneauId], references: [id], onDelete: Cascade)
+  // Replay (VOD) : exclusif du précédent.
+  replayId      String?
+  replay        Replay?         @relation(fields: [replayId], references: [id], onDelete: Cascade)
+
+  debutAt       DateTime        @default(now())
+  dernierPingAt DateTime        @default(now())
+  dureeSecondes Int             @default(0)
+
+  // NULL != NULL en Postgres : les deux contraintes coexistent sans se gêner, chacune
+  // ne s'appliquant qu'aux lignes qui portent réellement la colonne concernée.
+  @@unique([sessionKey, creneauId])
+  @@unique([sessionKey, replayId])
+  @@index([creneauId])
+  @@index([replayId])
+  @@index([dernierPingAt])
+  @@map("audience_sessions")
+}
+
+// ─────────────────────────────────────────
+// JOURNAL D'AUDIT
+// ─────────────────────────────────────────
+
+// Trace des actions qui engagent la chaîne vis-à-vis d'un tiers. Sur un produit qui
+// facture une exposition sponsor, il faut pouvoir répondre à « qui a retiré ce bandeau
+// et quand ? ». Jamais modifiable ni supprimable par l'application (aucune route
+// d'écriture exposée), et l'utilisateur est conservé en clair (email/nom figés au
+// moment de l'action) pour que la suppression d'un compte ne vide pas l'historique.
+model AuditLog {
+  id           String       @id @default(cuid())
+  action       ActionAudit
+  utilisateurId String?
+  utilisateurEmail String
+  utilisateurNom   String
+  // Type et identifiant de l'objet touché (ex. "Sponsor", "cml...").
+  cible        String?
+  cibleId      String?
+  // Contexte libre : ce qui a changé, en clair et lisible par un humain.
+  details      String?
+  adresseIp    String?
+  createdAt    DateTime     @default(now())
+
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_logs")
 }
 
 // ─────────────────────────────────────────
@@ -308,6 +438,8 @@ model Replay {
   match         Match?         @relation(fields: [matchId], references: [id], onDelete: SetNull)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+
+  audienceSessions AudienceSession[]
 
   @@index([statut])
   @@map("replays")

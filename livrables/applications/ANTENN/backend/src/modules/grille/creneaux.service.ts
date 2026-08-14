@@ -173,6 +173,54 @@ export async function compterBrouillons() {
   return prisma.creneauGrille.count({ where: { syncStatus: 'BROUILLON' } });
 }
 
+export interface Trou {
+  debut: string;
+  fin: string;
+  dureeMinutes: number;
+}
+
+// Balayage à curseur : partie purement calculatoire de la détection de trous, isolée
+// de la base pour être testable directement (cf. tests/creneaux.trous.test.ts). C'est
+// l'algorithme dont une régression provoquerait le plus de dégâts — un trou non
+// signalé, c'est un écran noir à l'antenne que personne ne voit venir.
+//
+// `creneaux` doit être trié par date de début croissante et ne contenir que des
+// créneaux réellement à l'antenne (SYNCHRONISE) intersectant la fenêtre.
+export function calculerTrous(
+  creneaux: Array<{ dateHeureDebut: Date; dateHeureFin: Date }>,
+  debutFenetre: Date,
+  finFenetre: Date
+): Trou[] {
+  const trous: Trou[] = [];
+  // Curseur = borne haute de couverture continue depuis le début de la fenêtre.
+  let curseur = debutFenetre;
+
+  for (const c of creneaux) {
+    const debut = c.dateHeureDebut < debutFenetre ? debutFenetre : c.dateHeureDebut;
+    if (debut > curseur) {
+      trous.push({
+        debut: curseur.toISOString(),
+        fin: debut.toISOString(),
+        dureeMinutes: Math.round((debut.getTime() - curseur.getTime()) / 60000),
+      });
+    }
+    // La couverture avance jusqu'à la fin la plus tardive rencontrée (créneaux
+    // adjacents ou imbriqués : on ne recule jamais le curseur).
+    if (c.dateHeureFin > curseur) curseur = c.dateHeureFin;
+  }
+
+  // Trou final entre la dernière couverture et la fin de la fenêtre.
+  if (curseur < finFenetre) {
+    trous.push({
+      debut: curseur.toISOString(),
+      fin: finFenetre.toISOString(),
+      dureeMinutes: Math.round((finFenetre.getTime() - curseur.getTime()) / 60000),
+    });
+  }
+
+  return trous;
+}
+
 // Détection des trous de grille (dead-air potentiel) sur une fenêtre. Seule la grille
 // SYNCHRONISE compte : c'est ce qui est réellement à l'antenne. Un brouillon posé dans
 // un trou ne le comble pas (il n'est pas encore répercuté vers le playout). Fenêtre par
@@ -192,32 +240,9 @@ export async function detecterTrous(from?: string, to?: string) {
     orderBy: { dateHeureDebut: 'asc' },
   });
 
-  const trous: { debut: string; fin: string; dureeMinutes: number }[] = [];
-  // Curseur = borne haute de couverture continue depuis le début de la fenêtre.
-  let curseur = debutFenetre;
-  for (const c of creneaux) {
-    const debut = c.dateHeureDebut < debutFenetre ? debutFenetre : c.dateHeureDebut;
-    if (debut > curseur) {
-      trous.push({
-        debut: curseur.toISOString(),
-        fin: debut.toISOString(),
-        dureeMinutes: Math.round((debut.getTime() - curseur.getTime()) / 60000),
-      });
-    }
-    // La couverture avance jusqu'à la fin la plus tardive rencontrée (créneaux
-    // adjacents ou imbriqués : on ne recule jamais le curseur).
-    if (c.dateHeureFin > curseur) curseur = c.dateHeureFin;
-  }
-  // Trou final entre la dernière couverture et la fin de la fenêtre.
-  if (curseur < finFenetre) {
-    trous.push({
-      debut: curseur.toISOString(),
-      fin: finFenetre.toISOString(),
-      dureeMinutes: Math.round((finFenetre.getTime() - curseur.getTime()) / 60000),
-    });
-  }
-
+  const trous = calculerTrous(creneaux, debutFenetre, finFenetre);
   const totalMinutes = trous.reduce((sum, t) => sum + t.dureeMinutes, 0);
+
   return {
     fenetre: { from: debutFenetre.toISOString(), to: finFenetre.toISOString() },
     trous,

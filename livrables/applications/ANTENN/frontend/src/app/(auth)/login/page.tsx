@@ -30,7 +30,7 @@ export default function LoginPage() {
   const [tipIndex, setTipIndex] = useState(0);
 
   useEffect(() => {
-    if (utilisateur) router.replace('/grille');
+    if (utilisateur) router.replace('/moniteur');
   }, [utilisateur, router]);
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export default function LoginPage() {
     setError('');
     try {
       await login(form.email, form.password);
-      router.push('/grille');
+      router.push('/moniteur');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Identifiants invalides');
     }

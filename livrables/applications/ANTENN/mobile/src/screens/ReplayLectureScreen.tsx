@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { compterVue, getReplay, ReplayDetail } from '../api/replay.api';
+import { getReplay, ReplayDetail } from '../api/replay.api';
+import { pingAudience } from '../api/audience.api';
 import { colors } from '../theme/colors';
 import VodPlayer from '../components/VodPlayer';
 import LogoOverlay from '../components/LogoOverlay';
@@ -23,7 +24,7 @@ export default function ReplayLectureScreen({ id, onBack }: { id: string; onBack
   }, [id]);
 
   const onDemarrage = useCallback(() => {
-    compterVue(id).catch(() => {});
+    pingAudience({ replayId: id });
   }, [id]);
 
   const r = detail?.replay;

@@ -19,8 +19,19 @@ import rapportsRoutes from './modules/rapports/rapports.routes';
 import epgRoutes from './modules/epg/epg.routes';
 import configRoutes from './modules/config/config.routes';
 import replayRoutes from './modules/replay/replay.routes';
+import audienceRoutes from './modules/audience/audience.routes';
+import auditRoutes from './modules/audit/audit.routes';
+import utilisateursRoutes from './modules/utilisateurs/utilisateurs.routes';
+import moniteurRoutes from './modules/moniteur/moniteur.routes';
 
 const app = express();
+
+// En production, l'API tourne derrière un reverse proxy : sans cela `req.ip` vaut
+// l'adresse du proxy, ce qui fausserait à la fois le rate limiting (tout le trafic
+// compté sur une seule IP) et l'adresse enregistrée au journal d'audit.
+if (env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -40,7 +51,13 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 app.use(cookieParser());
 app.use(morgan(env.NODE_ENV === 'development' ? 'dev' : 'combined'));
 
-app.use('/api', globalLimiter);
+// Le heartbeat d'audience a son propre plafond (cf. rateLimiter.middleware) : le
+// compter aussi dans le limiteur global reviendrait à lui réimposer les 300 requêtes
+// générales et à perdre l'audience derrière une IP partagée.
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/audience/ping')) return next();
+  return globalLimiter(req, res, next);
+});
 
 // Logos sponsors uploadés (stockage disque local, cf. middlewares/upload.middleware.ts)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -55,6 +72,10 @@ app.use('/api/rapports', rapportsRoutes);
 app.use('/api/epg', epgRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/replay', replayRoutes);
+app.use('/api/audience', audienceRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/utilisateurs', utilisateursRoutes);
+app.use('/api/moniteur', moniteurRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'ANTENN API', version: '1.0.0', timestamp: new Date().toISOString() });

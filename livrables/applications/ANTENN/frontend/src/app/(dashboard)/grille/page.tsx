@@ -8,6 +8,8 @@ import EmptyState from '@/components/ui/EmptyState';
 import Timeline from '@/components/grille/Timeline';
 import CreneauModal from '@/components/grille/CreneauModal';
 import DupliquerModal from '@/components/grille/DupliquerModal';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { useToastStore, messageErreur } from '@/stores/toastStore';
 
 const TYPE_LABEL: Record<string, string> = {
   PROGRAMME: 'Programme',
@@ -31,7 +33,8 @@ export default function GrillePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Creneau | null>(null);
   const [dupliquerCible, setDupliquerCible] = useState<Creneau | null>(null);
-  const [erreur, setErreur] = useState('');
+  const [aSupprimer, setASupprimer] = useState<Creneau | null>(null);
+  const { succes, erreur } = useToastStore();
 
   const jour = useMemo(() => new Date(`${jourStr}T00:00:00`), [jourStr]);
 
@@ -50,23 +53,23 @@ export default function GrillePage() {
   }, [reload]);
 
   const handleDelete = async (c: Creneau) => {
-    if (!confirm('Supprimer ce créneau ?')) return;
-    setErreur('');
+    setASupprimer(null);
     try {
       await deleteCreneau(c.id);
       await reload();
-    } catch (err: any) {
-      setErreur(err.response?.data?.message || 'Suppression impossible');
+      succes('Créneau retiré de la grille');
+    } catch (err) {
+      erreur(messageErreur(err, 'Suppression impossible'));
     }
   };
 
   const handleSynchroniser = async (c: Creneau) => {
-    setErreur('');
     try {
       await synchroniserCreneau(c.id);
       await reload();
-    } catch (err: any) {
-      setErreur(err.response?.data?.message || 'Erreur');
+      succes('Créneau déclaré synchronisé avec le playout');
+    } catch (err) {
+      erreur(messageErreur(err, 'Synchronisation impossible'));
     }
   };
 
@@ -151,10 +154,6 @@ export default function GrillePage() {
         <input type="date" className="input w-auto" value={jourStr} onChange={(e) => setJourStr(e.target.value)} />
       </div>
 
-      {erreur && (
-        <div className="p-3 rounded-xl text-sm" style={{ background: 'var(--color-danger-soft)', color: 'var(--color-danger)' }}>{erreur}</div>
-      )}
-
       <Timeline creneaux={creneaux} jour={jour} onSelect={(c) => { setEditing(c); setModalOpen(true); }} />
 
       <div className="card overflow-x-auto">
@@ -212,7 +211,7 @@ export default function GrillePage() {
                         <button
                           title={passe ? 'Créneau déjà diffusé — historique figé' : 'Supprimer'}
                           disabled={passe}
-                          onClick={() => handleDelete(c)}
+                          onClick={() => setASupprimer(c)}
                           className="p-2 rounded-lg transition-colors disabled:opacity-30"
                           style={{ color: 'var(--color-danger)' }}
                         >
@@ -247,6 +246,24 @@ export default function GrillePage() {
           if (dupliquerCible) await dupliquerCreneau(dupliquerCible.id, dateHeureDebut);
           await reload();
         }}
+      />
+
+      <ConfirmDialog
+        open={!!aSupprimer}
+        titre="Supprimer ce créneau"
+        message={
+          aSupprimer
+            ? `${TYPE_LABEL[aSupprimer.typeCreneau]} de ${formatHeure(aSupprimer.dateHeureDebut)} à ${formatHeure(aSupprimer.dateHeureFin)}`
+            : ''
+        }
+        detail={
+          aSupprimer?.syncStatus === 'SYNCHRONISE'
+            ? 'Ce créneau est déjà répercuté à l\'antenne : le retirer laissera un trou dans la grille tant qu\'il ne sera pas remplacé.'
+            : 'Ce créneau est encore en brouillon, il n\'a jamais été diffusé.'
+        }
+        libelleConfirmation="Supprimer"
+        onConfirm={() => aSupprimer && handleDelete(aSupprimer)}
+        onCancel={() => setASupprimer(null)}
       />
     </div>
   );

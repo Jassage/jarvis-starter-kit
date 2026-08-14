@@ -4,13 +4,17 @@ import * as ctrl from './auth.controller';
 import { validate } from '../../middlewares/validate.middleware';
 import { requireAuth } from '../../middlewares/auth.middleware';
 import { authLimiter } from '../../middlewares/rateLimiter.middleware';
-import { loginSchema, updateMeSchema, changePasswordSchema } from './auth.schemas';
+import { loginSchema, updateMeSchema, changePasswordSchema, resetPasswordSchema } from './auth.schemas';
 
 const router = Router();
 
 router.post('/login', authLimiter, validate(loginSchema), asyncHandler(ctrl.login));
 router.post('/refresh', asyncHandler(ctrl.refresh));
 router.post('/logout', asyncHandler(ctrl.logout));
+
+// Public : consommer un lien de réinitialisation reçu d'un administrateur. Même
+// limiteur que le login, un lien étant une porte d'entrée au même titre.
+router.post('/reset-password', authLimiter, validate(resetPasswordSchema), asyncHandler(ctrl.resetPassword));
 
 router.get('/me', requireAuth, asyncHandler(ctrl.getMe));
 router.patch('/me', requireAuth, validate(updateMeSchema), asyncHandler(ctrl.updateMe));

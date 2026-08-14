@@ -3,6 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } 
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getEpg, EpgResponse } from '../api/epg.api';
+import { pingAudience, INTERVALLE_PING_MS } from '../api/audience.api';
 import { colors } from '../theme/colors';
 import Player from '../components/Player';
 import LiveBadge from '../components/LiveBadge';
@@ -35,6 +36,16 @@ export default function WatchScreen() {
     const interval = setInterval(fetchEpg, REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchEpg]);
+
+  // Heartbeat d'audience du direct, parité avec le player web. Le contenu de repli n'a
+  // pas de créneau et n'est donc pas compté : il ne relève d'aucun contrat sponsor.
+  const creneauEnCoursId = epg?.enCours?.id ?? null;
+  useEffect(() => {
+    if (!creneauEnCoursId) return;
+    pingAudience({ creneauId: creneauEnCoursId });
+    const t = setInterval(() => pingAudience({ creneauId: creneauEnCoursId }), INTERVALLE_PING_MS);
+    return () => clearInterval(t);
+  }, [creneauEnCoursId]);
 
   const onRefresh = async () => {
     setRefreshing(true);

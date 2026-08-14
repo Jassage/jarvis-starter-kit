@@ -1,5 +1,6 @@
 import { PrismaClient, TypeContenu, TypeCreneau, TypePackageSponsor, PositionOverlay } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -115,10 +116,13 @@ async function main() {
     },
   });
 
+  // Programme à l'antenne au moment du seed. Volontairement long (3 h) : un créneau
+  // de 30 minutes laissait la chaîne « hors antenne » une demi-heure après le seed,
+  // ce qui donnait un moniteur en alerte rouge dès la première démonstration client.
   const creneauEnCours = await prisma.creneauGrille.create({
     data: {
       dateHeureDebut: new Date(startOfHour.getTime() - 30 * 60 * 1000),
-      dateHeureFin: new Date(startOfHour.getTime() + 30 * 60 * 1000),
+      dateHeureFin: new Date(startOfHour.getTime() + 3 * 60 * 60 * 1000),
       typeCreneau: TypeCreneau.PROGRAMME,
       contenuId: contenuProgramme2.id,
       syncStatus: 'SYNCHRONISE',
@@ -126,10 +130,12 @@ async function main() {
     },
   });
 
+  // Écran publicitaire enchaîné juste après, laissé en brouillon : c'est lui qui fait
+  // apparaître l'avertissement « créneau non répercuté » sur le moniteur et la grille.
   await prisma.creneauGrille.create({
     data: {
-      dateHeureDebut: new Date(startOfHour.getTime() + 30 * 60 * 1000),
-      dateHeureFin: new Date(startOfHour.getTime() + 32 * 60 * 1000),
+      dateHeureDebut: new Date(startOfHour.getTime() + 3 * 60 * 60 * 1000),
+      dateHeureFin: new Date(startOfHour.getTime() + 3 * 60 * 60 * 1000 + 2 * 60 * 1000),
       typeCreneau: TypeCreneau.PUB,
       contenuId: contenuSpot.id,
     },
@@ -154,15 +160,22 @@ async function main() {
     },
   });
 
-  await prisma.incrustationLogo.create({
-    data: {
-      creneauId: creneauEnCours.id,
-      sponsorId: sponsorHabillage.id,
-      logoUrl: 'https://cdn.example.com/antenn/logo-sogebank.png',
-      position: PositionOverlay.BAS_DROITE,
-      opacite: 0.85,
-    },
-  });
+  // Habillage permanent : le sponsor est exposé sur le programme en cours comme sur
+  // celui qui vient de passer. C'est ce second créneau, déjà terminé, qui donnera au
+  // rapport sponsor une exposition réellement chiffrée (durée et vues issues des
+  // sessions d'audience semées plus bas) — sans lui, la démonstration afficherait un
+  // rapport à zéro alors que la chaîne fonctionne.
+  for (const creneauSponsorise of [creneauEnCours, creneauPasse]) {
+    await prisma.incrustationLogo.create({
+      data: {
+        creneauId: creneauSponsorise.id,
+        sponsorId: sponsorHabillage.id,
+        logoUrl: 'https://cdn.example.com/antenn/logo-sogebank.png',
+        position: PositionOverlay.BAS_DROITE,
+        opacite: 0.85,
+      },
+    });
+  }
 
   await prisma.bandeauSponsor.create({
     data: {
@@ -175,13 +188,26 @@ async function main() {
     },
   });
 
-  await prisma.diffusionLog.create({
-    data: {
+  // Audience du créneau déjà diffusé. On sème des sessions, pas un DiffusionLog :
+  // celui-ci est généré à partir d'elles par audience.service.synchroniserDiffusionLogs()
+  // à la première ouverture des rapports ou du moniteur. Semer directement un log
+  // donnerait un rapport sponsor crédible sans que la chaîne d'audience fonctionne —
+  // exactement l'illusion à éviter sur une démonstration client.
+  const dureeCreneauPasse = Math.round(
+    (creneauPasse.dateHeureFin.getTime() - creneauPasse.dateHeureDebut.getTime()) / 1000
+  );
+  await prisma.audienceSession.createMany({
+    data: Array.from({ length: 12 }, (_, i) => ({
+      sessionKey: randomUUID(),
+      // Deux tiers de mobile : la consommation vidéo haïtienne est très majoritairement
+      // sur téléphone, autant que la démonstration le reflète.
+      source: i % 3 === 0 ? ('WEB' as const) : ('MOBILE' as const),
       creneauId: creneauPasse.id,
-      dateHeureReelle: creneauPasse.dateHeureDebut,
-      dureeVisionneeEstimee: 3200,
-      nombreVuesEstimees: 480,
-    },
+      debutAt: creneauPasse.dateHeureDebut,
+      dernierPingAt: creneauPasse.dateHeureFin,
+      // Durées inégales : personne ne regarde un programme entier de bout en bout.
+      dureeSecondes: Math.round(dureeCreneauPasse * (0.3 + (i % 5) * 0.15)),
+    })),
   });
 
   // Catalogue replay : un programme déjà diffusé publié en VOD (avec sa fenêtre de

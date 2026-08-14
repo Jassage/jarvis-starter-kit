@@ -46,7 +46,7 @@ export async function getReplay(id: string): Promise<ReplayDetail> {
   return data.data;
 }
 
-// Compteur de vues à la demande, distinct des diffusions antenne côté rapports.
-export async function compterVue(id: string): Promise<void> {
-  await api.post(`/replay/${id}/vue`);
-}
+// Le comptage des vues replay passe par le heartbeat d'audience
+// (POST /api/audience/ping) : une session ne peut ouvrir qu'une vue par replay.
+// L'ancienne route POST /replay/:id/vue, publique et sans déduplication, a été retirée
+// côté backend. Cf. audience.api.ts.

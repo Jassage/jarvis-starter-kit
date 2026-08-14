@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { motDePasseSchema } from '../../utils/password';
 
 export const loginSchema = z.object({
   body: z.object({
@@ -16,6 +17,15 @@ export const updateMeSchema = z.object({
 export const changePasswordSchema = z.object({
   body: z.object({
     currentPassword: z.string().min(1),
-    newPassword: z.string().min(8, 'Le nouveau mot de passe doit contenir au moins 8 caractères'),
+    newPassword: motDePasseSchema,
+  }),
+});
+
+// Consommation d'un lien de réinitialisation. Le jeton arrive en clair depuis le
+// porteur du lien, il est comparé à son empreinte en base (cf. auth.service).
+export const resetPasswordSchema = z.object({
+  body: z.object({
+    token: z.string().min(20, 'Lien de réinitialisation invalide'),
+    newPassword: motDePasseSchema,
   }),
 });

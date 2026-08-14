@@ -1,11 +1,12 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Tv, CalendarDays, History } from 'lucide-react';
 import HlsPlayer from '@/components/player/HlsPlayer';
 import Overlay from '@/components/player/Overlay';
 import EpgPanel from '@/components/player/EpgPanel';
 import NetworkIndicator from '@/components/player/NetworkIndicator';
+import { pingAudience, INTERVALLE_PING_MS } from '@/lib/audience';
 
 interface EpgResponse {
   enCours: any | null;
@@ -19,22 +20,48 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 export default function RegarderPage() {
   const [epg, setEpg] = useState<EpgResponse | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const res = await fetch(`${API_URL}/epg`);
-        const json = await res.json();
-        if (!cancelled) setEpg(json.data);
-      } catch {
-        // Player public : on n'affiche pas d'erreur bloquante si l'EPG est
-        // momentanément indisponible, on réessaiera au prochain intervalle.
-      }
+  const [cancelled, setCancelled] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/epg`);
+      const json = await res.json();
+      if (!cancelled) setEpg(json.data);
+    } catch {
+      // Player public : on n'affiche pas d'erreur bloquante si l'EPG est
+      // momentanément indisponible, on réessaiera au prochain intervalle.
     }
+  }, [cancelled]);
+
+  useEffect(() => {
     load();
     const interval = setInterval(load, 30000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+    return () => { setCancelled(true); clearInterval(interval); };
+  }, [load]);
+
+  // Bascule à la seconde près. Le rafraîchissement périodique seul afficherait le
+  // programme suivant avec jusqu'à 30 s de retard sur ce que le téléspectateur voit
+  // réellement à l'écran : on programme en plus un rechargement à l'heure de fin
+  // annoncée du programme courant, qu'on connaît déjà.
+  const finEnCours: string | undefined = epg?.enCours?.dateHeureFin;
+  useEffect(() => {
+    if (!finEnCours) return;
+    const delai = new Date(finEnCours).getTime() - Date.now();
+    if (delai <= 0 || delai > 6 * 60 * 60 * 1000) return;
+    const t = setTimeout(load, delai + 500);
+    return () => clearTimeout(t);
+  }, [finEnCours, load]);
+
+  // Heartbeat d'audience : seule source du rapport sponsor. Le contenu de repli n'a
+  // pas de créneau (`id: null`) et n'est donc pas compté — il ne relève d'aucun
+  // contrat, c'est un bouche-trou d'antenne.
+  const creneauEnCoursId: string | null = epg?.enCours?.id ?? null;
+  useEffect(() => {
+    if (!creneauEnCoursId) return;
+    pingAudience({ creneauId: creneauEnCoursId });
+    const t = setInterval(() => pingAudience({ creneauId: creneauEnCoursId }), INTERVALLE_PING_MS);
+    return () => clearInterval(t);
+  }, [creneauEnCoursId]);
 
   const enDirect = epg?.enCours?.typeCreneau === 'MATCH_DIRECT';
   const estRepli = !!epg?.enCours?.estRepli;

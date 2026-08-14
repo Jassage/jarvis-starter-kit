@@ -3,6 +3,7 @@ import path from 'path';
 import * as service from './replay.service';
 import { sendSuccess } from '../../utils/response';
 import { AppError } from '../../middlewares/errorHandler.middleware';
+import { logAudit } from '../audit/audit.service';
 import { env } from '../../config/env';
 
 // ── Public ──────────────────────────────────────────────
@@ -21,11 +22,6 @@ export async function catalogue(req: Request, res: Response) {
 export async function detailPublic(req: Request, res: Response) {
   const detail = await service.getReplayPublic(req.params.id);
   sendSuccess(res, detail);
-}
-
-export async function compterVue(req: Request, res: Response) {
-  const replay = await service.incrementerVue(req.params.id);
-  sendSuccess(res, { replay });
 }
 
 // ── Régie ───────────────────────────────────────────────
@@ -70,15 +66,31 @@ export async function uploadVignette(req: Request, res: Response) {
 
 export async function publier(req: Request, res: Response) {
   const replay = await service.publierReplay(req.params.id);
+  await logAudit(req, 'REPLAY_PUBLIE', {
+    cible: 'Replay',
+    cibleId: replay.id,
+    details: `« ${replay.titre} » rendu public au catalogue`,
+  });
   sendSuccess(res, { replay }, 'Replay publié');
 }
 
 export async function retirer(req: Request, res: Response) {
   const replay = await service.retirerReplay(req.params.id);
+  await logAudit(req, 'REPLAY_RETIRE', {
+    cible: 'Replay',
+    cibleId: replay.id,
+    details: `« ${replay.titre} » retiré du catalogue`,
+  });
   sendSuccess(res, { replay }, 'Replay retiré du catalogue');
 }
 
 export async function remove(req: Request, res: Response) {
+  const replay = await service.getReplay(req.params.id);
   await service.deleteReplay(req.params.id);
+  await logAudit(req, 'REPLAY_SUPPRIME', {
+    cible: 'Replay',
+    cibleId: req.params.id,
+    details: `« ${replay.titre} » supprimé définitivement (${replay.nombreVues} vues perdues)`,
+  });
   sendSuccess(res, null, 'Replay supprimé');
 }
